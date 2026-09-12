@@ -41,3 +41,6 @@ coverage/
 # Misc
 *.tsbuildinfo
 .eslintcache
+
+# opencode project config (contains local API keys)
+.opencode/opencode.json
