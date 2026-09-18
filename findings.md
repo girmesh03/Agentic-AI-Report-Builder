@@ -73,6 +73,11 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Schema-Level Indexing Mandate | All single-field, compound, unique, sparse, and TTL indexes declared strictly via `schema.index(...)`. Zero inline field-level indexes allowed across entire codebase. |
 | Dual Clock-In/Out Hierarchy | `report.clockIn`/`report.clockOut` for overall daily shift; `visit.clockIn`/`visit.clockOut` for per-branch arrival and departure intervals. |
 | Zero Hardcoded Config Defaults | AI provider names, default models, quotas, paths, and timeouts must never be hardcoded in schemas or code; always loaded dynamically from `config/env.js` or runtime context. |
+| Dual Chat Node Specialization | `type: 'report'` (1-to-1 active report co-pilot with mutation tools) vs `type: 'general'` (universal operations analyst & personal assistant with read-only report querying). |
+| General Chat 7-Archetype Catalog | Cross-branch analytics, Google Sheets generation, management escalation memos, SOP guidance, financial calculations, glossary management, personal productivity. |
+| Live Google Sheet Generation | Tool `export_to_google_sheet` creates Google Spreadsheet via `drive.file` OAuth scope and streams clickable direct link in Amharic chat. |
+| Mid-Chat Dynamic Configuration | User can switch preset, provider (`addis`, `google`, `nvidia`), model, language, and reasoning at inception or mid-chat; changes apply to future messages while past turns freeze executed params. |
+| Per-Chat Stream Concurrency Lock | In-memory `activeChatStreams` map rejects concurrent requests with HTTP 409 Conflict; supports clean client abort via `POST /chats/:chatId/abort`. |
 
 ## Locked Package Manifest
 

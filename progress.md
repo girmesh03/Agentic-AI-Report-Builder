@@ -92,12 +92,33 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+### Phase 5: Section 5 - Chat, Message & Conversation Node Architecture
+- **Status:** complete
+- **Started:** 2026-09-18T05:50:00+03:00
+- **Completed:** 2026-09-18T06:27:00+03:00
+- Actions taken:
+  - Formulated Section 5 specifications covering the dual conversation node taxonomy (`type: 'report'` active co-pilot vs `type: 'general'` operations analyst and personal assistant).
+  - Defined the comprehensive 7-archetype catalog of General Chat user requests (cross-branch analytics, Google Sheets generation, management escalation memos, SOP guidance, financial calculations, glossary management, personal productivity).
+  - Specified the live Google Sheets export pipeline (`export_to_google_sheet`) using Google OAuth tokens (`drive.file` scope) returning clickable edit URLs in chat.
+  - Formulated mid-chat dynamic preset selection/creation (`MuiDialog` modal) and AI runtime configuration switching (`addis`, `google`, `nvidia`, model, language, reasoning).
+  - Documented the 3 navigation entry points (Sidebar Recent, Reports Card/List, Reports DataGrid).
+  - Documented linear downstream message truncation mechanics for prompt edits and agent retries.
+  - Documented Mode 3 multi-modal voice notes and per-chat in-memory stream locking (HTTP 409 Conflict + abort control).
+  - Appended complete Section 5 to `docs/specifications/master_specification.md` and activated TOC link.
+  - User reviewed and approved Section 5.
+  - Staged, committed, and pushed Section 5 to `phase-0-specification`.
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Phase 4 complete on branch `phase-0-specification`. Ready for Section 5 in Plan Mode. |
-| Where am I going? | Switch to Plan Mode for Phase 5: Section 5 - Chat, Message & Conversation Node Architecture. |
+| Where am I? | Phase 5 complete on branch `phase-0-specification`. Ready for Section 6 in Plan Mode. |
+| Where am I going? | Switch to Plan Mode for Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine. |
 | What's the goal? | Complete, exhaustive 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Complete 8-model Mongoose database contract, zero field-level indexes, visit clockIn/clockOut, and addis/google/nvidia provider enums locked into specification. |
-| What have I done? | Authored, reviewed, committed, and pushed Sections 1, 2, 3, and 4. |
+| What have I learned? | Dual chat taxonomy, General Chat 7-archetype catalog, Google Sheets export, mid-chat preset/AI config switching, and linear truncation locked into specification. |
+| What have I done? | Authored, reviewed, committed, and pushed Sections 1, 2, 3, 4, and 5. |

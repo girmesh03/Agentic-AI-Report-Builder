@@ -13,7 +13,7 @@
 2. [Section 2: User Persona, Authentication & Session Security](#section-2-user-persona-authentication--session-security)
 3. [Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules](#section-3-locked-plain-text-amharic-report-engine--formatting-rules)
 4. [Section 4: Domain Data Models, Schemas & Lifecycle Management](#section-4-domain-data-models-schemas--lifecycle-management)
-5. *Section 5: Chat, Message & Conversation Node Architecture (Pending)*
+5. [Section 5: Chat, Message & Conversation Node Architecture](#section-5-chat-message--conversation-node-architecture)
 6. *Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine (Pending)*
 7. *Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime (Pending)*
 8. *Section 8: Workplace Transliteration Engine & Per-User Glossary (Pending)*
@@ -1386,6 +1386,28 @@ const chatSchema = new Schema({
     default: 'report',
     required: true
   },
+  preset: {
+    type: Schema.Types.ObjectId,
+    ref: 'Preset',
+    default: null // Active prompt preset selected at inception or switched mid-chat
+  },
+  config: {
+    provider: {
+      type: String,
+      enum: ['addis', 'google', 'nvidia']
+    },
+    model: {
+      type: String
+    },
+    language: {
+      type: String,
+      default: 'am'
+    },
+    reasoning: {
+      type: Boolean,
+      default: false
+    }
+  },
   isArchived: {
     type: Boolean,
     default: false
@@ -1724,3 +1746,296 @@ Validation occurs at two distinct application boundaries:
 | **Chat Message** | `text` (required string unless audio file present); `audio` (Multer MIME validation). | `sender` enum, compound index on `{ chat: 1, createdAt: 1 }`. |
 | **Preset** | `name` (1–100 chars); `persona` (required text); `systemPrompt` (required text). | Compound unique `{ user: 1, name: 1 }`. |
 | **Glossary** | `englishTerm` (trimmed, required); `amharicPhonetic` (trimmed, required); `category` (enum). | Compound unique `{ user: 1, englishTerm: 1 }`. |
+
+---
+
+# Section 5: Chat, Message & Conversation Node Architecture
+
+### 5.1 Dual Conversation Node Taxonomy
+
+The application implements a multi-turn conversational runtime supporting two distinct node types: **Report Chats** and **General Chats**.
+
+```mermaid
+flowchart TD
+    subgraph Conversation_Nodes["Conversation Node Types (Chat Model)"]
+        RC["Report Chat (type: 'report')"]
+        GC["General Chat (type: 'general')"]
+    end
+
+    subgraph RC_Features["Report Chat Capabilities"]
+        RC1["1-to-1 Hard Linkage to Report Document"]
+        RC2["Title: Report - <branchName> - <DD-MM-YY>"]
+        RC3["Full Report Context Injected into Prompt"]
+        RC4["Read & Write Tools: update_report, export_to_google_docs"]
+    end
+
+    subgraph GC_Features["General Chat Capabilities"]
+        GC1["Autonomous Thread (report: null)"]
+        GC2["Title: Dynamic from First User Prompt (or 3-5 word AI summary)"]
+        GC3["Universal Operations Analyst & Personal Assistant"]
+        GC4["Read-Only Report Tools: query_reports_and_issues, export_to_google_sheet"]
+    end
+
+    RC --> RC1
+    RC --> RC2
+    RC --> RC3
+    RC --> RC4
+
+    GC --> GC1
+    GC --> GC2
+    GC --> GC3
+    GC --> GC4
+```
+
+#### 5.1.1 Report Chat (`type: 'report'`) — Operational Refinement Co-Pilot
+- **Scope & Persona**: The agent operates as a specialized operational co-pilot dedicated exclusively to the active report. It possesses deep, real-time contextual awareness of the report's date, supervisor identity, primary branch, visit intervals, activities, issues, general comments, and plain-text assembly.
+- **1-to-1 Relationship Invariant**:
+  - Bound to exactly one `Report` document via `chat.report` (`Schema.Types.ObjectId`).
+  - Enforced by a MongoDB partial unique index:
+    `chatSchema.index({ report: 1 }, { unique: true, partialFilterExpression: { report: { $type: 'objectId' } } })`.
+  - Exactly one conversation node may exist per report. Creating a second chat for an existing report is physically impossible.
+- **Deterministic Titling**:
+  - Automatically derived upon report association: `Report - <branchName> - <DD-MM-YY>` (e.g., `"Report - Bole - 08-01-17"`).
+  - Synchronizes if the report's primary branch or calendar date is updated.
+- **Available Tool Set (Read & Write)**:
+  - `get_report_context`: Fetches current report JSON and assembled plain-text string.
+  - `update_report`: Mutates report fields (shift hours, visits, activities, issues, comments) and automatically triggers deterministic re-rendering via `utils/reportRenderer.js`.
+  - `export_report_to_google_docs`: Exports the active report text to Google Docs using the user's Google OAuth tokens (`drive.file` scope).
+  - `export_to_google_sheet`: Exports current report activities/issues to a live Google Sheet.
+  - `list_branches`: Lists user branches for name validation.
+  - `create_branch`: Adds a new branch location if the supervisor mentions an unlisted store.
+  - `get_glossary`: Retrieves workplace transliteration mappings.
+
+#### 5.1.2 General Chat (`type: 'general'`) — Universal Operations Analyst & Personal Assistant
+- **Scope & Persona**: The agent operates as a universal operations analyst, business writing co-pilot, and versatile personal assistant. It is decoupled from any single report (`report: null`), enabling supervisors to query cross-branch historical data, generate Google Sheets across date ranges, draft formal management escalations, review SOP compliance, and perform general inquiries outside company boundaries.
+- **Strict Read-Only Guarantee on Reports**:
+  - General Chat is **strictly prohibited from mutating existing report documents**.
+  - The `update_report` tool is **never registered** in General Chat contexts.
+  - Can query historical reports, aggregate activities/issues across branches and dates, and generate Google Sheets, but cannot alter historical records.
+- **Dynamic Titling Mechanics**:
+  - Initializes upon blank creation as `"New Chat"`.
+  - **Automatic Derivation from Prompt**: Upon receiving the supervisor's **first message**, the title is immediately set to the first 35 characters of the prompt (cleanly word-wrapped), or a concise 3–5 word AI summary (e.g., `"የፎይል አቅርቦት እና ስቶር እጥረት"`).
+  - **Manual Renaming**: The supervisor may manually rename the chat at any time via `PATCH /api/v1/chats/:chatId` (`{ title }`).
+
+---
+
+### 5.2 Comprehensive General Chat Request Catalog
+
+General Chat accommodates a wide variety of supervisory workflows across seven major operational archetypes:
+
+#### 5.2.1 Cross-Branch Operational Analytics & Historical Issue Tracking
+Supervisors can filter, aggregate, and compare historical performance across branches, dates, and statuses:
+1. **Multi-Branch Issue Queries**:
+   - *"Get me all Bole branch issues with status 'reported' between 01-01-17 and 15-01-17."*
+   - *"Which branches experienced stockouts or machinery failures this past week?"*
+   - *"List all unresolved maintenance issues across Sarbet and Megnagna branches."*
+2. **Activity & Audit History**:
+   - *"Show me all deep-cleaning and cash reconciliation activities completed across all branches this month."*
+   - *"List all branches visited on Monday and Tuesday with recorded arrival and departure times."*
+3. **Frequency & Trend Detection**:
+   - *"How many times did foil shortage or POS machine downtime occur in the last 30 days?"*
+   - *"Which branch had the highest volume of reported issues this month?"*
+4. **Shift & Working Hours Breakdown**:
+   - *"Calculate the total hours I spent on-site across all branches last week."*
+   - *"Compare total inspection hours between Bole and Piassa branches."*
+
+#### 5.2.2 Structured Document & Live Google Sheets Generation (`export_to_google_sheet`)
+Supervisors can command the AI to aggregate operational data and instantly generate an accessible spreadsheet in Google Workspace:
+1. **Multi-Branch Issue Spreadsheets**:
+   - Prompt: *"Export all unresolved issues across all branches for the last 14 days into a Google Sheet so I can share it with corporate maintenance."*
+   - Backend Execution:
+     - Agent invokes tool: `export_to_google_sheet({ type: 'issues', status: 'reported', startDate, endDate })`.
+     - Queries MongoDB, instantiates Google Sheets API (v4) using the user's OAuth access token (`drive.file` scope).
+     - Creates sheet titled `Unresolved Issues - <dateRange>`.
+     - Writes headers: `ቀን (Date) | ብራንች (Branch) | ችግር (Issue Description) | ሁኔታ (Status) | ተቆጣጣሪ (Supervisor)`.
+     - Returns direct link: `https://docs.google.com/spreadsheets/d/<spreadsheetId>/edit`.
+   - In-Chat Response: Displays Amharic summary plus a clickable action button: `[በ Google Sheet ክፈት 📊]`.
+2. **Timeline & Shift Logs**:
+   - *"Create a Google Sheet tracking my daily arrival and departure times across all branches for the month of Meskerem."*
+3. **In-Chat Markdown Tabular Summaries**:
+   - *"Format all kitchen equipment maintenance requests from this week into a comparison table here in the chat."*
+
+#### 5.2.3 Corporate Memos, Management Escalations & Meeting Agendas (Amharic)
+Field findings frequently require formal corporate escalation:
+1. **Executive Escalation Letters**:
+   - *"Draft a formal Amharic memo to the Supply Chain Director explaining the ongoing foil shortage at Bole branch, highlighting the 6,630 ETB daily financial loss from outside purchases, and urging immediate warehouse delivery."*
+   - *"Help me write an urgent maintenance escalation memo to Operations regarding the broken deep fryer at Sarbet."*
+2. **Branch Manager Meeting Agendas**:
+   - *"Based on the customer service complaints reported at Piassa this week, draft an agenda for my branch manager meeting tomorrow morning."*
+3. **Supervisory Feedback & HR Notes**:
+   - *"Draft a professional supervisory feedback note to a branch shift leader regarding uniform hygiene and cash drawer reconciliation."*
+
+#### 5.2.4 SOP Guidance, Compliance & Technical Troubleshooting
+Immediate operational decision support while on-site:
+1. **Standard Operating Procedure (SOP) Verification**:
+   - *"What are the standard checklist steps for closing cash reconciliation at the end of the shift according to company policy?"*
+   - *"What is the approved procedure for logging expired raw meat in the kitchen waste log?"*
+2. **Equipment Troubleshooting**:
+   - *"The POS machine at Bole is displaying a network timeout error during lunch rush. What are the standard troubleshooting steps before calling IT?"*
+   - *"What is the emergency protocol if the branch water supply is cut off during operational hours?"*
+
+#### 5.2.5 Financial Impact & Shortage Calculations
+1. **Financial Waste Projections**:
+   - *"If Bole purchases foil from local retailers at 6,630 ETB per week, calculate the projected 3-month financial loss if the central warehouse does not supply."*
+   - *"Calculate total overtime labor cost if 3 employees work 2 additional hours each day for 6 days."*
+2. **Visit Route Optimization**:
+   - *"I need to inspect Bole, Sarbet, and Megnagna tomorrow between 08:30 and 17:00. Considering lunchtime traffic and rush hours, suggest an optimal visit sequence and time allocation."*
+
+#### 5.2.6 Workplace Transliteration & Glossary Management (`manage_glossary`)
+1. **Phonetic Terminology Lookup**:
+   - *"What is the standard Amharic Ge'ez transliteration for 'soft serve machine' or 'grease trap'?"*
+2. **Glossary Enrichment Tool**:
+   - Prompt: *"Add 'grease trap' -> 'ግሪስ ትራፕ' to my equipment glossary under the equipment category."*
+   - Tool Execution: `manage_glossary({ action: 'add', englishTerm: 'Grease Trap', amharicPhonetic: 'ግሪስ ትራፕ', category: 'equipment' })`.
+   - Creates or updates `Glossary` document in MongoDB.
+
+#### 5.2.7 Open-Ended Personal Productivity & Executive Advisory
+Because General Chat operates as an unconstrained personal assistant:
+- Drafting personal communications, proofreading Amharic texts, formulating constructive negotiation strategies with branch managers, and personal daily time management.
+
+---
+
+### 5.3 Dynamic AI Configuration & Inception / Mid-Chat Preset Switching
+
+The chat system enables supervisors to customize or reconfigure the AI runtime **either before the conversation begins or at any turn mid-chat**:
+
+```mermaid
+flowchart LR
+    A["Chat Inception"] --> B["Select Preset or Custom AI Config"]
+    B --> C["Send Messages (Turns 1..k)"]
+    C -->|"User switches config mid-chat"| D["Update Chat Toolbar (Preset / Provider / Model / Reasoning)"]
+    D --> E["PATCH /api/v1/chats/:chatId { preset, config }"]
+    E --> F["Subsequent Messages (Turns k+1..N) use New AI Parameters"]
+```
+
+#### 5.3.1 Configurable AI Runtime Parameters
+The supervisor can adjust four core execution parameters per chat session:
+1. **Provider (`addis` | `google` | `nvidia`)**: Selects the active LLM backend.
+2. **Model (`String`)**: Specific model identifier under the selected provider:
+   - Google: `gemini-2.5-flash`, `gemini-2.5-flash-lite`
+   - Addis AI: `addis-1-alef`
+   - Nvidia: `meta/llama-3.1-nemotron-70b-instruct`
+3. **Language (`'am'` | `'en'`)**: Primary generation language (defaults to Amharic `'am'`).
+4. **Reasoning (`Boolean`)**: Enables or disables deep reasoning / chain-of-thought traces for supported reasoning models (capturing `.candidates[0].content.parts[].thought`).
+
+#### 5.3.2 Preset Selection & Mid-Chat Creation Modal
+- **Initial Selection**: When opening a new chat, the composer defaults to the user's default `Preset` (or general assistant prompt). The supervisor can select an existing preset from a dropdown selector.
+- **Mid-Chat Switching**: At any turn in the conversation, the supervisor can open the Preset selector and switch to a different preset (e.g., switching from *"Kitchen Hygiene Audit"* to *"Management Escalation Mode"*).
+- **In-Chat Preset Creation**:
+  - The dropdown includes a **"Create New Preset"** action button.
+  - Clicking mounts an inline Material-UI modal (`MuiDialog`) containing:
+    - Preset Name (`MuiTextField`)
+    - Persona (`MuiTextField`, multiline)
+    - System Guidelines / Operational Rules (`MuiTextField`, multiline)
+  - Submitting creates the `Preset` in MongoDB (`POST /api/v1/presets`) and immediately sets it as `chat.preset` without clearing or interrupting thread history.
+
+#### 5.3.3 Historical Audit Trail & Per-Message Immutability
+- When a supervisor switches presets, providers, models, or reasoning mid-chat, the change applies strictly to **future messages**.
+- Every individual `Message` document permanently freezes:
+  - `message.provider` (`'addis' | 'google' | 'nvidia'`)
+  - `message.model` (e.g., `'gemini-2.5-flash'`)
+  - `message.language` (`'am' | 'en'`)
+  - `message.reasoning` (thinking trace text, if enabled)
+  - `message.tokensUsed` (prompt, completion, and total tokens)
+- This guarantees full auditing integrity: past turns visibly display which provider and model generated them, even within a single multi-model conversation.
+
+---
+
+### 5.4 The Three Universal Navigation Entry Points
+
+The application provides three persistent entry points ensuring supervisors can instantly access conversations from anywhere in the platform:
+
+| Entry Point | UI Location | Trigger Mechanism | Target Route & Behavior |
+|---|---|---|---|
+| **1. Sidebar Recent Chats** | AppShell mini/temporary drawer | Clicking any chat item in the recent chats list | Navigates directly to `/chats/:chatId`. List is paginated, auto-refreshes on `updatedAt: -1`, and displays a badge indicating `Report` vs `General`. |
+| **2. Reports Card/List View** | `/reports` (Card / List layout) | Clicking `"Refine with AI / Open Chat"` button on report card | Invokes idempotent resolution `POST /api/v1/reports/:reportId/chat` (retrieves existing chat or creates new linked node) and redirects to `/chats/:chatId`. |
+| **3. Reports DataGrid View** | `/reports` (MuiDataGrid layout) | Clicking Chat icon button in the row action column | Invokes idempotent resolution `POST /api/v1/reports/:reportId/chat` and navigates to `/chats/:chatId`. |
+
+---
+
+### 5.5 In-Thread Action Icons & Linear Downstream Truncation Mechanics
+
+To prevent branching conversation trees, context divergence, and hallucinated state mutations, threads enforce a **strictly linear history timeline**.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Supervisor
+    participant UI as MUI Chat UI
+    participant API as Express API
+    participant DB as MongoDB
+
+    Note over User, DB: Flow 1: User Edits Prompt at Turn k
+    User->>UI: Clicks Edit icon on User Message (turn k)
+    UI->>User: Displays inline MuiTextField + Update / Cancel
+    User->>UI: Modifies prompt text & clicks Update
+    UI->>API: PUT /api/v1/chats/:chatId/messages/:messageId { text: newText }
+    API->>DB: deleteMany({ chat: chatId, createdAt: { $gt: targetMessage.createdAt } })
+    API->>DB: updateOne({ _id: messageId }, { text: newText })
+    API-->>UI: Initiates SSE stream for revised Agent response (turn k+1)
+
+    Note over User, DB: Flow 2: User Retries Agent Response at Turn k
+    User->>UI: Clicks Retry icon on Agent Message (turn k)
+    UI->>API: POST /api/v1/chats/:chatId/messages/:messageId/retry
+    API->>DB: deleteMany({ chat: chatId, createdAt: { $gte: targetMessage.createdAt } })
+    API-->>UI: Re-runs generation on prior user prompt & streams via SSE
+```
+
+#### 5.5.1 User Message Action Icons
+1. **Copy Prompt**: Copies user message text to clipboard.
+2. **Edit Prompt**:
+   - Replaces the message bubble with an inline `MuiTextField` editor equipped with "Update" and "Cancel" buttons.
+   - **Linear Downstream Truncation**: Clicking Update causes the backend to permanently delete all messages in MongoDB where `chat: chatId` and `createdAt > targetMessage.createdAt`.
+   - The target message's `text` is updated to the new prompt, and the server immediately begins streaming the new agent response.
+
+#### 5.5.2 Agent Message Action Icons
+1. **Copy Response**: Copies generated response text or plain-text report directly to clipboard.
+2. **Retry Generation**:
+   - Clicking Retry permanently deletes the target agent response and any subsequent messages where `chat: chatId` and `createdAt >= targetMessage.createdAt`.
+   - Re-executes LLM generation on the immediately preceding user prompt and streams the fresh response.
+
+---
+
+### 5.6 Multi-Modal Audio Payloads (Mode 3 Ephemeral Voice Notes)
+
+Supervisors can narrate instructions or corrections directly into the chat composer via ephemeral audio voice notes:
+
+1. **Client Recording**:
+   - Handled via browser `MediaRecorder` API recording audio into `audio/webm;codecs=opus` (with MP4 fallback).
+   - Shows live recording timer and waveform / visualizer.
+2. **Multer Audio Ingestion (`POST /api/v1/chats/:chatId/messages/audio`)**:
+   - Ingests single audio file under field name `audio` with maximum file size of 25MB.
+   - MIME validation allowlist: `audio/webm`, `audio/wav`, `audio/mp3`, `audio/mpeg`, `audio/m4a`, `audio/ogg`, `audio/aac`.
+3. **FFmpeg Audio Normalization**:
+   - The server converts uploaded audio to mono 16-bit 16kHz PCM WAV format via `fluent-ffmpeg`.
+4. **Synchronous Addis AI STT Transcription**:
+   - Sends normalized audio to Addis AI STT API (`addisai` SDK).
+   - Retrieves exact Amharic transcription text.
+5. **Message Creation & Immediate Streaming**:
+   - Creates a `Message` document:
+     - `sender: 'user'`
+     - `text`: Transcribed Amharic text
+     - `audio`: `{ originalName, fileName, path, duration, mimeType }`
+     - `rawTranscription`: Transcribed Amharic text
+   - Automatically triggers upstream LLM streaming response for the transcribed prompt.
+
+---
+
+### 5.7 Concurrency Control, Stream Locking & Abort Mechanics
+
+To prevent duplicate requests, race conditions, and corrupted database states caused by rapid double-clicks:
+
+1. **In-Memory Per-Chat Stream Lock**:
+   - The backend maintains an active stream registry: `const activeChatStreams = new Map<string, AbortController>();`.
+   - Keyed by `chatId.toString()`.
+2. **HTTP 409 Conflict Rejection**:
+   - If a user sends a message, edits a prompt, or triggers a retry while a stream is actively writing on that `chatId`:
+     - The server rejects the incoming request immediately with **HTTP 409 Conflict**:
+       `{ success: false, message: "A response is currently generating for this chat. Please wait for completion or abort the active response." }`.
+3. **Client-Side "Stop Generation" Button**:
+   - While streaming, the chat composer's "Send" button morphs into a red "Stop Generation" button.
+   - Clicking invokes `POST /api/v1/chats/:chatId/abort`:
+     - The server looks up `activeChatStreams.get(chatId)` and invokes `.abort()`.
+     - Upstream LLM connection is severed, the active SSE stream is cleanly terminated, the partial generated text is saved to MongoDB, and the chat lock is released.
+
+

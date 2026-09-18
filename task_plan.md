@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Switch mode to Plan Mode for Phase 5: Section 5 - Chat, Message & Conversation Node Architecture.
+Switch mode to Plan Mode for Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine.
 
 ## Current Phase
 
-Phase 5: Section 5 - Chat, Message & Conversation Node Architecture
+Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 
 ## Phases
 
@@ -54,12 +54,16 @@ Phase 5: Section 5 - Chat, Message & Conversation Node Architecture
 - **Status:** complete
 
 ### Phase 5: Section 5 - Chat, Message & Conversation Node Architecture
-- [ ] Detail Chat and Message schemas (`report` vs `free` types, autoTitle, presets, refs)
-- [ ] Detail unique index (one conversation node per report)
-- [ ] Detail message threading and attachment references
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail Report Chat (1-to-1 co-pilot with mutation tools) vs General Chat (operations analyst & personal assistant)
+- [x] Detail General Chat 7-archetype request catalog and Google Sheets export pipeline (`export_to_google_sheet`)
+- [x] Detail mid-chat dynamic preset selection/creation and AI configuration (`addis`, `google`, `nvidia`, model, language, reasoning)
+- [x] Detail 3 navigation entry points (Sidebar Recent, Reports Card/List, Reports DataGrid)
+- [x] Detail linear downstream truncation mechanics on prompt Edit and agent Retry
+- [x] Detail multi-modal voice notes and in-memory per-chat stream locking (409 Conflict + abort)
+- [x] Write complete Section 5 to `docs/specifications/master_specification.md`
+- [x] User review and confirmation of Section 5
+- [x] Commit Section 5 to `phase-0-specification`
+- **Status:** complete
 
 ### Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 - [ ] Detail MediaRecorder browser capture (WebM/Opus with MP4 fallback)
