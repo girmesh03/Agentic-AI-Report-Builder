@@ -11,7 +11,7 @@
 ## Table of Contents
 1. [Section 1: System Vision, Operational Architecture & Constraints Registry](#section-1-system-vision-operational-architecture--constraints-registry)
 2. [Section 2: User Persona, Authentication & Session Security](#section-2-user-persona-authentication--session-security)
-3. *Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules (Pending)*
+3. [Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules](#section-3-locked-plain-text-amharic-report-engine--formatting-rules)
 4. *Section 4: Domain Data Models, Schemas & Lifecycle Management (Pending)*
 5. *Section 5: Chat, Message & Conversation Node Architecture (Pending)*
 6. *Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine (Pending)*
@@ -713,4 +713,201 @@ To strictly uphold security boundaries, the following endpoints are permanently 
 - `GET /api/v1/auth/sessions` & `DELETE /api/v1/auth/sessions`: No session management interfaces exist.
 - `DELETE /api/v1/auth/user` or generic user deletion endpoints outside of authenticated self-service account deletion in Settings.
 - Any administrative user management endpoints (`/api/v1/users/*`).
+
+---
+
+# Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules
+
+### 3.1 Core Architecture & Deterministic Plain-Text Guarantee
+- **Zero Markdown Mandate**:
+  - The final generated report is strictly **plain text** (UTF-8).
+  - Markdown styling characters (`#`, `##`, `###`, `**bold**`, `*italic*`, `__underline__`, `[links]()`, ````codeblocks````) are **strictly forbidden** anywhere in the output report string.
+  - The output must be cleanly readable when copied directly into external communication tools (WhatsApp, Telegram, SMS, Email, Apple Notes) without escaping artifacts or formatting breakage.
+- **Deterministic Server-Side Rendering Engine (`utils/reportRenderer.js`)**:
+  - The LLM agent is **never permitted to manually assemble or format the final plain-text string**.
+  - All report generation and re-rendering is executed deterministically by a centralized backend utility:
+    ```javascript
+    /**
+     * @module utils/reportRenderer
+     * @description Deterministically renders a Mongoose Report document into locked Amharic plain text.
+     * @param {Object} report - Populated Mongoose report document.
+     * @returns {string} Fully formatted plain-text report string.
+     */
+    export const renderReportText = (report) => { ... };
+    ```
+  - This architecture mathematically eliminates LLM formatting drift, incorrect indentation, missed headers, accidental markdown injection, and punctuation errors.
+- **Whitespace & Delimiter Invariants**:
+  - Exactly **one blank newline** (`\n\n`) separates the header block from the body block.
+  - Exactly **one blank newline** (`\n\n`) separates each body section from the next.
+  - Exactly **one blank newline** (`\n\n`) separates the final body section from the footer line.
+  - Every bullet point begins with the exact three-character prefix: ASCII space, ASCII hyphen, ASCII space (` - `).
+
+---
+
+### 3.2 Locked Amharic Layout Templates
+
+#### 3.2.1 Single-Branch Report Layout (No Visits)
+When the supervisor visits a single branch (`visits[]` is empty, null, or has length 0):
+```text
+ቀን: [DD-MM-YY]
+ብራንች: [ብራንች ስም]
+ስም: [ሙሉ ስም]
+ስራ የገባሁበት ሰዓት: [HH:mm]
+
+የተሰሩ ስራዎች:
+ - [ስራ 1]
+ - [ስራ 2]
+
+መፍትሄ የሚፈልጉ ጉዳዮች:
+ - [ችግር 1]
+ - [ችግር 2]
+
+አጠቃላይ አስተያየት:
+ - [አስተያየት 1]
+
+ከስራ የወጣሁበት ሰዓት: [HH:mm]
+```
+
+#### 3.2.2 Multi-Branch Report Layout (With Visits)
+When the supervisor visits two or more branches (`visits[]` contains 1 or more visit intervals):
+```text
+ቀን: [DD-MM-YY]
+ብራንች: [የመጀመሪያ ብራንች]፣ [ሁለተኛ ብራንች] እና [ሶስተኛ ብራንች]
+ስም: [ሙሉ ስም]
+ስራ የገባሁበት ሰዓት: [HH:mm]
+ከ [HH:mm] – [HH:mm] ([የመጀመሪያ ብራንች] ብራንች)
+ከ [HH:mm] – [HH:mm] ([ሁለተኛ ብራንች] ብራንች)
+
+የተሰሩ ስራዎች:
+ - [ስራ 1]
+ - [ስራ 2]
+
+መፍትሄ የሚፈልጉ ጉዳዮች:
+ - [ችግር 1]
+ - [ችግር 2]
+
+አጠቃላይ አስተያየት:
+ - [አስተያየት 1]
+
+ከስራ የወጣሁበት ሰዓት: [HH:mm]
+```
+
+---
+
+### 3.3 Line-by-Line Formatting Rules & Invariants
+
+#### 3.3.1 Header Block
+1. **Date Line (`ቀን: DD-MM-YY`)**:
+   - Must output the Ethiopian calendar date formatted as `DD-MM-YY` (e.g., `08-01-17`).
+   - Derived bidirectionally from UTC `report.date` using `utils/ethiopianDate.js`.
+   - Ethiopian month-name words are strictly banned from this header line.
+2. **Branch Line (`ብራንች: ...`)**:
+   - *Single Branch Visit*: `ብራንች: <primaryBranchName>` (e.g., `ብራንች: ቦሌ`).
+   - *Multiple Branch Visits*: Formatted by joining the primary branch and all visited branch names using standard Amharic punctuation (`፣`) and conjunction (`እና`):
+     - Two branches: `ብራንች: ቦሌ እና ሳርቤት`
+     - Three or more branches: `ብራንች: ፒያሳ፣ ቦሌ እና መገናኛ`
+3. **Supervisor Name Line (`ስም: <fullName>`)**:
+   - Outputs the supervisor's `fullName` snapshot stored at report creation: `ስም: በዛ ሀይሌ`.
+4. **Workday Entry Time Line (`ስራ የገባሁበት ሰዓት: HH:mm`)**:
+   - Outputs the 24-hour time string stored in `report.clockIn` (e.g., `ስራ የገባሁበት ሰዓት: 08:30`).
+5. **Per-Visit Intervals Block**:
+   - Rendered **if and only if** `report.visits` exists and `report.visits.length > 0`.
+   - Placed directly beneath `ስራ የገባሁበት ሰዓት:` on consecutive lines without intervening blank lines.
+   - Syntax per line: `ከ HH:mm – HH:mm (<branchName> ብራንች)` utilizing an en-dash `–`.
+   - Example:
+     ```text
+     ከ 09:00 – 12:30 (ቦሌ ብራንች)
+     ከ 13:15 – 16:45 (ሳርቤት ብራንች)
+     ```
+   - If `report.visits` is empty, this block is **entirely omitted**.
+
+#### 3.3.2 Body Block & Bullet Formatting
+1. **Activities Section (`የተሰሩ ስራዎች:`)**:
+   - Header: `የተሰሩ ስራዎች:`
+   - Each activity rendered on a new line prefixed with ` - `.
+   - Internal statuses (`completed`, `in_progress`) are **strictly hidden**. Status tags (e.g., `[completed]`) are never output.
+2. **Issues Section (`መፍትሄ የሚፈልጉ ጉዳዮች:`)**:
+   - Header: strictly `መፍትሄ የሚፈልጉ ጉዳዮች:`. Urgency qualifiers such as `(አፋጣኝ)` are **strictly forbidden** in the header.
+   - Each issue rendered on a new line prefixed with ` - `.
+   - All documented issues are inherently urgent operational items; urgency prefixes or tags are never rendered in bullet text.
+   - Internal statuses (`reported`, `in_progress`, `completed`, `no_issue`) are **strictly hidden**.
+   - **The Mandatory `no_issue` Invariant**: If no issues occurred during the shift, the section is **never** blank or omitted. It must render the exact locked sentence:
+     ` - በዕለቱ በብራንቹ አፋጣኝ መፍትሄ የሚፈልግ የተለየ ጉዳይ አልነበረም።`
+3. **General Comments Section (`አጠቃላይ አስተያየት:`)**:
+   - Header: `አጠቃላይ አስተያየት:`
+   - Each observation rendered on a new line prefixed with ` - `.
+   - Comments carry no status.
+   - **The Mandatory Default Comments Fallback**: If the supervisor provided no specific general comments during narration, the section renders the locked professional fallback sentence:
+     ` - በዕለቱ በብራንቹ የነበረው አጠቃላይ የስራ እንቅስቃሴ ደህና ነበር።`
+     *(The phrase "ምንም ተጨማሪ አስተያየት የለም።" is strictly prohibited).*
+
+#### 3.3.3 Footer Block
+1. **Workday Exit Time Line (`ከስራ የወጣሁበት ሰዓት: HH:mm`)**:
+   - Separated from the comments section by exactly one blank newline.
+   - Outputs the 24-hour departure time string stored in `report.clockOut` (e.g., `ከስራ የወጣሁበት ሰዓት: 17:45`).
+
+---
+
+### 3.4 The Six Linguistic & Cognitive Guardrails
+
+To guarantee professional supervisory reporting and eliminate poor AI generation, the agent runtime and prompt architecture enforce the following six non-negotiable guardrails:
+
+#### 3.4.1 Acoustic Quality Gate & Clarification Fallback
+- If the uploaded audio has duration but the Addis AI STT transcript is empty, garbled, noisy, or lacks substantive operational details, the agent **must never hallucinate or invent** synthetic shift tasks or fictitious branch issues.
+- In such circumstances, the agent halts the report synthesis flow and responds conversationally in polite Amharic, prompting the supervisor with targeted clarifying questions (e.g., asking which specific tasks were performed, whether any equipment malfunctioned, or confirming departure times).
+
+#### 3.4.2 Empty Comments Fallback Invariant
+- If the supervisor narrates activities and issues but provides no general supervisory impressions, customer volume sentiment, or staff atmosphere notes, the system automatically injects:
+  `በዕለቱ በብራንቹ የነበረው አጠቃላይ የስራ እንቅስቃሴ ደህና ነበር።`
+- The system must never output dismissive or negative placeholders like *"ምንም ተጨማሪ አስተያየት የለም።"*.
+
+#### 3.4.3 First-Person Active Voice for Activities (`የተሰሩ ስራዎች`)
+- Every activity bullet must be phrased from the direct supervisory perspective using the **first-person singular active voice** with appropriate Ge'ez past-tense verbal suffixes (`አረጋግጫለሁ`, `ተከታትያለሁ`, `አጠናቅቄአለሁ`, `መርምሬአለሁ`, `አስተካክያለሁ`).
+- Passive or third-person phrasing (e.g., *"ስራዎች ተሰርተዋል"*) is strictly prohibited.
+- **Reference Standard**:
+  ` - በቼክሊስቱ መሰረት በብራንቹ የሚከናወኑ የዕለት ተዕለት ተግባራትን፣ የአሰራር ሂደቶችን እና የሰራተኞችን ዝግጁነት ተከታትዬ አረጋግጫለሁ።`
+
+#### 3.4.4 Action-Oriented Impact-and-Solution Tone for Issues (`መፍትሄ የሚፈልጉ ጉዳዮች`)
+- Every documented issue bullet must clearly state three logical elements:
+  1. **The Specific Operational Problem**: What failed, broke, or was exhausted.
+  2. **The Operational / Financial Impact**: Why it matters to branch efficiency, customer satisfaction, or corporate expenditure.
+  3. **The Urgent Resolution Required**: What concrete action management or the supply chain must take immediately.
+- **Reference Standard**:
+  ` - በአሁኑ ሰዓት በስቶር ውስጥ ፎይል የለም። በዚህም ምክንያት ከውጪ በ6,630 ብር እየተገዛ ይገኛል። ይህ አሰራር ከፍተኛ ወጪ ስለሚያስወጣ፣ ፎይል በፍጥነት ወደ ስቶር ገብቶ ለብራንቹ የሚቀርብበት መንገድ በአፋጣኝ ሊመቻች ይገባል።`
+- Issues must never be documented as bare fragments (e.g., *"ፎይል አልቋል"* is unacceptable).
+
+#### 3.4.5 Vague Shorthand Expansion Engine
+- Field supervisors often speak in shorthand operational jargon when tired (e.g., saying only *"ቼክሊስት"* or *"ካሽ ቆጠራ"*).
+- The agentic prompt pipeline is instructed to expand standard workplace shorthand into professional, auditable supervisory documentation that accurately reflects company Standard Operating Procedures (SOPs).
+- E.g., *"ቼክሊስት"* $\rightarrow$ *"በቼክሊስቱ መሰረት በብራንቹ የሚከናወኑ የዕለት ተዕለት ተግባራትን፣ የአሰራር ሂደቶችን እና የሰራተኞችን ዝግጁነት ተከታትዬ አረጋግጫለሁ።"*
+
+#### 3.4.6 The `no_issue` Domain Invariant
+- If the supervisor explicitly states that no problems occurred (e.g., *"ምንም ችግር አልነበረም"*), or if the narration contains zero complaints, stockouts, or failures:
+  - The issue status is set to `no_issue`.
+  - The issues section renders the exact, standardized single bullet:
+    ` - በዕለቱ በብራንቹ አፋጣኝ መፍትሄ የሚፈልግ የተለየ ጉዳይ አልነበረም።`
+
+---
+
+### 3.5 Delivery & Export Formatting Specifications
+
+The application provides four client-side and backend export mechanisms that consume the deterministic plain-text output:
+
+1. **One-Click Clipboard Copy**:
+   - Implemented via `navigator.clipboard.writeText(report.generatedReportText)`.
+   - Triggers a success toast: `"Report copied to clipboard"`.
+2. **Plain-Text File Download (`.txt`)**:
+   - Generates a client-side `Blob` of type `text/plain;charset=utf-8` containing the exact report string with UTF-8 BOM (`\uFEFF`) to ensure seamless opening in Windows Notepad and Amharic text readers.
+   - Naming convention: `Report-<branchName>-<DD-MM-YY>.txt`.
+3. **Browser Print to Clean PDF**:
+   - Invokes `window.print()` targeting a print-only layout stylesheet (`@media print`).
+   - Print stylesheet rules:
+     - Hides AppShell navigation, sidebars, headers, action buttons, and chat composers (`display: none !important`).
+     - Renders report in a high-readability monospace or Inter font with standard A4 margins (20mm), black text on pure white background, and no URL footers or browser headers.
+4. **Backend-Only Google Docs Export (`POST /api/v1/reports/:reportId/export/google-docs`)**:
+   - Executes strictly on the backend using the user's authorized Google OAuth tokens under the `https://www.googleapis.com/auth/drive.file` scope.
+   - Creates a new Google Document titled `Report - <branchName> - <DD-MM-YY>`.
+   - Inserts the formatted report string into the Google Doc body using the Google Docs v1 REST API.
+   - Returns the web link to the created Google Document (`{ success: true, message: "Exported to Google Docs", data: { docUrl } }`).
+
 

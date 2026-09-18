@@ -56,6 +56,13 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Downstream Message Truncation | Editing user prompt or retrying agent response permanently truncates all subsequent messages below it to maintain context integrity. |
 | Profile Update (`PATCH /auth/profile`) | Updates `firstName`, `lastName`, `email` (409 on duplicate), `position` via Settings Profile tab; syncs Redux in memory. |
 | Avatar Upload Constraints | Max 15MB single file, storage `uploads/avatars/`, allowed types: `jpeg`, `jpg`, `png`, `webp`. |
+| Server-Side Report Renderer | Pure deterministic assembly in `utils/reportRenderer.js`; LLM never formats plain-text string directly. |
+| Activities Tone | Strictly first-person active voice (`አረጋግጫለሁ`, `ተከታትያለሁ`); hidden status (`completed`, `in_progress`). |
+| Issues Tone & Structure | Problem + Impact + Urgent Action Required; heading never gets `(አፋጣኝ)`; hidden status (`reported`, `in_progress`, `completed`, `no_issue`). |
+| No-Issue Invariant | Renders `በዕለቱ በብራንቹ አፋጣኝ መፍትሄ የሚፈልግ የተለየ ጉዳይ አልነበረም።` when zero issues are identified. |
+| Empty Comments Fallback | Renders `በዕለቱ በብራንቹ የነበረው አጠቃላይ የስራ እንቅስቃሴ ደህና ነበር።` when comments are absent (never outputs "ምንም ተጨማሪ..."). |
+| Acoustic Quality Gate | Agent asks clarifying questions if STT transcript is empty or garbled; zero hallucination on noisy audio. |
+| Vague Shorthand Expansion | Expands terse workplace phrases (e.g. `ቼክሊስት`) into professional SOP supervisory documentation. |
 
 ## Locked Package Manifest
 

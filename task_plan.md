@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Switch mode to Plan Mode for Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules.
+Switch mode to Plan Mode for Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management.
 
 ## Current Phase
 
-Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
+Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
 
 ## Phases
 
@@ -34,12 +34,14 @@ Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
 - **Status:** complete
 
 ### Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
-- [ ] Detail exact Amharic plain-text layout for single-branch and multi-branch visits
-- [ ] Detail Ethiopian date (`DD-MM-YY`), 24h times (`HH:mm`), headers, bullets, and footer lines
-- [ ] Detail rule for `no_issue` bullet and hidden internal statuses
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail exact Amharic plain-text layout for single-branch and multi-branch visits
+- [x] Detail Ethiopian date (`DD-MM-YY`), 24h times (`HH:mm`), headers, bullets, and footer lines
+- [x] Detail rule for `no_issue` bullet and hidden internal statuses
+- [x] Detail the six linguistic guardrails (acoustic quality gate, first-person activities, impact-and-solution issues, comments fallback, shorthand expansion, no_issue)
+- [x] Write complete Section 3 to `docs/specifications/master_specification.md`
+- [x] User review and confirmation of Section 3
+- [x] Commit Section 3 to `phase-0-specification`
+- **Status:** complete
 
 ### Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
 - [ ] Detail User, Branch, Report, and RefreshToken Mongoose schemas
