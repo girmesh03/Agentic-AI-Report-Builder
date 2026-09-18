@@ -8,20 +8,21 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Awaiting user review of this complete planning setup, followed by adding, committing, and pushing branch `phase-0-specification`, then switching mode back to Plan Mode for Section 1.
+Switch mode to Plan Mode for Phase 2: Section 2 - User Persona, Authentication & Session Security.
 
 ## Current Phase
 
-Phase 1: Section 1 - System Vision, Operational Architecture & Constraints Registry
+Phase 2: Section 2 - User Persona, Authentication & Session Security
 
 ## Phases
 
 ### Phase 1: Section 1 - System Vision, Operational Architecture & Constraints Registry
-- [ ] Detail product philosophy, supervisor workflow, Amharic-first domain, and delivery model
-- [ ] Document strict scope boundaries and architecture constraints
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail product philosophy, supervisor workflow, Amharic-first domain, and delivery model
+- [x] Document strict scope boundaries and architecture constraints
+- [x] Write complete Section 1 to `docs/specifications/master_specification.md`
+- [x] User review and confirmation of Section 1
+- [x] Commit Section 1 to `phase-0-specification`
+- **Status:** complete
 
 ### Phase 2: Section 2 - User Persona, Authentication & Session Security
 - [ ] Detail Email+Password and Google OAuth raw flow (state + PKCE)

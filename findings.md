@@ -51,6 +51,9 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Dual httpOnly JWT Cookie Auth | Maximum security against XSS. 15m access, 7d refresh with rotation and reuse detection. |
 | Exactly one TTL index | Placed on `RefreshToken` collection. |
 | 30-day Sweeper | `node-cron` sweeps archived branches and reports after 30 days. |
+| Multi-turn ChatGPT/Gemini Thread | Persistent ongoing conversation inside AppShell; 3 entry points (Sidebar Recent, Reports Card/List, Reports DataGrid). |
+| In-Thread Message Action Icons | Agent: Copy & Retry; User: Copy & Edit (inline `MuiTextField` editor + Update button). |
+| Downstream Message Truncation | Editing user prompt or retrying agent response permanently truncates all subsequent messages below it to maintain context integrity. |
 
 ## Locked Package Manifest
 
