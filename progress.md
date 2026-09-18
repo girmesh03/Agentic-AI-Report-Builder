@@ -68,12 +68,36 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+### Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
+- **Status:** complete
+- **Started:** 2026-09-18T05:14:00+03:00
+- **Completed:** 2026-09-18T05:47:00+03:00
+- Actions taken:
+  - Addressed user feedback: added `normalizedName`, optional `phone`, and optional `address` to `Branch`; renamed `generatedReportText` to `generated` on `Report`; added `rawTranscript` and `audioFiles[]` to `Report`.
+  - Formulated comprehensive schema definitions for all 8 application models (`User`, `Branch`, `Report`, `RefreshToken`, `Chat`, `Message`, `Preset`, `Glossary`).
+  - Integrated multi-provider AI metadata (`provider`, `model`, `language`, `reasoning`, `tokensUsed`) across `Message` and `Report`.
+  - Standardized provider enums to `['addis', 'google', 'nvidia']`.
+  - Designed dynamic chat titling: report-context derived for `type: 'report'` and auto-generated from first prompt for `type: 'general'`.
+  - Decoupled `Preset` prompt into `persona` and `systemPrompt`.
+  - Defined two-tier deletion lifecycle (Tier 1 soft-archive, Tier 2 physical purge via 30-day `node-cron` daily midnight sweeper with audio file unlinking and cascade deletion).
+  - Authored complete Section 4 into `docs/specifications/master_specification.md` and activated TOC link.
+  - Refactored all 8 models to eliminate inline field-level indexes/uniqueness, centralizing all index declarations into `schema.index(...)`.
+  - Updated `visits[]` subdocuments to use `clockIn` and `clockOut` for per-branch arrival/departure, decoupled from overall daily shift `clockIn`/`clockOut`.
+  - Eliminated hardcoded AI provider and model defaults from schemas, enforcing dynamic injection via `config/env.js`.
+  - User reviewed and approved Section 4.
+  - Staged, committed, and pushed Section 4 to `phase-0-specification`.
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Phase 3 complete on branch `phase-0-specification`. Ready for Section 4 in Plan Mode. |
-| Where am I going? | Switch to Plan Mode for Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management. |
+| Where am I? | Phase 4 complete on branch `phase-0-specification`. Ready for Section 5 in Plan Mode. |
+| Where am I going? | Switch to Plan Mode for Phase 5: Section 5 - Chat, Message & Conversation Node Architecture. |
 | What's the goal? | Complete, exhaustive 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Plain-text report engine, deterministic assembler, and 6 linguistic guardrails locked into specification. |
-| What have I done? | Authored, reviewed, committed, and pushed Sections 1, 2 & 3. |
+| What have I learned? | Complete 8-model Mongoose database contract, zero field-level indexes, visit clockIn/clockOut, and addis/google/nvidia provider enums locked into specification. |
+| What have I done? | Authored, reviewed, committed, and pushed Sections 1, 2, 3, and 4. |

@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Switch mode to Plan Mode for Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management.
+Switch mode to Plan Mode for Phase 5: Section 5 - Chat, Message & Conversation Node Architecture.
 
 ## Current Phase
 
-Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
+Phase 5: Section 5 - Chat, Message & Conversation Node Architecture
 
 ## Phases
 
@@ -44,12 +44,14 @@ Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
 - **Status:** complete
 
 ### Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
-- [ ] Detail User, Branch, Report, and RefreshToken Mongoose schemas
-- [ ] Detail indexes, validations, virtuals, JSON transforms (stripping `id` and `__v`)
-- [ ] Detail soft-delete lifecycle (`isArchived`, `archivedAt`) and 30-day cron sweeper
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail User, Branch, Report, RefreshToken, Chat, Message, Preset, and Glossary Mongoose schemas
+- [x] Detail indexes, compound uniqueness, validations, virtuals, JSON transforms (stripping `id` and `__v`)
+- [x] Detail soft-delete lifecycle (`isArchived`, `archivedAt`) and 30-day cron sweeper with audio unlinking
+- [x] Review in Plan Mode with user
+- [x] Write complete Section 4 to `docs/specifications/master_specification.md`
+- [x] User review and confirmation of Section 4
+- [x] Commit Section 4 to `phase-0-specification`
+- **Status:** complete
 
 ### Phase 5: Section 5 - Chat, Message & Conversation Node Architecture
 - [ ] Detail Chat and Message schemas (`report` vs `free` types, autoTitle, presets, refs)

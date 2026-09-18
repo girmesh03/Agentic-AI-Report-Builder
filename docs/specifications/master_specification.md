@@ -12,7 +12,7 @@
 1. [Section 1: System Vision, Operational Architecture & Constraints Registry](#section-1-system-vision-operational-architecture--constraints-registry)
 2. [Section 2: User Persona, Authentication & Session Security](#section-2-user-persona-authentication--session-security)
 3. [Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules](#section-3-locked-plain-text-amharic-report-engine--formatting-rules)
-4. *Section 4: Domain Data Models, Schemas & Lifecycle Management (Pending)*
+4. [Section 4: Domain Data Models, Schemas & Lifecycle Management](#section-4-domain-data-models-schemas--lifecycle-management)
 5. *Section 5: Chat, Message & Conversation Node Architecture (Pending)*
 6. *Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine (Pending)*
 7. *Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime (Pending)*
@@ -240,7 +240,7 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
 - **Single-User Scope & Architectural Enforcement**:
   - The platform implements a self-service, single-user security architecture.
   - The concept of `role` is strictly prohibited throughout models, DTOs, tokens, and controllers. No `role` or `roles` property may exist anywhere in the codebase.
-  - Every application collection except `User` (`Branch`, `Report`, `Chat`, `RefreshToken`, `Preset`, `Glossary`) carries a mandatory `user` field (`type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true`).
+  - Every application collection except `User` (`Branch`, `Report`, `Chat`, `RefreshToken`, `Preset`, `Glossary`) carries a mandatory `user` field (`type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true`).
   - All controller handlers and service methods scope database queries, mutations, and aggregations strictly to `req.user._id.toString()`.
 - **Mongoose `User` Schema Specification**:
   ```javascript
@@ -257,7 +257,6 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
       email: {
         type: String,
         required: [true, 'Email is required'],
-        unique: true,
         lowercase: true,
         trim: true,
         match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
@@ -310,6 +309,8 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
       },
     }
   );
+
+  userSchema.index({ email: 1 }, { unique: true });
   ```
 - **Name Auto-Derivation Invariant**:
   - `firstName` and `lastName` are never collected on the registration form.
@@ -528,18 +529,14 @@ const refreshTokenSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     tokenHash: {
       type: String,
       required: true,
-      unique: true,
-      index: true,
     },
     family: {
       type: String,
       required: true,
-      index: true,
     },
     isRevoked: {
       type: Boolean,
@@ -568,6 +565,10 @@ const refreshTokenSchema = new mongoose.Schema(
   }
 );
 
+// Schema-level indexes
+refreshTokenSchema.index({ tokenHash: 1 }, { unique: true });
+refreshTokenSchema.index({ family: 1 });
+refreshTokenSchema.index({ user: 1 });
 // The sole TTL index in the entire database
 refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 ```
@@ -910,4 +911,816 @@ The application provides four client-side and backend export mechanisms that con
    - Inserts the formatted report string into the Google Doc body using the Google Docs v1 REST API.
    - Returns the web link to the created Google Document (`{ success: true, message: "Exported to Google Docs", data: { docUrl } }`).
 
+---
 
+# Section 4: Domain Data Models, Schemas & Lifecycle Management
+
+### 4.1 Architecture, Conformance & Global Schema Invariants
+
+All Mongoose models in the application adhere to the following non-negotiable architectural mandates:
+
+1. **Pure ES Modules & Single Identity Invariant**:
+   - Written exclusively in native JavaScript ES Modules (`import mongoose, { Schema } from 'mongoose';`).
+   - The primary identifier for every document is MongoDB's native `_id` (`Schema.Types.ObjectId`).
+   - Accessing or exposing `.id` (Mongoose's virtual string alias) is **strictly forbidden**. Every schema's `toJSON` transform explicitly deletes `id` and `__v`.
+2. **Single-User Data Isolation (Zero Multi-Tenancy / Zero RBAC)**:
+   - The platform operates as a personal productivity tool without role-based access controls (`role` properties are strictly banned).
+   - Every collection except `User` must define a required `user` field referencing `'User'`.
+   - Every database query in services and controllers must explicitly scope by `user: req.user._id`.
+3. **Document Reference Syntax**:
+   - Foreign document references use the **plain singular model name** (`user`, `branch`, `report`, `chat`).
+   - Suffixed keys such as `userId`, `branchId`, or `reportId` in Mongoose schemas are **strictly forbidden**.
+4. **Universal Timestamps**:
+   - Every top-level schema declares `{ timestamps: true }`, automatically generating `createdAt` and `updatedAt` ISO 8601 UTC dates.
+5. **Auditing & Historical Snapshot Invariant**:
+   - Operational reports must remain immutable even if referenced entities are subsequently renamed, edited, soft-archived, or physically purged.
+   - To achieve zero-lookup rendering resilience, the `Report` document snapshots human-readable metadata at the exact moment of synthesis (`supervisorName`, `branchName`, and per-visit `branchName`).
+6. **Schema-Level Indexing Mandate (Zero Field-Level Indexing)**:
+   - All single-field indexes, compound indexes, unique constraints, sparse indexes, and TTL indexes must be defined **exclusively at the schema level** using `schema.index(...)`.
+   - Defining indexes inline at the property level (e.g., `index: true`, `unique: true`, `sparse: true`) is **strictly forbidden** across all schemas to ensure centralized index visibility and avoid duplicate index generation in MongoDB.
+7. **Configuration Decoupling Invariant (Zero Hardcoded Defaults)**:
+   - Configuration-dependent settings (such as AI provider names, default models, upload paths, quota limits, and timeouts) must **never be hardcoded** as Mongoose schema defaults or static inline strings.
+   - All defaults must be injected dynamically at the service/controller layer from centralized environment configuration (`config/env.js`).
+8. **Dual Clock-In/Clock-Out Domain Hierarchy**:
+   - The application enforces two distinct, hierarchical time tracking boundaries:
+     - **Workday Shift Clock-In/Clock-Out (`report.clockIn` / `report.clockOut`)**: Represents the supervisor's overall working hours for the day.
+     - **Per-Branch Visit Clock-In/Clock-Out (`visit.clockIn` / `visit.clockOut`)**: Represents arrival and departure times for a specific branch inspection interval within that day.
+
+---
+
+### 4.2 Comprehensive Schema Catalog
+
+#### 4.2.1 `User` Model (`models/User.js`)
+Stores authenticated supervisor credentials, profile metadata, and OAuth linkages.
+```javascript
+/**
+ * @module models/User
+ * @description Supervisor entity, authentication credentials, and profile settings.
+ */
+import mongoose, { Schema } from 'mongoose';
+import bcrypt from 'bcryptjs';
+
+const userSchema = new Schema({
+  firstName: {
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true
+  },
+  email: {
+    type: String,
+    required: [true, 'Email address is required'],
+    lowercase: true,
+    trim: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/, 'Please provide a valid email address']
+  },
+  password: {
+    type: String,
+    select: false,
+    minlength: [8, 'Password must be at least 8 characters long']
+  },
+  position: {
+    type: String,
+    default: 'Area Supervisor',
+    trim: true
+  },
+  avatar: {
+    type: String,
+    default: null // Stored relative path: 'uploads/avatars/<filename>'
+  },
+  googleId: {
+    type: String,
+    default: null
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.password;
+      delete ret.__v;
+      delete ret.id; // Enforces strict _id convention
+      return ret;
+    }
+  }
+});
+
+// Virtual full name accessor
+userSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`.trim();
+});
+
+// Schema-level indexes
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ googleId: 1 }, { sparse: true });
+
+// Pre-save password hashing hook (10 rounds bcrypt)
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password') || !this.password) {
+    return next();
+  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Instance method for secure password verification
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  if (!this.password) return false;
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+export const User = mongoose.model('User', userSchema);
+```
+
+---
+
+#### 4.2.2 `Branch` Model (`models/Branch.js`)
+Stores company store or inspection branch locations visited by the supervisor.
+```javascript
+/**
+ * @module models/Branch
+ * @description Company branch location scoped per user with duplicate-name collision prevention.
+ */
+import mongoose, { Schema } from 'mongoose';
+import mongoosePaginate from 'mongoose-paginate-v2';
+
+const branchSchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'Branch must belong to a user']
+  },
+  name: {
+    type: String,
+    required: [true, 'Branch name is required'],
+    trim: true // e.g., 'Bole', 'ሳርቤት'
+  },
+  normalizedName: {
+    type: String,
+    required: true,
+    lowercase: true,
+    trim: true // Used for case-insensitive unique constraint per user
+  },
+  phone: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  address: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  isArchived: {
+    type: Boolean,
+    default: false
+  },
+  archivedAt: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  }
+});
+
+// Schema-level indexes
+branchSchema.index({ user: 1, normalizedName: 1 }, { unique: true });
+branchSchema.index({ user: 1, isArchived: 1 });
+
+branchSchema.plugin(mongoosePaginate);
+
+export const Branch = mongoose.model('Branch', branchSchema);
+```
+
+---
+
+#### 4.2.3 `Report` Model (`models/Report.js`)
+The central domain aggregate storing shift hours, operational bullets, audio attachments, synthesis metadata, and the locked plain-text Amharic output.
+```javascript
+/**
+ * @module models/Report
+ * @description Immutable operational report aggregate containing shift data, activities, issues, and locked plain text.
+ */
+import mongoose, { Schema } from 'mongoose';
+import mongoosePaginate from 'mongoose-paginate-v2';
+
+const visitSubdocumentSchema = new Schema({
+  branch: {
+    type: Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: true
+  },
+  branchName: {
+    type: String,
+    required: true,
+    trim: true // Historical snapshot
+  },
+  clockIn: {
+    type: String,
+    required: true,
+    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Branch visit clock-in must follow HH:mm 24-hour format']
+  },
+  clockOut: {
+    type: String,
+    required: true,
+    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Branch visit clock-out must follow HH:mm 24-hour format']
+  }
+}, { _id: true });
+
+const activitySubdocumentSchema = new Schema({
+  text: {
+    type: String,
+    required: [true, 'Activity description is required'],
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['completed', 'in_progress'],
+    default: 'completed'
+  }
+}, { _id: true });
+
+const issueSubdocumentSchema = new Schema({
+  text: {
+    type: String,
+    required: [true, 'Issue description is required'],
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['reported', 'in_progress', 'completed', 'no_issue'],
+    default: 'reported'
+  }
+}, { _id: true });
+
+const commentSubdocumentSchema = new Schema({
+  text: {
+    type: String,
+    required: [true, 'Comment text is required'],
+    trim: true
+  }
+}, { _id: true });
+
+const audioFileSubdocumentSchema = new Schema({
+  originalName: { type: String, required: true },
+  fileName: { type: String, required: true },
+  path: { type: String, required: true }, // e.g., 'uploads/audio/<filename>'
+  mimeType: { type: String, required: true },
+  size: { type: Number, required: true }, // bytes
+  duration: { type: Number, default: 0 } // seconds
+}, { _id: true });
+
+const reportSchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: [true, 'Report must belong to a user']
+  },
+  branch: {
+    type: Schema.Types.ObjectId,
+    ref: 'Branch',
+    required: [true, 'Primary branch is required']
+  },
+  branchName: {
+    type: String,
+    required: [true, 'Primary branch name snapshot is required'],
+    trim: true
+  },
+  date: {
+    type: Date,
+    required: [true, 'Report calendar date is required'] // Stored at UTC midnight
+  },
+  ethiopianDate: {
+    type: String,
+    required: [true, 'Ethiopian date string is required'],
+    match: [/^\d{2}-\d{2}-\d{2}$/, 'Ethiopian date must follow DD-MM-YY format']
+  },
+  supervisorName: {
+    type: String,
+    required: [true, 'Supervisor name snapshot is required'],
+    trim: true
+  },
+  clockIn: {
+    type: String,
+    required: [true, 'Shift clock-in time is required'],
+    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Shift clock-in must follow HH:mm 24-hour format']
+  },
+  clockOut: {
+    type: String,
+    required: [true, 'Shift clock-out time is required'],
+    match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Shift clock-out must follow HH:mm 24-hour format']
+  },
+  visits: [visitSubdocumentSchema],
+  activities: [activitySubdocumentSchema],
+  issues: [issueSubdocumentSchema],
+  comments: [commentSubdocumentSchema],
+  generated: {
+    type: String,
+    default: '' // Locked plain-text Amharic output rendered by utils/reportRenderer.js
+  },
+  rawTranscript: {
+    type: String,
+    default: '' // Concatenated raw Addis AI STT output from initial narration
+  },
+  audioFiles: [audioFileSubdocumentSchema],
+  chat: {
+    type: Schema.Types.ObjectId,
+    ref: 'Chat',
+    default: null // 1-to-1 link to conversational refinement thread
+  },
+  aiMetadata: {
+    provider: {
+      type: String,
+      enum: ['addis', 'google', 'nvidia'],
+      required: true // Dynamically injected from runtime execution (no hardcoded default)
+    },
+    model: {
+      type: String,
+      required: true // Dynamically injected from runtime execution (no hardcoded default)
+    },
+    reasoning: {
+      type: String,
+      default: null // Thinking trace for reasoning-enabled models
+    },
+    durationMs: {
+      type: Number,
+      default: 0
+    },
+    tokensUsed: {
+      promptTokens: { type: Number, default: 0 },
+      completionTokens: { type: Number, default: 0 },
+      totalTokens: { type: Number, default: 0 }
+    }
+  },
+  isArchived: {
+    type: Boolean,
+    default: false
+  },
+  archivedAt: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  }
+});
+
+// Schema-level composite & query indexes
+reportSchema.index({ user: 1, date: -1 });
+reportSchema.index({ user: 1, branch: 1, date: -1 });
+reportSchema.index({ user: 1, isArchived: 1 });
+reportSchema.index({ chat: 1 });
+
+reportSchema.plugin(mongoosePaginate);
+
+export const Report = mongoose.model('Report', reportSchema);
+```
+
+---
+
+#### 4.2.4 `RefreshToken` Model (`models/RefreshToken.js`)
+Manages rotating refresh token families, reuse detection, and automatic session cleanup.
+```javascript
+/**
+ * @module models/RefreshToken
+ * @description Stores cryptographic digests of active refresh tokens with automatic TTL expiry.
+ */
+import mongoose, { Schema } from 'mongoose';
+
+const refreshTokenSchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  tokenHash: {
+    type: String,
+    required: true // SHA-256 digest of the raw refresh token string
+  },
+  family: {
+    type: String,
+    required: true // Cryptographic family identifier for reuse/theft detection
+  },
+  isRevoked: {
+    type: Boolean,
+    default: false
+  },
+  expiresAt: {
+    type: Date,
+    required: true // Set to exactly 7 days from creation
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      delete ret.tokenHash;
+      return ret;
+    }
+  }
+});
+
+// Schema-level indexes
+refreshTokenSchema.index({ tokenHash: 1 }, { unique: true });
+refreshTokenSchema.index({ family: 1 });
+refreshTokenSchema.index({ user: 1 });
+// The SOLE TTL index in the entire database: Automatically purges expired sessions
+refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+export const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
+```
+
+---
+
+#### 4.2.5 `Chat` Model (`models/Chat.js`)
+Conversational container representing either a dedicated report refinement thread or a general AI assistant conversation.
+```javascript
+/**
+ * @module models/Chat
+ * @description Conversation thread aggregate supporting report refinement and general assistance.
+ */
+import mongoose, { Schema } from 'mongoose';
+import mongoosePaginate from 'mongoose-paginate-v2';
+
+const chatSchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  report: {
+    type: Schema.Types.ObjectId,
+    ref: 'Report',
+    default: null // Associated report when type === 'report'
+  },
+  title: {
+    type: String,
+    required: true,
+    trim: true,
+    default: 'New Chat'
+  },
+  type: {
+    type: String,
+    enum: ['report', 'general'],
+    default: 'report',
+    required: true
+  },
+  isArchived: {
+    type: Boolean,
+    default: false
+  },
+  archivedAt: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  }
+});
+
+// Schema-level indexes
+// Compound partial unique index: Exactly one chat node per report
+chatSchema.index(
+  { report: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { report: { $type: 'objectId' } }
+  }
+);
+chatSchema.index({ user: 1, isArchived: 1, updatedAt: -1 });
+chatSchema.index({ user: 1 });
+
+chatSchema.plugin(mongoosePaginate);
+
+export const Chat = mongoose.model('Chat', chatSchema);
+```
+
+##### Title Derivation Rules for `Chat`:
+1. **Report Chats (`type === 'report'`)**:
+   - Title is generated deterministically upon report association:
+     `Report - <branchName> - <DD-MM-YY>` (e.g., `"Report - Bole - 08-01-17"`).
+2. **General Chats (`type === 'general'`)**:
+   - Initial placeholder title on creation is `"New Chat"`.
+   - **Auto-Generated from User Input**: Upon receiving the supervisor's **first message**, the title is automatically updated to the first 35 characters of the prompt (or a concise 3–5 word AI summary).
+   - Supervisors may manually rename the chat at any time via `PATCH /api/v1/chats/:chatId`.
+
+---
+
+#### 4.2.6 `Message` Model (`models/Message.js`)
+Stores individual conversational exchanges, attached audio voice notes, STT transcripts, provider metadata, and reasoning traces.
+```javascript
+/**
+ * @module models/Message
+ * @description Threaded conversational exchange with multi-modal audio, STT, and multi-provider AI metadata.
+ */
+import mongoose, { Schema } from 'mongoose';
+
+const messageSchema = new Schema({
+  chat: {
+    type: Schema.Types.ObjectId,
+    ref: 'Chat',
+    required: true
+  },
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  sender: {
+    type: String,
+    enum: ['user', 'agent'],
+    required: true
+  },
+  text: {
+    type: String,
+    required: [true, 'Message text content is required']
+  },
+  audio: {
+    originalName: { type: String, default: null },
+    fileName: { type: String, default: null },
+    path: { type: String, default: null }, // 'uploads/audio/<filename>'
+    duration: { type: Number, default: 0 },
+    mimeType: { type: String, default: null }
+  },
+  rawTranscription: {
+    type: String,
+    default: null // Addis AI STT output if message originated as a voice note
+  },
+  provider: {
+    type: String,
+    enum: ['addis', 'google', 'nvidia'],
+    required: true // Dynamically injected from runtime execution (no hardcoded default)
+  },
+  model: {
+    type: String,
+    required: true // Dynamically injected from runtime execution (no hardcoded default)
+  },
+  language: {
+    type: String,
+    required: true // e.g., 'am' or 'en' from active session config
+  },
+  reasoning: {
+    type: String,
+    default: null // Chain-of-thought/thinking content extracted from provider response
+  },
+  tokensUsed: {
+    promptTokens: { type: Number, default: 0 },
+    completionTokens: { type: Number, default: 0 },
+    totalTokens: { type: Number, default: 0 }
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  }
+});
+
+// Schema-level indexes
+messageSchema.index({ chat: 1, createdAt: 1 });
+messageSchema.index({ user: 1 });
+
+export const Message = mongoose.model('Message', messageSchema);
+```
+
+---
+
+#### 4.2.7 `Preset` Model (`models/Preset.js`)
+Configurable supervisory templates separating operational persona from checklist/system instructions.
+```javascript
+/**
+ * @module models/Preset
+ * @description User-customizable prompt templates decoupling persona from operational SOP instructions.
+ */
+import mongoose, { Schema } from 'mongoose';
+import mongoosePaginate from 'mongoose-paginate-v2';
+
+const presetSchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  name: {
+    type: String,
+    required: [true, 'Preset name is required'],
+    trim: true // e.g., 'Enjoy Burger Closing Audit', 'Fast Food Opening Inspection'
+  },
+  persona: {
+    type: String,
+    required: [true, 'Persona definition is required'],
+    trim: true // e.g., 'You are an experienced, detail-oriented F&B Area Supervisor with strict food safety, sanitation, and cash reconciliation standards.'
+  },
+  systemPrompt: {
+    type: String,
+    required: [true, 'Operational guidelines / system prompt is required'],
+    trim: true // e.g., 'Verify store sanitation, inspect POS register closing discrepancy, expand shorthand into SOP documentation, and ensure all issues detail problem, financial impact, and resolution.'
+  },
+  isDefault: {
+    type: Boolean,
+    default: false
+  },
+  isArchived: {
+    type: Boolean,
+    default: false
+  },
+  archivedAt: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  }
+});
+
+// Schema-level indexes
+presetSchema.index({ user: 1, name: 1 }, { unique: true });
+presetSchema.index({ user: 1, isArchived: 1 });
+
+presetSchema.plugin(mongoosePaginate);
+
+export const Preset = mongoose.model('Preset', presetSchema);
+```
+
+---
+
+#### 4.2.8 `Glossary` Model (`models/Glossary.js`)
+Maintains per-user English-to-Ge'ez workplace phonetic transliterations.
+```javascript
+/**
+ * @module models/Glossary
+ * @description Workplace transliteration vocabulary mapping English technical terms to natural Ge'ez script phonetics.
+ */
+import mongoose, { Schema } from 'mongoose';
+import mongoosePaginate from 'mongoose-paginate-v2';
+
+const glossarySchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  englishTerm: {
+    type: String,
+    required: [true, 'English technical term is required'],
+    trim: true // e.g., 'Deep Fryer', 'POS Machine'
+  },
+  amharicPhonetic: {
+    type: String,
+    required: [true, 'Amharic Ge\'ez transliteration is required'],
+    trim: true // e.g., 'ዲፕ ፍራየር', 'ፒኦኤስ ማሽን'
+  },
+  category: {
+    type: String,
+    enum: ['equipment', 'ingredient', 'role', 'general'],
+    default: 'general'
+  }
+}, {
+  timestamps: true,
+  toJSON: {
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  }
+});
+
+// Schema-level indexes
+glossarySchema.index({ user: 1, englishTerm: 1 }, { unique: true });
+glossarySchema.index({ user: 1 });
+
+glossarySchema.plugin(mongoosePaginate);
+
+export const Glossary = mongoose.model('Glossary', glossarySchema);
+```
+
+---
+
+### 4.3 Lifecycle Management, Two-Tier Deletion & 30-Day Purge Sweeper
+
+The application enforces a rigorous two-tier data deletion lifecycle designed to prevent accidental data loss while ensuring predictable storage hygiene.
+
+```mermaid
+flowchart TD
+    A["Active Entity (Branch / Report / Preset / Chat)"] -->|"User deletes or archives entity"| B["Tier 1: Soft Archive"]
+    B --> C["Set isArchived: true, archivedAt: new Date()"]
+    C --> D["Hidden from active queries { isArchived: false }"]
+    D -->|"User restores before 30 days"| A
+    D -->|"30 Days Elapsed in Archive"| E["Tier 2: Physical Purge (Daily node-cron Sweeper)"]
+    E --> F["Delete MongoDB Documents (deleteMany)"]
+    E --> G["Unlink & Delete Physical Audio Files from uploads/audio/"]
+```
+
+#### 4.3.1 Tier 1: Soft Archive Semantics
+- When a supervisor deletes a Branch, Report, Preset, or Chat, the backend never executes a direct MongoDB `deleteOne()` or `deleteMany()`.
+- Instead, the entity executes a soft archive:
+  ```javascript
+  entity.isArchived = true;
+  entity.archivedAt = new Date();
+  await entity.save();
+  ```
+- **Query Scoping**: All normal service queries automatically include `{ isArchived: false }` unless the client explicitly passes the query parameter `?archived=true`.
+- **Restoration**: Users can restore any archived entity within the 30-day grace window via `PATCH /api/v1/<resource>/:id/restore`, which resets `isArchived: false` and `archivedAt: null`.
+
+#### 4.3.2 Tier 2: Physical Purge Sweeper Engine (`jobs/sweeperJob.js`)
+- A background scheduler executed via `node-cron` runs once daily at midnight (`0 0 * * *`):
+  ```javascript
+  /**
+   * @function runArchiveSweeper
+   * @description Permanently deletes entities soft-archived for more than 30 consecutive days.
+   */
+  export const runArchiveSweeper = async () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
+    // 1. Identify and purge eligible archived Reports
+    const expiredReports = await Report.find({ isArchived: true, archivedAt: { $lte: thirtyDaysAgo } });
+    for (const report of expiredReports) {
+      // Unlink physical audio files from uploads/audio/
+      for (const audio of report.audioFiles) {
+        await fs.promises.unlink(audio.path).catch(() => {});
+      }
+      // Cascade delete linked Chat and Messages
+      if (report.chat) {
+        await Message.deleteMany({ chat: report.chat });
+        await Chat.deleteOne({ _id: report.chat });
+      }
+      await Report.deleteOne({ _id: report._id });
+    }
+
+    // 2. Purge eligible archived general Chats and unlinked Messages
+    const expiredChats = await Chat.find({ isArchived: true, archivedAt: { $lte: thirtyDaysAgo } });
+    for (const chat of expiredChats) {
+      const messages = await Message.find({ chat: chat._id });
+      for (const msg of messages) {
+        if (msg.audio?.path) {
+          await fs.promises.unlink(msg.audio.path).catch(() => {});
+        }
+      }
+      await Message.deleteMany({ chat: chat._id });
+      await Chat.deleteOne({ _id: chat._id });
+    }
+
+    // 3. Purge eligible archived Branches
+    await Branch.deleteMany({ isArchived: true, archivedAt: { $lte: thirtyDaysAgo } });
+
+    // 4. Purge eligible archived Presets
+    await Preset.deleteMany({ isArchived: true, archivedAt: { $lte: thirtyDaysAgo } });
+  };
+  ```
+
+#### 4.3.3 Historical Snapshot Resilience (Zero Dangling Reference Breakage)
+- When a company branch is permanently purged by the 30-day sweeper, existing historical reports referencing that branch `_id` will encounter a null population result.
+- Because `Report` stores immutable snapshots (`branchName`, `supervisorName`, and per-visit `branchName`), the plain-text renderer `utils/reportRenderer.js` **never depends on population**. The historical plain-text Amharic report continues to render with 100% fidelity indefinitely.
+
+---
+
+### 4.4 Schema Validation Rules & Express-Validator Ingress Matrix
+
+Validation occurs at two distinct application boundaries:
+
+| Entity | Layer 1: Ingress Validation (`express-validator`) | Layer 2: Persistence Defense (Mongoose Schema) |
+|---|---|---|
+| **User Registration** | `firstName`, `lastName` (not empty); `email` (isEmail, normalizeEmail); `password` (min length 8). | `unique: true`, regex on `email`, bcrypt pre-save hash. |
+| **Branch** | `name` (trimmed, 1–100 chars); `phone` (optional, valid format); `address` (optional, max 250 chars). | `normalizedName` lowercase, compound unique `{ user: 1, normalizedName: 1 }`. |
+| **Report Creation** | `branch` (isMongoId); `date` (isISO8601); `clockIn`, `clockOut` (regex `^([01]\d\|2[0-3]):([0-5]\d)$`); `visits` (valid array of time intervals). | `supervisorName`, `branchName` snapshots required; subdocument validators for activities and issues. |
+| **Chat Message** | `text` (required string unless audio file present); `audio` (Multer MIME validation). | `sender` enum, compound index on `{ chat: 1, createdAt: 1 }`. |
+| **Preset** | `name` (1–100 chars); `persona` (required text); `systemPrompt` (required text). | Compound unique `{ user: 1, name: 1 }`. |
+| **Glossary** | `englishTerm` (trimmed, required); `amharicPhonetic` (trimmed, required); `category` (enum). | Compound unique `{ user: 1, englishTerm: 1 }`. |

@@ -63,6 +63,16 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Empty Comments Fallback | Renders `በዕለቱ በብራንቹ የነበረው አጠቃላይ የስራ እንቅስቃሴ ደህና ነበር።` when comments are absent (never outputs "ምንም ተጨማሪ..."). |
 | Acoustic Quality Gate | Agent asks clarifying questions if STT transcript is empty or garbled; zero hallucination on noisy audio. |
 | Vague Shorthand Expansion | Expands terse workplace phrases (e.g. `ቼክሊስት`) into professional SOP supervisory documentation. |
+| Branch Metadata & Uniqueness | `name`, `normalizedName`, optional `phone`, optional `address`, compound unique `{ user: 1, normalizedName: 1 }`. |
+| Report plain text field `generated` | Renamed from `generatedReportText`; stores locked assembled string. Accompanied by `rawTranscript` and `audioFiles[]`. |
+| Zero-Lookup Historical Snapshots | `Report` stores immutable snapshots of `branchName`, `supervisorName`, and per-visit `branchName` to guarantee rendering resilience even if branches are purged. |
+| Multi-Provider AI Metadata | Tracked on `Message` and `Report`: `provider` ('addis', 'google', 'nvidia'), `model`, `language`, `reasoning` trace, `tokensUsed`. |
+| Chat Title Dynamics | `type: 'report'` titled `Report - <branchName> - <DD-MM-YY>`; `type: 'general'` auto-generated from first user message prompt. |
+| Preset Persona/System Decoupling | Cleanly separates `persona` (agent persona/tone) from `systemPrompt` (SOP checklists, operational rules). |
+| Two-Tier Deletion & 30-Day Sweeper | Soft archive (`isArchived`, `archivedAt`) with 30-day grace period; daily midnight `node-cron` (`0 0 * * *`) physically purges documents and unlinks audio files. |
+| Schema-Level Indexing Mandate | All single-field, compound, unique, sparse, and TTL indexes declared strictly via `schema.index(...)`. Zero inline field-level indexes allowed across entire codebase. |
+| Dual Clock-In/Out Hierarchy | `report.clockIn`/`report.clockOut` for overall daily shift; `visit.clockIn`/`visit.clockOut` for per-branch arrival and departure intervals. |
+| Zero Hardcoded Config Defaults | AI provider names, default models, quotas, paths, and timeouts must never be hardcoded in schemas or code; always loaded dynamically from `config/env.js` or runtime context. |
 
 ## Locked Package Manifest
 
