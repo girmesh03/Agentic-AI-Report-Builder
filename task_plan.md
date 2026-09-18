@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Switch mode to Plan Mode for Phase 2: Section 2 - User Persona, Authentication & Session Security.
+Switch mode to Plan Mode for Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules.
 
 ## Current Phase
 
-Phase 2: Section 2 - User Persona, Authentication & Session Security
+Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
 
 ## Phases
 
@@ -25,12 +25,13 @@ Phase 2: Section 2 - User Persona, Authentication & Session Security
 - **Status:** complete
 
 ### Phase 2: Section 2 - User Persona, Authentication & Session Security
-- [ ] Detail Email+Password and Google OAuth raw flow (state + PKCE)
-- [ ] Detail User entity, automatic name derivation from email, and virtuals
-- [ ] Detail dual JWT httpOnly cookie architecture, RefreshToken rotation, reuse detection, and session rules
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail Email+Password and Google OAuth raw flow (state + PKCE)
+- [x] Detail User entity, automatic name derivation from email, and virtuals
+- [x] Detail dual JWT httpOnly cookie architecture, RefreshToken rotation, reuse detection, and session rules
+- [x] Write complete Section 2 to `docs/specifications/master_specification.md`
+- [x] User review and confirmation of Section 2
+- [x] Commit Section 2 to `phase-0-specification`
+- **Status:** complete
 
 ### Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
 - [ ] Detail exact Amharic plain-text layout for single-branch and multi-branch visits

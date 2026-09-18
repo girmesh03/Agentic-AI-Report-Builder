@@ -10,7 +10,7 @@
 
 ## Table of Contents
 1. [Section 1: System Vision, Operational Architecture & Constraints Registry](#section-1-system-vision-operational-architecture--constraints-registry)
-2. *Section 2: User Persona, Authentication & Session Security (Pending)*
+2. [Section 2: User Persona, Authentication & Session Security](#section-2-user-persona-authentication--session-security)
 3. *Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules (Pending)*
 4. *Section 4: Domain Data Models, Schemas & Lifecycle Management (Pending)*
 5. *Section 5: Chat, Message & Conversation Node Architecture (Pending)*
@@ -231,3 +231,486 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
 - **Backend Verification**: Every code modification must be verified by running `node --check` against the modified backend files.
 - **Client Verification**: Every client change must execute `npx vite build` ensuring 0 compilation errors, followed immediately by deleting the generated `dist/` directory.
 - **Git Branching Rules**: Feature branches must strictly follow the `phase-N-description` naming standard. Commits must never be made directly to `main`, and feature branches must never be merged without explicit instructions.
+
+---
+
+# Section 2: User Persona, Authentication & Session Security
+
+### 2.1 User Entity Schema & Persona Specifications
+- **Single-User Scope & Architectural Enforcement**:
+  - The platform implements a self-service, single-user security architecture.
+  - The concept of `role` is strictly prohibited throughout models, DTOs, tokens, and controllers. No `role` or `roles` property may exist anywhere in the codebase.
+  - Every application collection except `User` (`Branch`, `Report`, `Chat`, `RefreshToken`, `Preset`, `Glossary`) carries a mandatory `user` field (`type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true`).
+  - All controller handlers and service methods scope database queries, mutations, and aggregations strictly to `req.user._id.toString()`.
+- **Mongoose `User` Schema Specification**:
+  ```javascript
+  /**
+   * @module models/User
+   * @description Mongoose schema and model definition for User entity.
+   */
+
+  import mongoose from 'mongoose';
+  import bcrypt from 'bcryptjs';
+
+  const userSchema = new mongoose.Schema(
+    {
+      email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        lowercase: true,
+        trim: true,
+        match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
+      },
+      password: {
+        type: String,
+        select: false,
+        minlength: [8, 'Password must be at least 8 characters long'],
+      },
+      firstName: {
+        type: String,
+        required: [true, 'First name is required'],
+        trim: true,
+      },
+      lastName: {
+        type: String,
+        required: [true, 'Last name is required'],
+        trim: true,
+      },
+      position: {
+        type: String,
+        default: 'Area Supervisor',
+        trim: true,
+      },
+      avatar: {
+        type: String,
+        default: null,
+      },
+    },
+    {
+      timestamps: true,
+      strict: true,
+      toJSON: {
+        virtuals: true,
+        transform: (doc, ret) => {
+          delete ret.id;
+          delete ret.password;
+          delete ret.__v;
+          return ret;
+        },
+      },
+      toObject: {
+        virtuals: true,
+        transform: (doc, ret) => {
+          delete ret.id;
+          delete ret.password;
+          delete ret.__v;
+          return ret;
+        },
+      },
+    }
+  );
+  ```
+- **Name Auto-Derivation Invariant**:
+  - `firstName` and `lastName` are never collected on the registration form.
+  - Upon registration, the system extracts the local-part of the email prior to the `@` symbol.
+  - Both `firstName` and `lastName` are initialized to this local-part string (e.g., `beza@gmail.com` $\rightarrow$ `firstName: "beza"`, `lastName: "beza"`).
+  - The supervisor may subsequently customize their first and last names via the Profile tab in `/settings`.
+- **Mongoose Virtual `fullName`**:
+  ```javascript
+  userSchema.virtual('fullName').get(function () {
+    return `${this.firstName} ${this.lastName}`.trim();
+  });
+  ```
+  - `fullName` is strictly a Mongoose virtual; it is never persisted to disk, never indexed, and never directly queried.
+- **Password Encryption & Comparison Protocol**:
+  ```javascript
+  userSchema.pre('save', async function (next) {
+    if (!this.isModified('password') || !this.password) {
+      return next();
+    }
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  });
+
+  userSchema.methods.comparePassword = async function (candidatePassword) {
+    if (!this.password) return false;
+    return bcrypt.compare(candidatePassword, this.password);
+  };
+  ```
+- **User Lifecycle Rules**:
+  - `User` documents have **no** `isArchived`, `archivedAt`, or `deletedAt` fields.
+  - `User` documents declare **no** TTL indexes.
+  - Deleting an account permanently cascades to delete all dependent user resources inside a single atomic database transaction.
+
+---
+
+### 2.2 Registration & Password Authentication Flows
+
+#### 2.2.1 Registration Flow (`POST /api/v1/auth/register`)
+- **Route Definition**: `POST /api/v1/auth/register` (Public).
+- **Request Payload**:
+  ```json
+  {
+    "email": "supervisor@company.com",
+    "password": "SecurePassword123!",
+    "confirmPassword": "SecurePassword123!"
+  }
+  ```
+- **Validation Pipeline (`express-validator`)**:
+  - `body('email').isEmail().normalizeEmail()`
+  - `body('password').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)`
+  - `body('confirmPassword').custom((value, { req }) => value === req.body.password)`
+- **Registration Controller Invariants**:
+  - Checks if user exists via `User.findOne({ email })`. If found, returns HTTP 409 `CONFLICT` (`"An account with this email already exists"`).
+  - Extracts email local-part: `const prefix = email.split('@')[0];`.
+  - Creates user: `await User.create({ email, password, firstName: prefix, lastName: prefix, position: 'Area Supervisor' })`.
+  - Returns HTTP 201 `CREATED`:
+    ```json
+    {
+      "success": true,
+      "message": "Registration successful. Please log in.",
+      "data": null
+    }
+    ```
+- **Client Registration Invariant**:
+  - The client registration form collects strictly: email, password, and confirmPassword.
+  - No name fields, profile picture capture, or "Remember me" checkboxes exist.
+  - Successful registration **never** auto-logs the user in; the client navigates directly to `/login`.
+
+#### 2.2.2 Password Login Flow (`POST /api/v1/auth/login`)
+- **Route Definition**: `POST /api/v1/auth/login` (Public).
+- **Rate Limit**: Strictly bounded to 10 requests per 15 minutes per IP address.
+- **Request Payload**:
+  ```json
+  {
+    "email": "supervisor@company.com",
+    "password": "SecurePassword123!"
+  }
+  ```
+- **Anti-User-Enumeration Guarantee**:
+  - The controller queries `User.findOne({ email }).select('+password')`.
+  - If the user is not found, OR if `await user.comparePassword(password)` evaluates to `false`, the server returns the **exact same 401 response**:
+    ```json
+    {
+      "success": false,
+      "message": "Invalid email or password",
+      "data": null
+    }
+    ```
+- **Session Issuance on Success**:
+  - Generates a cryptographically random UUIDv4 string as the `family` identifier.
+  - Issues an Access Token (15m expiration) signed with `JWT_ACCESS_SECRET`.
+  - Issues a Refresh Token (7d expiration) signed with `JWT_REFRESH_SECRET`.
+  - Calculates `tokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex')`.
+  - Creates a document in the `RefreshToken` collection.
+  - Sets dual httpOnly cookies:
+    - `accessToken`: 15m TTL, `path: '/'`.
+    - `refreshToken`: 7d TTL, `path: '/api/v1/auth'`.
+  - Returns HTTP 200 `OK`:
+    ```json
+    {
+      "success": true,
+      "message": "Login successful",
+      "data": {
+        "user": {
+          "_id": "660c1f2e8f1b2c001f8d4e11",
+          "email": "supervisor@company.com",
+          "firstName": "supervisor",
+          "lastName": "supervisor",
+          "fullName": "supervisor supervisor",
+          "position": "Area Supervisor",
+          "avatar": null,
+          "createdAt": "2026-09-18T00:00:00.000Z",
+          "updatedAt": "2026-09-18T00:00:00.000Z"
+        }
+      }
+    }
+    ```
+
+---
+
+### 2.3 Raw Google OAuth 2.0 Flow (State + PKCE, No Passport)
+
+#### 2.3.1 Architectural Principles
+- **No Passport Dependency**: Authentication with Google uses raw, native Node.js HTTP requests (`fetch`) and native `node:crypto` primitives. Passport.js and session middlewares are strictly banned.
+- **Environment Configuration**: Environment variables must use `OAUTH_GOOGLE_*`. Any environment variable starting with `GOOGLE_*` is strictly forbidden:
+  - `OAUTH_GOOGLE_CLIENT_ID`
+  - `OAUTH_GOOGLE_CLIENT_SECRET`
+  - `OAUTH_GOOGLE_CALLBACK_URL` (e.g., `http://localhost:4000/api/v1/auth/oauth/google/callback`)
+
+#### 2.3.2 OAuth Initiation (`GET /api/v1/auth/oauth/google`)
+1. Server generates a cryptographically random `code_verifier` (64-byte random hex string).
+2. Server computes `code_challenge = crypto.createHash('sha256').update(code_verifier).digest('base64url')`.
+3. Server generates a random cryptographic `state` token signed with an HMAC secret.
+4. Server stores `code_verifier` and `state` inside an ephemeral, signed httpOnly cookie:
+   - Name: `oauth_session`
+   - TTL: 10 minutes
+   - `path: '/api/v1/auth/oauth/google'`
+   - `httpOnly: true`, `sameSite: 'lax'`, `secure: production`
+5. Constructs Google OAuth 2.0 authorization URL:
+   - Base: `https://accounts.google.com/o/oauth2/v2/auth`
+   - Parameters:
+     - `client_id`: `env.OAUTH_GOOGLE_CLIENT_ID`
+     - `redirect_uri`: `env.OAUTH_GOOGLE_CALLBACK_URL`
+     - `response_type`: `"code"`
+     - `scope`: `"openid email profile https://www.googleapis.com/auth/drive.file"`
+     - `code_challenge`: `code_challenge`
+     - `code_challenge_method`: `"S256"`
+     - `state`: `state`
+     - `access_type`: `"offline"`
+     - `prompt`: `"consent"`
+6. Issues HTTP 302 redirect to Google.
+
+#### 2.3.3 OAuth Callback (`GET /api/v1/auth/oauth/google/callback`)
+1. Reads `code` and `state` from query parameters.
+2. Validates that `state` matches the value stored in the `oauth_session` cookie.
+3. Retrieves `code_verifier` from `oauth_session` cookie.
+4. Exchanges authorization code by executing a POST request to `https://oauth2.googleapis.com/token`:
+   ```javascript
+   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+     body: new URLSearchParams({
+       client_id: env.OAUTH_GOOGLE_CLIENT_ID,
+       client_secret: env.OAUTH_GOOGLE_CLIENT_SECRET,
+       code,
+       code_verifier,
+       grant_type: 'authorization_code',
+       redirect_uri: env.OAUTH_GOOGLE_CALLBACK_URL,
+     }),
+   });
+   ```
+5. Fetches profile payload from `https://www.googleapis.com/oauth2/v3/userinfo` using the returned Google access token.
+6. User Account Resolution:
+   - Queries `User.findOne({ email: googleProfile.email.toLowerCase() })`.
+   - If user exists: updates avatar URL if changed.
+   - If user does not exist: creates a new `User`:
+     - `email`: `googleProfile.email.toLowerCase()`
+     - `firstName`: `googleProfile.given_name || prefix`
+     - `lastName`: `googleProfile.family_name || prefix`
+     - `position`: `'Area Supervisor'`
+     - `avatar`: `googleProfile.picture || null`
+     - `password`: omitted (user authenticates via OAuth).
+7. Session Initialization:
+   - Generates application dual JWT tokens (`accessToken`, `refreshToken`).
+   - Inserts session row into `RefreshToken` collection.
+   - Clears the temporary `oauth_session` cookie.
+   - Sets application `accessToken` and `refreshToken` cookies.
+   - Issues HTTP 302 redirect to frontend `/dashboard`.
+
+---
+
+### 2.4 Dual JWT httpOnly Cookie Architecture & Token Lifecycle
+
+#### 2.4.1 Cookie Transport Contract
+- Authentication tokens are transmitted strictly via secure `httpOnly` cookies. Token storage in `localStorage`, `sessionStorage`, or window objects is strictly banned.
+- All client-side fetch requests must include `credentials: 'include'`.
+
+| Cookie Name | Expiration | Path Scope | Flags | Redux / Memory Sync |
+|---|---|---|---|---|
+| `accessToken` | 15 Minutes | `/` | `httpOnly: true`, `secure: production`, `sameSite: 'lax'` | Mirrored in `authSlice` memory state (never persisted to disk). |
+| `refreshToken` | 7 Days | `/api/v1/auth` | `httpOnly: true`, `secure: production`, `sameSite: 'lax'` | Never exposed to client JavaScript or Redux. |
+
+#### 2.4.2 Mongoose `RefreshToken` Collection Specification
+```javascript
+/**
+ * @module models/RefreshToken
+ * @description Stores cryptographic hashes of issued refresh tokens for session rotation and reuse detection.
+ */
+
+import mongoose from 'mongoose';
+
+const refreshTokenSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    tokenHash: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+    family: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    isRevoked: {
+      type: Boolean,
+      default: false,
+    },
+    replacedByTokenHash: {
+      type: String,
+      default: null,
+    },
+    expiresAt: {
+      type: Date,
+      required: true,
+    },
+    userAgent: {
+      type: String,
+      default: 'Unknown',
+    },
+    ipAddress: {
+      type: String,
+      default: 'Unknown',
+    },
+  },
+  {
+    timestamps: true,
+    strict: true,
+  }
+);
+
+// The sole TTL index in the entire database
+refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+```
+
+#### 2.4.3 Refresh Token Rotation & Theft Detection Protocol (`POST /api/v1/auth/refresh`)
+1. Controller reads `refreshToken` from httpOnly cookie. If absent, returns HTTP 401 `UNAUTHORIZED`.
+2. Computes `tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex')`.
+3. Queries database: `const tokenDoc = await RefreshToken.findOne({ tokenHash })`.
+4. **Theft & Reuse Detection**:
+   - If `tokenDoc` exists AND `tokenDoc.replacedByTokenHash !== null`:
+     - A previously used refresh token was presented again—indicating a token replay attack or stolen cookie.
+     - The server immediately invalidates the **entire token family**:
+       `await RefreshToken.updateMany({ family: tokenDoc.family }, { isRevoked: true })`.
+     - Clears `accessToken` and `refreshToken` cookies on the response.
+     - Returns HTTP 401 `UNAUTHORIZED` (`"Session invalidated due to suspicious activity. Please log in again."`).
+5. **Revocation & Expiration Check**:
+   - If `!tokenDoc`, OR `tokenDoc.isRevoked === true`, OR `tokenDoc.expiresAt < new Date()`:
+     - Clears auth cookies.
+     - Returns HTTP 401 `UNAUTHORIZED` (`"Invalid or expired refresh token"`).
+6. **Successful Rotation**:
+   - Generates new `rawAccessToken` (15m) and new `rawRefreshToken` (7d).
+   - Computes `newTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex')`.
+   - Updates old session row: `tokenDoc.isRevoked = true; tokenDoc.replacedByTokenHash = newTokenHash; await tokenDoc.save();`.
+   - Creates new session row with the **same** `family`:
+     ```javascript
+     await RefreshToken.create({
+       user: tokenDoc.user,
+       tokenHash: newTokenHash,
+       family: tokenDoc.family,
+       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+       userAgent: req.headers['user-agent'] || 'Unknown',
+       ipAddress: req.ip || 'Unknown',
+     });
+     ```
+   - Sets updated `accessToken` and `refreshToken` httpOnly cookies.
+   - Returns HTTP 200 `OK` with refreshed user DTO.
+
+#### 2.4.4 Logout Protocol (`POST /api/v1/auth/logout`)
+- Reads `refreshToken` cookie.
+- Computes SHA-256 hash and sets `isRevoked: true` on that specific session row.
+- Clears both `accessToken` (path: `/`) and `refreshToken` (path: `/api/v1/auth`) cookies.
+- **Multi-Device Support**: Only the active device's session row is revoked. Other devices belonging to the user maintain distinct token families and remain logged in.
+- Returns HTTP 200 `OK` (`{ success: true, message: "Logged out successfully", data: null }`).
+
+#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue
+- Implemented inside `client/src/features/apiSlice.js` using a custom RTK Query base query wrapper.
+- When an API request returns HTTP 401:
+  1. The base query pauses outbound requests and triggers **exactly one** refresh attempt: `POST /api/v1/auth/refresh`.
+  2. If the refresh call succeeds:
+     - Outbound requests are re-executed with the newly refreshed session cookies.
+  3. If the refresh call fails (HTTP 401/403):
+     - Clears user memory state in Redux `authSlice`.
+     - Redirects the browser to `/login`.
+  4. **Zero Toast Notification**: 401 responses are handled silently by the interceptor and must **never** trigger toast alert popups (`showToast`).
+
+---
+
+### 2.5 Security, Endpoints & Settings Account Management
+
+#### 2.5.1 Profile Information Update (`PATCH /api/v1/auth/profile`)
+- **Route**: `PATCH /api/v1/auth/profile` (Protected, requires active auth cookie).
+- **Location**: Accessed via the **Profile** tab in `/settings`.
+- **UI Form Controls**:
+  - Built with `react-hook-form` (`mode: 'onBlur'`).
+  - Inputs use `size="small"` with dedicated start adornments:
+    - `firstName`: `MuiTextField` (Person icon start adornment, required).
+    - `lastName`: `MuiTextField` (Person icon start adornment, required).
+    - `fullName`: Read-only preview displaying the live virtual concatenation `${firstName} ${lastName}`.
+    - `email`: `MuiTextField` (Email icon start adornment, required, validated email format).
+    - `position`: `MuiTextField` (Badge/Work icon start adornment, default `"Area Supervisor"`).
+  - Submit button: `MuiButton` (`size="small"`, `"Save Changes"`), disabled when `isSubmitting` or `!isDirty`.
+- **Validation Pipeline (`express-validator`)**:
+  - `body('firstName').trim().notEmpty().withMessage('First name is required')`
+  - `body('lastName').trim().notEmpty().withMessage('Last name is required')`
+  - `body('position').trim().notEmpty().withMessage('Position is required')`
+  - `body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email address')`
+- **Controller Logic & Execution**:
+  1. Reads user ID from `req.user._id.toString()`.
+  2. Fetches `const user = await User.findById(req.user._id)`.
+  3. **Email Uniqueness Verification**:
+     - If `req.body.email !== user.email`:
+       - Checks `const existing = await User.findOne({ email: req.body.email, _id: { $ne: user._id } })`.
+       - If `existing` is found, returns HTTP 409 `CONFLICT` (`"An account with this email address already exists"`).
+       - Otherwise, assigns `user.email = req.body.email`.
+  4. Assigns `user.firstName = req.body.firstName`, `user.lastName = req.body.lastName`, `user.position = req.body.position`.
+  5. Executes `await user.save()`.
+  6. Returns HTTP 200 `OK`:
+     ```json
+     {
+       "success": true,
+       "message": "Profile updated successfully",
+       "data": {
+         "user": {
+           "_id": "660c1f2e8f1b2c001f8d4e11",
+           "email": "supervisor@company.com",
+           "firstName": "supervisor",
+           "lastName": "supervisor",
+           "fullName": "supervisor supervisor",
+           "position": "Area Supervisor",
+           "avatar": null,
+           "createdAt": "2026-09-18T00:00:00.000Z",
+           "updatedAt": "2026-09-18T03:25:00.000Z"
+         }
+       }
+     }
+     ```
+- **Client Synchronization**:
+  - Updates Redux `authSlice` user state with the returned payload.
+  - Instantly refreshes the user's name and position in the `AppShell` header and sidebar footer.
+  - Displays a success toast notification: `"Profile updated successfully"`.
+
+#### 2.5.2 Password Change (`PATCH /api/v1/auth/password`)
+- **Route**: `PATCH /api/v1/auth/password` (Protected).
+- **Location**: Accessed via the Security tab in `/settings`.
+- **Validation**:
+  - `body('currentPassword').notEmpty()`
+  - `body('newPassword').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)`
+  - `body('confirmNewPassword').custom((value, { req }) => value === req.body.newPassword)`
+- **Logic**:
+  - Fetches authenticated user including password: `User.findById(req.user._id).select('+password')`.
+  - Verifies `await user.comparePassword(req.body.currentPassword)`. If false, returns HTTP 400 `BAD_REQUEST` (`"Current password does not match"`).
+  - Assigns `user.password = req.body.newPassword; await user.save();`.
+  - Returns HTTP 200 `OK` (`{ success: true, message: "Password updated successfully", data: null }`).
+
+#### 2.5.3 Avatar Upload & Serving Specifications
+- **Upload Route (`PATCH /api/v1/auth/avatar`)**:
+  - Protected endpoint handled via `multer`.
+  - Storage Location: `uploads/avatars/` (gitignored).
+  - Naming Convention: `avatar-<userId>-<timestamp>.<ext>`.
+  - File Size Limit: Strictly **15MB**, single file upload (`upload.single('avatar')`).
+  - Allowed MIME Types: `image/jpeg`, `image/jpg`, `image/png`, `image/webp`. Any other MIME type returns HTTP 422 `UNPROCESSABLE_ENTITY`.
+  - Controller saves relative path in `user.avatar`. If an existing local avatar existed, the old file is deleted from disk.
+  - Returns HTTP 200 `OK` with updated user DTO.
+- **Serving Route (`GET /api/v1/auth/avatar`)**:
+  - Protected route requiring valid authentication cookie.
+  - If `user.avatar` starts with `http://` or `https://` (Google picture), issues an HTTP 302 redirect to the external URL.
+  - If `user.avatar` is a local file path, verifies file existence and streams the file using `res.sendFile()` with appropriate `Content-Type` headers.
+  - If `user.avatar` is null, returns a standard fallback or HTTP 404.
+
+#### 2.5.4 Forbidden Endpoints Registry
+To strictly uphold security boundaries, the following endpoints are permanently prohibited and must never be declared or implemented:
+- `GET /api/v1/auth/me`: Redundant; user state is returned upon login/refresh and fetched via `GET /api/v1/auth/profile`.
+- `GET /api/v1/auth/sessions` & `DELETE /api/v1/auth/sessions`: No session management interfaces exist.
+- `DELETE /api/v1/auth/user` or generic user deletion endpoints outside of authenticated self-service account deletion in Settings.
+- Any administrative user management endpoints (`/api/v1/users/*`).
+

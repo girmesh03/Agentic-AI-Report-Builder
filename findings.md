@@ -54,6 +54,8 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Multi-turn ChatGPT/Gemini Thread | Persistent ongoing conversation inside AppShell; 3 entry points (Sidebar Recent, Reports Card/List, Reports DataGrid). |
 | In-Thread Message Action Icons | Agent: Copy & Retry; User: Copy & Edit (inline `MuiTextField` editor + Update button). |
 | Downstream Message Truncation | Editing user prompt or retrying agent response permanently truncates all subsequent messages below it to maintain context integrity. |
+| Profile Update (`PATCH /auth/profile`) | Updates `firstName`, `lastName`, `email` (409 on duplicate), `position` via Settings Profile tab; syncs Redux in memory. |
+| Avatar Upload Constraints | Max 15MB single file, storage `uploads/avatars/`, allowed types: `jpeg`, `jpg`, `png`, `webp`. |
 
 ## Locked Package Manifest
 

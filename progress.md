@@ -38,6 +38,21 @@ Use this file as the chronological record of work performed, files created, git 
   - `progress.md`
 
 ### Phase 2: Section 2 - User Persona, Authentication & Session Security
+- **Status:** complete
+- **Started:** 2026-09-18T03:10:00+03:00
+- **Completed:** 2026-09-18T03:25:00+03:00
+- Actions taken:
+  - Aligned on avatar upload parameters (path `uploads/avatars/`, max 15MB single file, allowed types: jpeg, jpg, png, webp).
+  - Appended complete, exhaustive Section 2 into `docs/specifications/master_specification.md` (User model & virtuals, registration/login anti-enumeration, raw Google OAuth 2.0 PKCE, dual httpOnly JWT architecture with family-based theft detection and sole TTL index, profile update `PATCH /api/v1/auth/profile`, password change, avatar upload/serving, and forbidden endpoints).
+  - User reviewed and approved Section 2.
+  - Staged, committed, and pushed Section 2 to `phase-0-specification`.
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
+### Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
 - **Status:** pending
 - **Started:** Pending user switch to Plan Mode
 
@@ -45,8 +60,8 @@ Use this file as the chronological record of work performed, files created, git 
 
 | Question | Answer |
 |---|---|
-| Where am I? | Phase 1 complete on branch `phase-0-specification`. Ready for Section 2 in Plan Mode. |
-| Where am I going? | Switch to Plan Mode for Phase 2: Section 2 - User Persona, Authentication & Session Security. |
+| Where am I? | Phase 2 complete on branch `phase-0-specification`. Ready for Section 3 in Plan Mode. |
+| Where am I going? | Switch to Plan Mode for Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules. |
 | What's the goal? | Complete, exhaustive 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Section 1 master architecture established and locked in `docs/specifications/master_specification.md`. |
-| What have I done? | Authored, reviewed, committed, and pushed Section 1. |
+| What have I learned? | Section 2 authentication and user security architecture locked and verified. |
+| What have I done? | Authored, reviewed, committed, and pushed Sections 1 & 2. |
