@@ -142,6 +142,17 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Bilingual 429 Rate Limiter | Rate limit threshold breaches emit HTTP 429 with English and Amharic message: `Rate limit exceeded. እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።`. |
 | Ephemeral Audio Transcribe Endpoint | Live voice dictation runs via `POST /api/v1/audio/transcribe` with memory buffer and 0 disk files saved. |
 | Forbidden Endpoints Enforcement | Explicit prohibition of `GET /auth/me`, `GET /users`, `DELETE /users/:userId`, session management lists, automated email/telegram endpoints, and translation/TTS endpoints. |
+| Fixed 11-Step Middleware Sequence | Strictly linear in `backend/src/app.js`: helmet ➔ cors ➔ compression ➔ cookieParser ➔ morgan ➔ json ➔ urlencoded ➔ mongoSanitize ➔ rateLimiter ➔ /api/v1 ➔ 404 ➔ errorHandler. |
+| MongoDB Exponential Backoff Reconnection | Retries on disconnect/failure with exponential delay (`1s ➔ 2s ➔ 4s ➔ 8s ➔ 16s ➔ 30s max` + 10% jitter) and Winston warning logs. |
+| Deeply Frozen Environment Configurations | Both `backend/src/config/env.js` and `client/src/config/env.js` enforce immutable configuration via `Object.freeze()`. |
+| Morgan Dual-Mode Request Logging | Colorized console output in development (`dev` format); piped to Winston daily rotating files in production with PII field masking. |
+| 30-Day Daily Rotating Winston Logs | `combined-%DATE%.log` and `error-%DATE%.log` with 30-day retention, 20MB file cap, and gzip compression. |
+| Sanitized `req.validated` Standard | Centralized `validate` middleware populates `req.validated = { body, params, query }` via `matchedData()`. Controllers never read raw `req.body/params/query`. |
+| Universal Controller `asyncHandler` & Arrow Functions | All controllers wrapped in `asyncHandler` and written as arrow functions. Codebase-wide arrow function law strictly enforced. |
+| Universal Form Fields `React.forwardRef` | All reusable inputs wrapped in `React.forwardRef` with explicit `displayName` for `react-hook-form` ref integration. |
+| Unified `CustomError` Hierarchy | Domain subclasses inherit from `CustomError` with HTTP status code and details; formatted via centralized `errorHandler.js`. |
+| 30-Day Sweeper Cron (`0 0 * * *` UTC) | Midnight UTC job purges soft-archived reports and branches older than 30 days, cascades clip deletion in transaction, and cleans up disk files. |
+| Mutex-Protected RTK Query Re-Auth | `baseQueryWithReauth` in `client/src/features/api/apiSlice.js` serializes 401 token refresh requests using `async-mutex`. |
 
 
 ## Locked Package Manifest

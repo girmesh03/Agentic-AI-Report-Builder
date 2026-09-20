@@ -20,7 +20,7 @@
 9. [Section 9: Conversational Agent UI & MUI X Chat Integration](#section-9-conversational-agent-ui--mui-x-chat-integration)
 10. [Section 10: Frontend Routing, Shell Layout & Component Matrix](#section-10-frontend-routing-shell-layout--component-matrix)
 11. [Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes](#section-11-rest-api-endpoint-inventory-validation-chains--response-envelopes)
-12. *Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks (Pending)*
+12. [Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks](#section-12-backend-infrastructure-winston-logging--sweeper-tasks)
 13. *Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists (Pending)*
 14. *Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap (Pending)*
 
@@ -6569,7 +6569,9 @@ Every endpoint defined below is cataloged with its exact HTTP method, path, auth
   2. If `audioClipId` present, transcribes audio via Addis AI STT.
   3. Appends user message to Message collection.
   4. Flushes SSE headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`).
-  5. Executes agent reasoning loop with multi-tier LLM fallback (Addis $ightarrow$ Gemini $ightarrow$ Nvidia).
+  5. Executes agent reasoning loop with multi-tier LLM fallback (Addis $
+ightarrow$ Gemini $
+ightarrow$ Nvidia).
   6. Emits `text_delta`, `tool_call`, and `report_card` SSE events.
   7. Persists assistant message node in database and emits `done` event.
   8. Unlocks chat thread (`isStreaming: false`).
@@ -6777,5 +6779,1141 @@ To prevent architectural creep, insecure administrative bypasses, and unauthoriz
 | **Zero Soft Deletion Flags** | Collections use `isArchived` and `archivedAt`. No `deletedAt` field anywhere in the application. |
 | **Single TTL Index in Entire Database** | Exactly one TTL index exists on `RefreshToken` collection (`createdAt`). Soft-deleted records are pruned via `node-cron`. |
 | **Direct Canonical Routes** | Route parameters use `<resource>Id` exclusively (e.g. `:reportId`, `:branchId`, `:chatId`). Never bare `:id`. |
+
+---
+
+# Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks
+
+### 12.1 Server Architecture & Lifecycle Management (`backend/src/server.js`)
+
+The Report Builder backend is built on Node.js utilizing ES modules (`"type": "module"` in `package.json`). The application bootstrap and lifecycle management are encapsulated in `backend/src/server.js`, adhering to a strict phased boot sequence and a resilient graceful shutdown protocol.
+
+#### 12.1.1 Application Bootstrap Sequence
+The server bootstrap proceeds linearly through six deterministic lifecycle phases:
+
+```javascript
+/**
+ * @module server
+ * @description Application entrypoint, HTTP server initialization, and lifecycle manager.
+ */
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import app from './app.js';
+import { env } from './config/env.js';
+import { connectDB } from './config/db.js';
+import { logger } from './config/logger.js';
+import { initSweeperTasks } from './services/sweeperService.js';
+
+// Phase 1: Defensive Pre-boot Directory Initialization
+const requiredDirectories = [
+  path.resolve('logs'),
+  path.resolve('uploads', 'avatars'),
+  path.resolve('uploads', 'audio'),
+  path.resolve('uploads', 'temp'),
+];
+
+requiredDirectories.forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// Phase 2: Database Connection Initialization
+await connectDB();
+
+// Phase 3: Background Scheduled Tasks Initialization
+const sweeperTask = initSweeperTasks();
+
+// Phase 4: HTTP Server Creation & Port Binding
+const server = http.createServer(app);
+const PORT = env.PORT || 4000;
+
+server.listen(PORT, () => {
+  logger.info(`Report Builder Backend running in [${env.NODE_ENV}] mode on port ${PORT}`);
+  logger.info(`API base URL: http://localhost:${PORT}/api/v1`);
+});
+```
+
+#### 12.1.2 Graceful Shutdown Protocol
+To guarantee zero dropped requests, clean transaction boundaries, and zero orphaned disk or database locks during restarts, deployments, or container shutdowns, the server traps `SIGTERM` and `SIGINT`:
+
+```javascript
+// Phase 5: Graceful Shutdown Traps
+const handleGracefulShutdown = (signal) => {
+  logger.info(`${signal} signal received: initiating graceful shutdown protocol...`);
+
+  // 1. Forceful shutdown failsafe timeout (10 seconds)
+  const forceExitTimeout = setTimeout(() => {
+    logger.error('Graceful shutdown timeout exceeded (10s). Forcing termination.');
+    process.exit(1);
+  }, 10000);
+  forceExitTimeout.unref();
+
+  // 2. Stop receiving incoming HTTP connections
+  server.close((serverErr) => {
+    if (serverErr) {
+      logger.error('Error occurred while closing HTTP server:', serverErr);
+    } else {
+      logger.info('HTTP server closed. Zero incoming requests accepted.');
+    }
+
+    // 3. Stop background sweeper tasks
+    if (sweeperTask) {
+      sweeperTask.stop();
+      logger.info('Background sweeper tasks halted.');
+    }
+
+    // 4. Close MongoDB connection pool cleanly
+    import('mongoose').then(({ default: mongoose }) => {
+      mongoose.connection.close(false).then(() => {
+        logger.info('MongoDB connection pool drained and closed cleanly.');
+        logger.info('Graceful shutdown completed successfully. Process exiting.');
+        process.exit(0);
+      }).catch((dbErr) => {
+        logger.error('Error draining MongoDB connection pool:', dbErr);
+        process.exit(1);
+      });
+    });
+  });
+};
+
+process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
+
+// Phase 6: Uncaught Exception & Rejection Handlers
+process.on('uncaughtException', (err) => {
+  logger.error('FATAL UNCAUGHT EXCEPTION:', err);
+  handleGracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('FATAL UNHANDLED REJECTION at:', promise, 'reason:', reason);
+  handleGracefulShutdown('UNHANDLED_REJECTION');
+});
+```
+
+---
+
+### 12.2 Database Connection & Exponential Backoff Reconnection (`backend/src/config/db.js`)
+
+Database operations utilize Mongoose connected to MongoDB. To withstand transient network failures, replica set elections, and infrastructure restarts, the connection logic enforces an **Exponential Backoff Reconnect Algorithm**.
+
+#### 12.2.1 Connection Pool & Driver Configuration
+The connection pool is configured for high concurrency, low latency, and deterministic socket timeouts:
+- **`maxPoolSize`**: `50` concurrent sockets.
+- **`minPoolSize`**: `10` persistent warm sockets.
+- **`serverSelectionTimeoutMS`**: `5000` (5-second timeout for server discovery).
+- **`socketTimeoutMS`**: `45000` (45-second socket idle timeout).
+- **`family`**: `4` (enforces IPv4 resolution to prevent dual-stack DNS delays).
+
+#### 12.2.2 Exponential Backoff Algorithm Implementation
+When initial connection or background reconnection fails, the driver executes backoff with randomized jitter to prevent thundering herd spikes:
+
+```javascript
+/**
+ * @module config/db
+ * @description Mongoose connection manager with exponential backoff retry.
+ */
+import mongoose from 'mongoose';
+import { env } from './env.js';
+import { logger } from './logger.js';
+
+const INITIAL_DELAY_MS = 1000;
+const MAX_DELAY_MS = 30000;
+const BACKOFF_FACTOR = 2;
+const MAX_BOOT_RETRIES = 10;
+
+let currentRetryAttempt = 0;
+
+/**
+ * Calculates exponential backoff delay with 10% jitter.
+ * @param {number} attempt - Current consecutive failure attempt count.
+ * @returns {number} Delay in milliseconds.
+ */
+const calculateBackoffDelay = (attempt) => {
+  const baseDelay = Math.min(INITIAL_DELAY_MS * Math.pow(BACKOFF_FACTOR, attempt), MAX_DELAY_MS);
+  const jitter = baseDelay * 0.1 * (Math.random() * 2 - 1); // +/- 10%
+  return Math.round(baseDelay + jitter);
+};
+
+/**
+ * Connects to MongoDB with exponential backoff retry.
+ * @returns {Promise<typeof mongoose>}
+ */
+export const connectDB = async () => {
+  const options = {
+    maxPoolSize: 50,
+    minPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4,
+  };
+
+  while (currentRetryAttempt < MAX_BOOT_RETRIES) {
+    try {
+      const conn = await mongoose.connect(env.MONGODB_URI, options);
+      logger.info(`MongoDB Connected successfully: ${conn.connection.host}/${conn.connection.name}`);
+      currentRetryAttempt = 0; // Reset retry counter upon success
+      return conn;
+    } catch (error) {
+      currentRetryAttempt += 1;
+      const delay = calculateBackoffDelay(currentRetryAttempt);
+      logger.warn(
+        `MongoDB connection attempt ${currentRetryAttempt}/${MAX_BOOT_RETRIES} failed: ${error.message}. Retrying in ${delay}ms...`
+      );
+
+      if (currentRetryAttempt >= MAX_BOOT_RETRIES) {
+        logger.error(`FATAL: Could not connect to MongoDB after ${MAX_BOOT_RETRIES} attempts.`);
+        throw error;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+};
+
+// Lifecycle Event Listeners
+mongoose.connection.on('disconnected', () => {
+  logger.warn('MongoDB connection lost. Driver attempting automatic background reconnection...');
+});
+
+mongoose.connection.on('reconnected', () => {
+  logger.info('MongoDB driver successfully reconnected to cluster.');
+});
+
+mongoose.connection.on('error', (err) => {
+  logger.error('MongoDB operational error encountered:', err);
+});
+```
+
+---
+
+### 12.3 Environment & Constants Immutability (`Object.freeze`)
+
+To prevent accidental runtime mutations, security compromises, or dynamic configuration drifts, all environment variables and configuration constants are validated at boot and exported as **deeply frozen, immutable objects** across both the backend and frontend.
+
+#### 12.3.1 Backend Configuration (`backend/src/config/env.js`)
+The backend validates required environment variables using standard validation logic. If any critical secret is absent, boot halts immediately with an explicit error:
+
+```javascript
+/**
+ * @module config/env
+ * @description Centralized, immutable backend environment configuration.
+ */
+import dotenv from 'dotenv';
+dotenv.config();
+
+const requiredEnvVars = [
+  'MONGODB_URI',
+  'JWT_ACCESS_SECRET',
+  'JWT_REFRESH_SECRET',
+  'ADDIS_AI_API_KEY',
+  'GEMINI_API_KEY',
+];
+
+const missing = requiredEnvVars.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  throw new Error(`CRITICAL CONFIGURATION ERROR: Missing required environment variables: ${missing.join(', ')}`);
+}
+
+/**
+ * Deeply frozen backend environment configuration object.
+ */
+export const env = Object.freeze({
+  NODE_ENV: Object.freeze(process.env.NODE_ENV || 'development'),
+  PORT: Object.freeze(parseInt(process.env.PORT || '4000', 10)),
+  MONGODB_URI: Object.freeze(process.env.MONGODB_URI),
+  JWT_ACCESS_SECRET: Object.freeze(process.env.JWT_ACCESS_SECRET),
+  JWT_REFRESH_SECRET: Object.freeze(process.env.JWT_REFRESH_SECRET),
+  JWT_ACCESS_EXPIRES_IN: Object.freeze('15m'),
+  JWT_REFRESH_EXPIRES_IN: Object.freeze('7d'),
+  ADDIS_AI_API_KEY: Object.freeze(process.env.ADDIS_AI_API_KEY),
+  GEMINI_API_KEY: Object.freeze(process.env.GEMINI_API_KEY),
+  NVIDIA_API_KEY: Object.freeze(process.env.NVIDIA_API_KEY || ''),
+  GOOGLE_CLIENT_ID: Object.freeze(process.env.GOOGLE_CLIENT_ID || ''),
+  GOOGLE_CLIENT_SECRET: Object.freeze(process.env.GOOGLE_CLIENT_SECRET || ''),
+  GOOGLE_REDIRECT_URI: Object.freeze(process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/api/v1/auth/google/callback'),
+  ALLOWED_ORIGINS: Object.freeze(
+    (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+      .split(',')
+      .map((origin) => origin.trim())
+  ),
+  AI_TIMEOUT_MS: Object.freeze(parseInt(process.env.AI_TIMEOUT_MS || '25000', 10)),
+});
+```
+
+#### 12.3.2 Frontend Configuration (`client/src/config/env.js`)
+The Vite frontend mirrors this immutability pattern, preventing runtime tampering with client endpoints:
+
+```javascript
+/**
+ * @module config/env
+ * @description Centralized, immutable frontend environment configuration.
+ */
+export const env = Object.freeze({
+  MODE: Object.freeze(import.meta.env.MODE),
+  IS_DEV: Object.freeze(import.meta.env.DEV),
+  IS_PROD: Object.freeze(import.meta.env.PROD),
+  API_BASE_URL: Object.freeze(import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1'),
+});
+```
+
+---
+
+### 12.4 The Fixed Immutable Middleware Chain (`backend/src/app.js`)
+
+All HTTP requests pass through an immutable, strictly ordered 11-step middleware chain in `backend/src/app.js`. **The order of these middlewares is permanent and non-reorderable**:
+
+```
++---------------------------------------------------------------------------------------------------+
+| THE 11-STEP IMMUTABLE EXPRESS MIDDLEWARE PIPELINE (backend/src/app.js)                            |
++---------------------------------------------------------------------------------------------------+
+| 1. helmet()                   --> Sets strict HTTP security headers, HSTS, CSP, and sniffing guard|
+| 2. cors()                     --> Validates origin against env.ALLOWED_ORIGINS; credentials: true |
+| 3. compression()              --> Gzip/Brotli compression (explicitly skips SSE event-streams)    |
+| 4. cookieParser()             --> Extracts and parses signed/httpOnly cookies                     |
+| 5. morganRequestLogger        --> Terminal console output on dev; Winston http file stream on prod|
+| 6. express.json({limit:'1mb'})--> Parses JSON request bodies; bounded to 1MB to prevent DoS       |
+| 7. express.urlencoded(...)    --> Parses URL-encoded form data; bounded to 1MB                    |
+| 8. expressMongoSanitize(...)  --> Recursively strips '$' and '.' operators to prevent NoSQL inject|
+| 9. generalRateLimiter         --> 300 req/15min/user window; exempts /health endpoint             |
+| 10. app.use('/api/v1', router)--> Mounts single authoritative REST API route namespace            |
+| 11. 404 & Centralized Error   --> Catches unmapped routes and formats all errors via errorHandler |
++---------------------------------------------------------------------------------------------------+
+```
+
+#### 12.4.1 Complete Implementation (`backend/src/app.js`)
+```javascript
+/**
+ * @module app
+ * @description Express application assembly with strict 11-step middleware pipeline.
+ */
+import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import mongoSanitize from 'express-mongo-sanitize';
+import { env } from './config/env.js';
+import { requestLogger } from './middlewares/requestLogger.js';
+import { generalRateLimiter } from './middlewares/rateLimiter.js';
+import { apiRouter } from './routes/index.js';
+import { NotFoundError } from './errors/index.js';
+import { errorHandler } from './middlewares/errorHandler.js';
+
+const app = express();
+
+// 1. Security Headers via Helmet
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", ...env.ALLOWED_ORIGINS],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
+// 2. Cross-Origin Resource Sharing (CORS)
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin || env.ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+      }
+    },
+    credentials: true, // Mandatory for transmitting httpOnly auth cookies
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    maxAge: 86400, // Pre-flight cache: 24 hours
+  })
+);
+
+// 3. Response Compression (Bypassing SSE Streams)
+app.use(
+  compression({
+    filter: (req, res) => {
+      // Never compress Server-Sent Events streams; compression buffers chunks and breaks real-time delivery
+      if (req.headers.accept === 'text/event-stream') {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  })
+);
+
+// 4. Cookie Parsing
+app.use(cookieParser());
+
+// 5. Morgan Request Logging
+app.use(requestLogger);
+
+// 6. JSON Body Parsing (Bounded to 1MB)
+app.use(express.json({ limit: '1mb' }));
+
+// 7. URL-Encoded Form Parsing (Bounded to 1MB)
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// 8. NoSQL Injection Sanitization
+app.use(
+  mongoSanitize({
+    allowDots: false,
+    replaceWith: '_',
+  })
+);
+
+// 9. Application Rate Limiting
+app.use(generalRateLimiter);
+
+// 10. Authoritative API Route Mount
+app.use('/api/v1', apiRouter);
+
+// 11a. 404 Fallback Route Handler
+app.use((req, res, next) => {
+  next(new NotFoundError(`Cannot ${req.method} ${req.originalUrl} - Route not found`));
+});
+
+// 11b. Centralized Error Handler Middleware
+app.use(errorHandler);
+
+export default app;
+```
+
+---
+
+### 12.5 Morgan Logging & Dev Terminal Configuration (`backend/src/middlewares/requestLogger.js`)
+
+HTTP request logging is powered by Morgan with dual-mode behavior depending on `env.NODE_ENV`:
+1. **Development Environment**: Logs directly to `process.stdout` in the colorized `dev` format (`:method :url :status :response-time ms - :res[content-length]`), giving developers instant visual feedback in the terminal.
+2. **Production Environment**: Piped directly into Winston's daily rotating file stream at the `http` log level.
+3. **Universal PII & Credential Masking**: Sanitizes sensitive fields before logging.
+
+```javascript
+/**
+ * @module middlewares/requestLogger
+ * @description Morgan HTTP logging middleware with development terminal formatting and production Winston stream.
+ */
+import morgan from 'morgan';
+import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
+
+// List of sensitive payload keys masked in log output
+const SENSITIVE_FIELDS = ['password', 'confirmPassword', 'currentPassword', 'newPassword', 'token', 'refreshToken'];
+
+/**
+ * Sanitizes an object by recursively masking sensitive field values.
+ * @param {object} obj - Target object to sanitize.
+ * @returns {object} Sanitized clone.
+ */
+export const sanitizePayload = (obj) => {
+  if (!obj || typeof obj !== 'object') return obj;
+  const sanitized = Array.isArray(obj) ? [...obj] : { ...obj };
+  for (const key of Object.keys(sanitized)) {
+    if (SENSITIVE_FIELDS.includes(key)) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof sanitized[key] === 'object') {
+      sanitized[key] = sanitizePayload(sanitized[key]);
+    }
+  }
+  return sanitized;
+};
+
+// Stream pipe for production Winston integration
+const winstonStream = {
+  write: (message) => {
+    logger.http(message.trim());
+  },
+};
+
+/**
+ * Exported request logger middleware configured for active environment.
+ */
+export const requestLogger =
+  env.NODE_ENV === 'development'
+    ? morgan('dev') // Colorized terminal output for developers
+    : morgan(
+        ':remote-addr - :remote-user [:date[iso]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" - :response-time ms',
+        { stream: winstonStream }
+      );
+```
+
+---
+
+### 12.6 Winston Daily Rotating Logging Infrastructure (`backend/src/config/logger.js`)
+
+The application implements a structured, multi-transport Winston logging engine utilizing `winston-daily-rotate-file` for file persistence and automated archival.
+
+#### 12.6.1 Log File Strategy & Retention Policy
+- **Combined Daily Log (`logs/combined-%DATE%.log`)**:
+  - Captures all log events at level `info` and above (`info`, `http`, `warn`, `error`).
+  - File retention: **30 days** (`maxFiles: '30d'`).
+  - Max file size: **20 MB** per file (`maxSize: '20m'`).
+  - Compression: Automated gzip compression of rotated archives (`zippedArchive: true`).
+- **Error Daily Log (`logs/error-%DATE%.log`)**:
+  - Captures only `error` level events.
+  - File retention: **30 days** (`maxFiles: '30d'`).
+  - Max file size: **20 MB** (`maxSize: '20m'`).
+  - Compression: Automated gzip compression (`zippedArchive: true`).
+
+#### 12.6.2 Logger Implementation (`backend/src/config/logger.js`)
+```javascript
+/**
+ * @module config/logger
+ * @description Centralized Winston logger with daily rotating file transports and development console formatting.
+ */
+import path from 'node:path';
+import winston from 'winston';
+import 'winston-daily-rotate-file';
+import { env } from './env.js';
+
+const { combine, timestamp, printf, colorize, json, errors } = winston.format;
+
+// Human-readable format for development terminal
+const devConsoleFormat = printf(({ level, message, timestamp, stack }) => {
+  return `${timestamp} [${level}]: ${stack || message}`;
+});
+
+// Daily rotate file transport for general logs
+const combinedFileTransport = new winston.transports.DailyRotateFile({
+  filename: path.join('logs', 'combined-%DATE%.log'),
+  datePattern: 'YYYY-MM-DD',
+  level: 'info',
+  maxSize: '20m',
+  maxFiles: '30d',
+  zippedArchive: true,
+  format: combine(timestamp(), errors({ stack: true }), json()),
+});
+
+// Daily rotate file transport for error logs
+const errorFileTransport = new winston.transports.DailyRotateFile({
+  filename: path.join('logs', 'error-%DATE%.log'),
+  datePattern: 'YYYY-MM-DD',
+  level: 'error',
+  maxSize: '20m',
+  maxFiles: '30d',
+  zippedArchive: true,
+  format: combine(timestamp(), errors({ stack: true }), json()),
+});
+
+// Console transport (colorized in dev, JSON in prod)
+const consoleTransport = new winston.transports.Console({
+  format:
+    env.NODE_ENV === 'development'
+      ? combine(colorize(), timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), errors({ stack: true }), devConsoleFormat)
+      : combine(timestamp(), errors({ stack: true }), json()),
+});
+
+export const logger = winston.createLogger({
+  level: env.NODE_ENV === 'development' ? 'debug' : 'info',
+  transports: [consoleTransport, combinedFileTransport, errorFileTransport],
+  exitOnError: false,
+});
+```
+
+---
+
+### 12.7 Unified Validation Architecture & `req.validated` Pattern
+
+To eliminate raw, unvalidated input bugs, prevent parameter pollution, and guarantee clean separation of concerns, validation is decoupled from controllers using `express-validator` and centralized in `backend/src/validators/validation.js`.
+
+#### 12.7.1 The Generic `validate` Middleware Wrapper (`backend/src/validators/validation.js`)
+The `validate` middleware executes an array of validation chains, checks for errors, formats 422 error details, extracts validated data via `matchedData()`, and attaches it cleanly to `req.validated`:
+
+```javascript
+/**
+ * @module validators/validation
+ * @description Generic express-validator runner attaching sanitized matchedData to req.validated.
+ */
+import { validationResult, matchedData } from 'express-validator';
+import { UnprocessableEntityError } from '../errors/index.js';
+
+/**
+ * Wraps validation rule chains into an Express middleware.
+ * @param {Array<import('express-validator').ValidationChain>} validations - Array of validator chains.
+ * @param {object} [options={}] - matchedData options.
+ * @returns {import('express').RequestHandler}
+ */
+export const validate = (validations, options = {}) => async (req, res, next) => {
+  // 1. Run all validations concurrently
+  await Promise.all(validations.map((validation) => validation.run(req)));
+
+  // 2. Evaluate validation results
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const details = errors.array().map((err) => ({
+      field: err.path || err.param,
+      message: err.msg,
+    }));
+    return next(new UnprocessableEntityError('Validation failed', details));
+  }
+
+  // 3. Populate sanitized req.validated object partitioned by location
+  req.validated = {
+    body: matchedData(req, { ...options, locations: ['body'] }),
+    params: matchedData(req, { ...options, locations: ['params'] }),
+    query: matchedData(req, { ...options, locations: ['query'] }),
+  };
+
+  next();
+};
+```
+
+#### 12.7.2 Controller Consumption Standard
+Controllers are **strictly prohibited** from reading raw `req.body`, `req.params`, or `req.query`. All controllers:
+1. Are wrapped in `asyncHandler(async (req, res, next) => { ... })`.
+2. Are declared as **arrow functions**.
+3. Read user credentials strictly via `const userId = req.user._id;`.
+4. Read inputs strictly from `req.validated.<body|params|query>`:
+
+```javascript
+// Example Controller Standard Pattern
+export const updateBranch = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
+  const { branchId } = req.validated.params;
+  const { name, location, phone, address } = req.validated.body;
+
+  const branch = await branchService.updateBranch(userId, branchId, { name, location, phone, address });
+  res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: 'Branch updated successfully',
+    data: branch,
+  });
+});
+```
+
+#### 12.7.3 Resource-Specific Validator Directory Layout
+Validators are organized per resource under `backend/src/validators/`:
+- `backend/src/validators/auth.js`: `registerValidator`, `loginValidator`, `passwordChangeValidator`.
+- `backend/src/validators/branch.js`: `createBranchValidator`, `updateBranchValidator`, `branchIdParamValidator`.
+- `backend/src/validators/report.js`: `createReportValidator`, `updateReportValidator`, `reportQueryValidator`.
+- `backend/src/validators/chat.js`: `createChatValidator`, `sendMessageValidator`.
+- `backend/src/validators/preset.js`: `createPresetValidator`, `updatePresetValidator`.
+- `backend/src/validators/user.js`: `updateProfileValidator`, `deleteAccountValidator`.
+- `backend/src/validators/search.js`: `searchQueryValidator`.
+
+---
+
+### 12.8 Universal Codebase Conventions: Arrow Functions & `forwardRef`
+
+#### 12.8.1 Universal Arrow Functions Law
+Unless syntactically or technically impossible, **every single function in the entire codebase** must be an **arrow function**:
+- **Backend**:
+  - Controllers: `export const getReports = asyncHandler(async (req, res, next) => { ... });`
+  - Services: `export const calculateDailySummary = async (date) => { ... };`
+  - Middlewares: `export const authenticate = (req, res, next) => { ... };`
+  - Utilities: `export const formatDateToEthiopian = (date) => { ... };`
+- **Frontend**:
+  - React Components: `const ReportCard = ({ report, onSelect }) => { ... };`
+  - Custom Hooks: `export const useAudioRecorder = () => { ... };`
+  - Redux Reducers & Thunks: `(builder) => { builder.addCase(...); }`
+  - Event Handlers: `const handleSubmit = async (e) => { ... };`
+- **Strictly Permitted Exception**: Mongoose schema virtual getters, pre-save hooks, and model methods where lexical binding of `this` is mandatory by Mongoose driver specifications.
+
+#### 12.8.2 Universal Form Fields `React.forwardRef` Wrapping
+Every reusable form input component under `client/src/components/reusable/*` (`MuiTextField.jsx`, `MuiSelect.jsx`, `MuiAutocomplete.jsx`, `MuiDatePicker.jsx`, `MuiTimePicker.jsx`, `MuiFileInput.jsx`) must be wrapped in `React.forwardRef` and assign an explicit `displayName`.
+
+This guarantees:
+1. Seamless integration with `react-hook-form`'s `register()` ref forwarding.
+2. Automated DOM focus shifting to the first invalid field upon form submission failure.
+3. Zero React ref-forwarding warnings in the browser console.
+
+```jsx
+// client/src/components/reusable/MuiTextField.jsx
+import React, { forwardRef } from 'react';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+
+/**
+ * @component MuiTextField
+ * @description Reusable MUI TextField with React.forwardRef, Start icon, and clear End icon.
+ */
+const MuiTextField = forwardRef(({ label, error, helperText, startIcon, endIcon, ...props }, ref) => {
+  return (
+    <TextField
+      inputRef={ref}
+      label={label}
+      size="small"
+      error={Boolean(error)}
+      helperText={helperText}
+      InputProps={{
+        startAdornment: startIcon ? <InputAdornment position="start">{startIcon}</InputAdornment> : null,
+        endAdornment: endIcon ? <InputAdornment position="end">{endIcon}</InputAdornment> : null,
+      }}
+      {...props}
+    />
+  );
+});
+
+MuiTextField.displayName = 'MuiTextField';
+export default MuiTextField;
+```
+
+---
+
+### 12.9 The CustomError Hierarchy & Global Error Pipeline
+
+Error handling is modeled as an object-oriented domain hierarchy rooted in `CustomError extends Error`.
+
+```
+                        +----------------------+
+                        |     CustomError      |
+                        | (Base Domain Error)  |
+                        +----------+-----------+
+                                   |
+        +--------------------------+--------------------------+
+        |                          |                          |
++-------v--------+         +-------v--------+         +-------v--------+
+| BadRequestError|         |UnauthorizedErr |         | ForbiddenError |
+|   (HTTP 400)   |         |   (HTTP 401)   |         |   (HTTP 403)   |
++----------------+         +----------------+         +----------------+
+        |                          |                          |
++-------v--------+         +-------v--------+         +-------v--------+
+| NotFoundError  |         | ConflictError  |         |UnprocessableErr|
+|   (HTTP 404)   |         |   (HTTP 409)   |         |   (HTTP 422)   |
++----------------+         +----------------+         +----------------+
+        |                          |                          |
++-------v--------+         +-------v--------+         +-------v--------+
+|TooManyReqsError|         |InternalServErr |         | BadGatewayError|
+|   (HTTP 429)   |         |   (HTTP 500)   |         |   (HTTP 502)   |
++----------------+         +----------------+         +----------------+
+```
+
+#### 12.9.1 Base Error Class (`backend/src/errors/CustomError.js`)
+```javascript
+/**
+ * @module errors/CustomError
+ * @description Base class for all operational domain errors.
+ */
+export class CustomError extends Error {
+  /**
+   * @param {string} message - Human-readable error message.
+   * @param {number} statusCode - HTTP status code.
+   * @param {Array<{field: string, message: string}> | null} [details=null] - Validation error details.
+   */
+  constructor(message, statusCode, details = null) {
+    super(message);
+    this.name = this.constructor.name;
+    this.statusCode = statusCode;
+    this.details = details;
+    this.isOperational = true;
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+```
+
+#### 12.9.2 Derived Domain Subclasses (`backend/src/errors/index.js`)
+```javascript
+/**
+ * @module errors
+ * @description Exported domain error classes.
+ */
+import { CustomError } from './CustomError.js';
+import { HTTP_STATUS } from '../config/httpStatus.js';
+
+export { CustomError };
+
+export class BadRequestError extends CustomError {
+  constructor(message = 'Bad request') {
+    super(message, HTTP_STATUS.BAD_REQUEST);
+  }
+}
+
+export class UnauthorizedError extends CustomError {
+  constructor(message = 'Authentication required') {
+    super(message, HTTP_STATUS.UNAUTHORIZED);
+  }
+}
+
+export class ForbiddenError extends CustomError {
+  constructor(message = 'Access forbidden') {
+    super(message, HTTP_STATUS.FORBIDDEN);
+  }
+}
+
+export class NotFoundError extends CustomError {
+  constructor(message = 'Resource not found') {
+    super(message, HTTP_STATUS.NOT_FOUND);
+  }
+}
+
+export class ConflictError extends CustomError {
+  constructor(message = 'Resource conflict detected') {
+    super(message, HTTP_STATUS.CONFLICT);
+  }
+}
+
+export class UnprocessableEntityError extends CustomError {
+  constructor(message = 'Validation failed', details = null) {
+    super(message, HTTP_STATUS.UNPROCESSABLE_ENTITY, details);
+  }
+}
+
+export class TooManyRequestsError extends CustomError {
+  constructor(message = 'Rate limit exceeded. እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።') {
+    super(message, HTTP_STATUS.TOO_MANY_REQUESTS);
+  }
+}
+
+export class InternalServerError extends CustomError {
+  constructor(message = 'Internal server error') {
+    super(message, HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  }
+}
+
+export class BadGatewayError extends CustomError {
+  constructor(message = 'Upstream service unavailable') {
+    super(message, HTTP_STATUS.BAD_GATEWAY);
+  }
+}
+
+export class ServiceUnavailableError extends CustomError {
+  constructor(message = 'Service temporarily unavailable') {
+    super(message, HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
+}
+```
+
+#### 12.9.3 Centralized Error Handler Middleware (`backend/src/middlewares/errorHandler.js`)
+```javascript
+/**
+ * @module middlewares/errorHandler
+ * @description Centralized Express error handler formatting standard JSON envelopes.
+ */
+import { CustomError } from '../errors/index.js';
+import { HTTP_STATUS } from '../config/httpStatus.js';
+import { env } from '../config/env.js';
+import { logger } from '../config/logger.js';
+
+export const errorHandler = (err, req, res, next) => {
+  let statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
+  let message = err.message || 'An unexpected error occurred';
+  let details = err.details || null;
+
+  // Handle Mongoose CastError (invalid ObjectId)
+  if (err.name === 'CastError') {
+    statusCode = HTTP_STATUS.BAD_REQUEST;
+    message = `Invalid format for resource parameter: ${err.path}`;
+  }
+
+  // Handle Mongoose Duplicate Key (E11000)
+  if (err.code === 11000) {
+    statusCode = HTTP_STATUS.CONFLICT;
+    const field = Object.keys(err.keyValue)[0];
+    message = `Duplicate value entered for unique field: ${field}`;
+  }
+
+  // Handle Mongoose Schema Validation Error
+  if (err.name === 'ValidationError') {
+    statusCode = HTTP_STATUS.UNPROCESSABLE_ENTITY;
+    message = 'Database validation failed';
+    details = Object.values(err.errors).map((e) => ({
+      field: e.path,
+      message: e.message,
+    }));
+  }
+
+  // Handle JWT Verification Errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    statusCode = HTTP_STATUS.UNAUTHORIZED;
+    message = 'Authentication token is invalid or expired';
+  }
+
+  // Log 500 errors to Winston error log with full stack trace
+  if (statusCode >= 500) {
+    logger.error(`[500 Server Error] ${req.method} ${req.originalUrl}:`, err);
+  } else {
+    logger.warn(`[${statusCode} Operational Warning] ${req.method} ${req.originalUrl} - ${message}`);
+  }
+
+  const responsePayload = {
+    success: false,
+    message,
+    data: null,
+  };
+
+  if (details) {
+    responsePayload.details = details;
+  }
+
+  // Include stack trace only in development
+  if (env.NODE_ENV === 'development' && statusCode >= 500) {
+    responsePayload.stack = err.stack;
+  }
+
+  res.status(statusCode).json(responsePayload);
+};
+```
+
+---
+
+### 12.10 30-Day Sweeper Service & Background Cron (`backend/src/services/sweeperService.js`)
+
+Archived reports and branches are never permanently deleted upon user archival. Instead, they enter a 30-day soft-delete retention window. The **30-Day Sweeper Service** executes automatically via `node-cron` every night at **00:00 UTC (03:00 AM EAT)** to purge records exceeding the 30-day retention threshold.
+
+#### 12.10.1 Multi-Resource Transactional Purge Lifecycle
+When a report reaches 30 days past `archivedAt`:
+1. **Database Cascade**: Opens a Mongoose transaction session (`session.withTransaction`).
+2. **Report Deletion**: Removes the `Report` document.
+3. **Clips Deletion**: Cascades deletion across all associated `AudioClip` rows matching `report: reportId`.
+4. **Transaction Commit**: Commits changes atomically.
+5. **Disk File Cleanup**: Physically unlinks audio directory `uploads/audio/${reportId}/` recursively.
+6. **Branch Deletion**: Deletes expired soft-archived `Branch` records.
+7. **Audit Logging**: Emits structured Winston log summarizing total deleted entities and duration.
+
+#### 12.10.2 Complete Implementation (`backend/src/services/sweeperService.js`)
+```javascript
+/**
+ * @module services/sweeperService
+ * @description Automated node-cron scheduled sweeper for 30-day soft-archived entities and orphaned files.
+ */
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import cron from 'node-cron';
+import mongoose from 'mongoose';
+import { Report } from '../models/Report.js';
+import { Branch } from '../models/Branch.js';
+import { AudioClip } from '../models/AudioClip.js';
+import { logger } from '../config/logger.js';
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Executes the 30-day archival purge cycle.
+ */
+export const runArchivalSweep = async () => {
+  const startTime = Date.now();
+  const thresholdDate = new Date(Date.now() - THIRTY_DAYS_MS);
+
+  logger.info(`Starting 30-day archival sweeper job for items archived prior to ${thresholdDate.toISOString()}...`);
+
+  let reportsPurgedCount = 0;
+  let branchesPurgedCount = 0;
+  let clipsPurgedCount = 0;
+
+  const session = await mongoose.startSession();
+
+  try {
+    // 1. Query expired archived reports
+    const expiredReports = await Report.find({
+      isArchived: true,
+      archivedAt: { $lte: thresholdDate },
+    }).select('_id').lean();
+
+    const reportIds = expiredReports.map((r) => r._id);
+
+    if (reportIds.length > 0) {
+      await session.withTransaction(async () => {
+        // Delete audio clip documents
+        const clipResult = await AudioClip.deleteMany({ report: { $in: reportIds } }, { session });
+        clipsPurgedCount = clipResult.deletedCount || 0;
+
+        // Delete report documents
+        const reportResult = await Report.deleteMany({ _id: { $in: reportIds } }, { session });
+        reportsPurgedCount = reportResult.deletedCount || 0;
+      });
+
+      // Post-transaction: clean up physical audio clip folders on disk
+      for (const reportId of reportIds) {
+        const audioDir = path.resolve('uploads', 'audio', reportId.toString());
+        try {
+          await fs.rm(audioDir, { recursive: true, force: true });
+        } catch (fileErr) {
+          logger.warn(`Could not remove audio directory for purged report ${reportId}: ${fileErr.message}`);
+        }
+      }
+    }
+
+    // 2. Query and purge expired archived branches
+    const branchResult = await Branch.deleteMany({
+      isArchived: true,
+      archivedAt: { $lte: thresholdDate },
+    });
+    branchesPurgedCount = branchResult.deletedCount || 0;
+
+    // 3. Clean up orphaned temp files older than 24 hours
+    const tempDir = path.resolve('uploads', 'temp');
+    try {
+      const tempFiles = await fs.readdir(tempDir);
+      const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      for (const file of tempFiles) {
+        const filePath = path.join(tempDir, file);
+        const stats = await fs.stat(filePath);
+        if (stats.mtimeMs < oneDayAgo) {
+          await fs.unlink(filePath);
+        }
+      }
+    } catch (tempErr) {
+      logger.warn(`Orphaned temp cleanup encountered non-critical error: ${tempErr.message}`);
+    }
+
+    const durationMs = Date.now() - startTime;
+    logger.info({
+      event: 'SWEEPER_COMPLETED',
+      reportsPurgedCount,
+      clipsPurgedCount,
+      branchesPurgedCount,
+      durationMs,
+    });
+  } catch (error) {
+    logger.error('Error occurred during 30-day archival sweeper execution:', error);
+  } finally {
+    await session.endSession();
+  }
+};
+
+/**
+ * Initializes the background cron task scheduled daily at 00:00 UTC (03:00 AM EAT).
+ * @returns {cron.ScheduledTask}
+ */
+export const initSweeperTasks = () => {
+  // Schedule: 0 0 * * * (Every day at 00:00:00 UTC)
+  const task = cron.schedule('0 0 * * *', async () => {
+    await runArchivalSweep();
+  });
+
+  logger.info('Archival sweeper cron initialized (Schedule: 0 0 * * * UTC / 03:00 EAT)');
+  return task;
+};
+```
+
+---
+
+### 12.11 Client-Side RTK Query Re-Auth & Native Fetch Client (`client/src/features/api/apiSlice.js`)
+
+Client-server communication is handled via a customized RTK Query base query wrapper that handles transparent JWT token refresh with concurrency protection via `async-mutex`.
+
+#### 12.11.1 The Custom `baseQueryWithReauth` Wrapper
+When a protected request receives an HTTP 401 response:
+1. The `Mutex` acquires a lock so parallel requests wait.
+2. Exactly one `POST /api/v1/auth/refresh` request is dispatched.
+3. **If Refresh Succeeds**: Updated access tokens are set in httpOnly cookies, the mutex releases, and all queued queries retry automatically.
+4. **If Refresh Fails**: The mutex releases, Redux dispatches `logout()`, all cached queries are purged, and the browser redirects to `/login`.
+5. **Infinite Loop Prevention**: If `/api/v1/auth/refresh` itself returns 401, re-auth is immediately aborted and the user is logged out without retry.
+
+```javascript
+// client/src/features/api/apiSlice.js
+import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { Mutex } from 'async-mutex';
+import { env } from '../../config/env.js';
+import { logout } from '../auth/authSlice.js';
+
+const mutex = new Mutex();
+
+const baseQuery = fetchBaseQuery({
+  baseUrl: env.API_BASE_URL,
+  credentials: 'include', // Mandates httpOnly cookie transmission
+});
+
+/**
+ * Custom base query wrapper handling seamless JWT refresh with async-mutex.
+ */
+export const baseQueryWithReauth = async (args, api, extraOptions) => {
+  // Wait until any active refresh has completed
+  await mutex.waitForUnlock();
+  let result = await baseQuery(args, api, extraOptions);
+
+  if (result.error && result.error.status === 401) {
+    // Prevent infinite loop if the refresh endpoint itself returns 401
+    const isRefreshRequest = typeof args === 'string' ? args.includes('/auth/refresh') : args.url?.includes('/auth/refresh');
+    if (isRefreshRequest) {
+      api.dispatch(logout());
+      return result;
+    }
+
+    if (!mutex.isLocked()) {
+      const release = await mutex.acquire();
+      try {
+        const refreshResult = await baseQuery(
+          { url: '/auth/refresh', method: 'POST' },
+          api,
+          extraOptions
+        );
+
+        if (refreshResult.data) {
+          // Token rotation succeeded; retry original failed query
+          result = await baseQuery(args, api, extraOptions);
+        } else {
+          // Refresh token invalid/revoked; terminate session
+          api.dispatch(logout());
+        }
+      } finally {
+        release();
+      }
+    } else {
+      // Mutex is locked by another request; wait for release and retry
+      await mutex.waitForUnlock();
+      result = await baseQuery(args, api, extraOptions);
+    }
+  }
+
+  return result;
+};
+
+export const apiSlice = createApi({
+  reducerPath: 'api',
+  baseQuery: baseQueryWithReauth,
+  tagTypes: ['User', 'Branch', 'Report', 'Chat', 'Preset'],
+  endpoints: () => ({}),
+});
+```
+
+#### 12.11.2 Lightweight Native Fetch Client (`client/src/services/apiClient.js`)
+For non-cached operations—specifically Server-Sent Events (SSE) streaming and audio Blob playback—the application uses a lightweight native fetch wrapper that also transmits `credentials: 'include'`:
+
+```javascript
+// client/src/services/apiClient.js
+import { env } from '../config/env.js';
+
+/**
+ * Executes a native fetch request with credentials: 'include'.
+ * @param {string} endpoint - API endpoint path.
+ * @param {RequestInit} [options={}] - Fetch options.
+ * @returns {Promise<Response>}
+ */
+export const apiClient = async (endpoint, options = {}) => {
+  const url = `${env.API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  return response;
+};
+```
+
+---
+
+### 12.12 Section 12 Invariants & Non-Negotiable Rules Table
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Fixed 11-Step Middleware Pipeline** | Enforced in `backend/src/app.js`. Middleware chain order is strictly immutable. |
+| **Exponential Backoff DB Reconnect** | Implemented in `backend/src/config/db.js` (`1s ➔ 2s ➔ 4s ➔ 8s ➔ 16s ➔ 30s max` + 10% jitter). |
+| **Immutable Environment Constants** | `Object.freeze()` applied to all exported configuration objects in backend and frontend. |
+| **Morgan Dual-Mode Logging** | Terminal console output on dev (`dev` format); Winston file logging on prod with PII masking. |
+| **30-Day Daily Rotating Winston Logs** | `logs/combined-%DATE%.log` and `logs/error-%DATE%.log` rotated daily, 30-day retention, 20MB limit, gzip compression. |
+| **Sanitized `req.validated` Standard** | Centralized `validate` middleware populates `req.validated = { body, params, query }` via `matchedData()`. Direct reading of raw `req.body/params/query` in controllers is strictly forbidden. |
+| **Universal Controller `asyncHandler`** | Every controller wrapped in `asyncHandler(async (req, res, next) => { ... })` and declared as an arrow function. |
+| **Universal Arrow Functions Law** | All functions across backend and frontend are arrow functions, with the sole exception of Mongoose hooks requiring `this`. |
+| **Universal Form Fields `React.forwardRef`** | Reusable input components wrapped in `React.forwardRef` with explicit `displayName` for `react-hook-form` ref integration. |
+| **Domain `CustomError` Hierarchy** | All operational errors inherit from `CustomError` and format into `{ success: false, message, data: null, details }`. |
+| **Daily 00:00 UTC 30-Day Sweeper** | `node-cron` job (`0 0 * * *`) purges soft-archived reports, cascades clips in a transaction, and deletes disk files. |
+| **Mutex-Locked 401 Token Refresh** | `client/src/features/api/apiSlice.js` queues concurrent queries via `async-mutex` during token refresh; zero toast on 401. |
+| **Zero Orphaned Files Guarantee** | Pre-boot defensive directory checks and automated 24-hour temporary upload directory cleanups. |
 
 ---

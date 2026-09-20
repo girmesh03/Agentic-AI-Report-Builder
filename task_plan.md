@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Switch to Plan Mode for Section 12 (Backend Infrastructure, Winston Logging & Sweeper Tasks) upon user confirmation.
+Plan Mode review and specification of Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists upon user confirmation.
 
 ## Current Phase
 
-Phase 12: Section 12 - Backend Infrastructure, Winston Logging & Sweeper Tasks
+Phase 13: Section 13 - Verification Protocols, Quality Gates & Zero-Error Checklists
 
 ## Phases
 
@@ -166,13 +166,20 @@ Phase 12: Section 12 - Backend Infrastructure, Winston Logging & Sweeper Tasks
 - **Status:** complete
 
 ### Phase 12: Section 12 - Backend Infrastructure, Winston Logging & Sweeper Tasks
-- [ ] Detail fixed middleware order in `app.js` (helmet -> cors -> compression -> cookie-parser -> express.json -> express-mongo-sanitize -> rate-limit)
-- [ ] Detail Winston logging with daily rotation, 30-day retention, and environment log levels
-- [ ] Detail `node-cron` 30-day archived items sweeper
-- [ ] Detail native fetch `apiClient` with `credentials: 'include'`, token refresh retry, and `features/apiSlice.js`
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail fixed 11-step middleware order in `app.js` (helmet -> cors -> compression -> cookie-parser -> morgan -> express.json -> express.urlencoded -> express-mongo-sanitize -> rate-limit -> routes -> 404 -> errorHandler)
+- [x] Detail Winston daily rotating logger (`combined-%DATE%.log`, `error-%DATE%.log`, 30-day retention, 20MB cap, gzip)
+- [x] Detail Morgan request logger (terminal on dev, Winston stream on prod, PII masking)
+- [x] Detail MongoDB exponential backoff retry reconnection (`1s ➔ 2s ➔ 4s ➔ 8s ➔ 16s ➔ 30s max`)
+- [x] Detail `node-cron` 30-day archived items sweeper (`0 0 * * *` UTC / 03:00 EAT) with transaction and disk file cleanup
+- [x] Detail immutable environment constants (`Object.freeze`) for backend and frontend
+- [x] Detail centralized `validate` middleware populating `req.validated = { body, params, query }` and controller consumption
+- [x] Detail universal controller `asyncHandler` wrapping and codebase-wide arrow function law
+- [x] Detail universal form fields `React.forwardRef` wrapping with explicit `displayName`
+- [x] Detail domain `CustomError` hierarchy and centralized error pipeline
+- [x] Detail native fetch `apiClient` with `credentials: 'include'`, token refresh retry, and `features/api/apiSlice.js`
+- [x] Review in Plan Mode with user
+- [x] Output Section 12 specification content to `docs/specifications/master_specification.md` in Build Mode (uncommitted per user command)
+- **Status:** complete
 
 ### Phase 13: Section 13 - Verification Protocols, Quality Gates & Zero-Error Checklists
 - [ ] Detail `node --check` backend validation

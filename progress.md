@@ -284,13 +284,44 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+### Phase 12: Section 12 - Backend Infrastructure, Winston Logging & Sweeper Tasks
+- **Status:** complete
+- **Started:** 2026-09-20T20:35:00+03:00
+- **Completed:** 2026-09-20T20:56:00+03:00
+- Actions taken:
+  - Committed Section 11 and harmonization work to `phase-0-specification` (`ecf3dd8`).
+  - Switched to Plan Mode for Section 12; user confirmed 00:00 UTC sweeper schedule, MongoDB exponential backoff retry, Morgan dev terminal logging, Object.freeze for env constants, centralized `validation.js` populating `req.validated = { body, params, query }` and controller consumption, CustomError hierarchy, universal controller `asyncHandler` wrapping, universal arrow functions law, and `React.forwardRef` wrapping for form inputs.
+  - Switched to Build Mode on user instruction ("proceed -> don't commit").
+  - Activated Section 12 link in Master Specification Table of Contents.
+  - Formulated, authored, and appended complete Section 12 (Backend Infrastructure, Winston Logging & Sweeper Tasks) to `docs/specifications/master_specification.md` (now 7,920 total lines):
+    - Specified `server.js` 6-phase boot sequence, defensive directory checks (`logs/`, `uploads/avatars/`, `uploads/audio/`, `uploads/temp/`), and 4-step graceful shutdown protocol (`SIGTERM`, `SIGINT`, 10s failsafe).
+    - Detailed `db.js` Mongoose connection pooling (`maxPoolSize: 50`, `minPoolSize: 10`) and Exponential Backoff Reconnection algorithm (`1s ➔ 2s ➔ 4s ➔ 8s ➔ 16s ➔ 30s max` + 10% jitter) with Winston logging.
+    - Specified `config/env.js` deeply frozen environment configurations (`Object.freeze`) for backend and frontend.
+    - Detailed fixed 11-step immutable middleware pipeline in `backend/src/app.js` (helmet ➔ cors ➔ compression ➔ cookieParser ➔ morgan ➔ json ➔ urlencoded ➔ mongoSanitize ➔ rateLimiter ➔ /api/v1 ➔ 404 ➔ errorHandler).
+    - Detailed `requestLogger.js` dual-mode Morgan logging (colorized `dev` on terminal in development; Winston file stream in production; PII masking of sensitive credentials).
+    - Specified `logger.js` Winston multi-transport setup (`combined-%DATE%.log`, `error-%DATE%.log`, 30-day retention, 20MB limit, gzip compression).
+    - Specified `validation.js` generic `validate` middleware populating `req.validated = { body, params, query }` via `matchedData()`, prohibiting raw access in controllers, and cataloged resource validators under `backend/src/validators/<resource>.js`.
+    - Codified Universal Arrow Functions Law across backend and frontend, and Universal `React.forwardRef` wrapping with explicit `displayName` on all reusable form input components.
+    - Detailed `CustomError` domain error hierarchy (`BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `UnprocessableEntityError`, `TooManyRequestsError`, `InternalServerError`, `BadGatewayError`, `ServiceUnavailableError`) and centralized `errorHandler.js`.
+    - Detailed `sweeperService.js` `node-cron` job (`0 0 * * *` UTC / 03:00 EAT) for 30-day soft-archived reports and branches purge, cascading clip deletion in transaction, disk audio directory unlinking, and 24h temp file cleanup.
+    - Detailed `apiSlice.js` RTK Query `baseQueryWithReauth` with `async-mutex` concurrency protection and native fetch `apiClient`.
+    - Formulated Section 12 Invariants & Non-Negotiable Rules Table.
+  - Updated `task_plan.md`, `findings.md`, and `progress.md`.
+  - **STRICTLY PRESERVED UNCOMMITTED WORKING DIRECTORY** per user explicit command ("don't commit").
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 11 (REST API Endpoint Inventory, Validation Chains & Response Envelopes) completed and appended to `master_specification.md` in Build Mode. All changes left in working tree uncommitted per explicit user command ("don't commit"). |
-| Where am I going? | Awaiting user review of Section 11 and instruction to switch to Plan Mode for Section 12 (Backend Infrastructure, Winston Logging & Sweeper Tasks). |
+| Where am I? | Section 12 (Backend Infrastructure, Winston Logging & Sweeper Tasks) completed and appended to `master_specification.md` in Build Mode. All changes left in working tree uncommitted per explicit user command ("don't commit"). |
+| Where am I going? | Awaiting user review of Section 12 and instruction to switch to Plan Mode for Section 13 (Verification Protocols, Quality Gates & Zero-Error Checklists). |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder on branch `phase-0-specification`. |
-| What have I learned? | Strict adherence to `{ success, message, data }` and `mongoose-paginate-v2` with `httpStatus.js` imports guarantees contract uniformity across all 45 endpoints; in-memory audio dictation via `POST /api/v1/audio/transcribe` ensures zero server disk storage; explicit forbidden endpoint registry blocks architectural creep. |
-| What have I done? | Harmonized legacy mismatches in Sections 1–10; authored Section 11 in `master_specification.md` (lines 5619–6782); updated `task_plan.md`, `findings.md`, and `progress.md`; kept changes uncommitted. |
+| What have I learned? | Strict 11-step linear middleware chain in `app.js` with `Object.freeze` env guarantees runtime immutability; `req.validated` pattern with `asyncHandler` arrow controllers ensures clean, safe input handling; `node-cron` midnight sweeper with Mongoose transaction cascade guarantees zero orphaned records or audio files. |
+| What have I done? | Authored and appended Section 12 to `master_specification.md` (lines 6783–7920); updated TOC; updated `task_plan.md`, `findings.md`, and `progress.md`; kept changes uncommitted. |
+
 
