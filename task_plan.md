@@ -127,18 +127,25 @@ Phase 9: Section 9 - Conversational Agent UI & MUI X Chat Integration
 - [x] Detail App Bar Preset Selector (`[ Preset: Operations Assistant ▾ ]`) and `[ + Create New Preset ]` modal
 - [x] Detail 10-row symmetrical report initiation form (`/reports/new`) with Method 1 in-memory Blob players
 - [x] Detail cross-section implementation guardrails and novel workplace term UI lifecycle
-- [ ] User review and confirmation of Section 9
-- [ ] Commit Section 9 to `phase-0-specification`
+- [x] Detail strict separation between Model Selector (popover/menu for runtime LLM params) and Preset Selector (MUI Dialog with empty state and `react-hook-form`)
+- [x] Detail Universal Responsive Control Iconification mandate (`xs` screen protection with `MuiTooltip`)
+- [x] Detail Universal Reusable Input Components & Mandatory Start/End Adornments Law
+- [x] User review and confirmation of Section 9 and active review amendments
+- [ ] Commit Section 9 specification amendments to `phase-0-specification`
 - **Status:** in_progress
 
 ### Phase 10: Section 10 - Frontend Routing, Shell Layout & Component Matrix
-- [ ] Detail `main.jsx` route configuration with `PublicRoute`, `ProtectedRoute`, and lazy `Component` loading
+- [ ] Detail `main.jsx` route configuration with `PublicRoute` (authenticated lockout to `/dashboard`), `ProtectedRoute`, and lazy `Component` loading
 - [ ] Detail `App.jsx`, `AppTheme`, `AppErrorBoundary`, `AppToastContainer`
-- [ ] Detail `MuiAppbar` (fixed in PublicLayout, sticky in AppShell) and `Logo.jsx`
+- [ ] Detail `MuiAppbar` in PublicLayout (Theme, Login, Register) and AppShell (Search, Theme, Avatar only; zero bell, zero font stepper)
 - [ ] Detail responsive `AppShell` (mini/temporary sidebar, Recent chats, User menu, Global Search Dialog)
+- [ ] Detail consolidated `/profile` route replacing `/settings` (Profile info, Security, Preferences, Account Deletion) with dual entry from AppBar and Sidebar
+- [ ] Detail unified `BranchDialog` (Create/Edit modes) eliminating dedicated `/branches/new` and `/branches/:branchId/edit` routes
+- [ ] Detail universal `react-hook-form` with `mode: 'onBlur'` and inline `helperText` error rendering
+- [ ] Detail universal start and end adornments on all `client/src/components/reusable/*` input components
 - [ ] Detail Dashboard KPI cards and 4 charts (`@mui/x-charts`)
 - [ ] Detail Branches and Reports pages (`MuiDataGrid`, filter drawer, pagination)
-- [ ] Detail BranchDetail, ReportDetail (text copy, .txt download, print-PDF, Google Docs export), and Settings tabs
+- [ ] Detail BranchDetail, ReportDetail (text copy, .txt download, print-PDF, Google Docs export)
 - [ ] Review in Plan Mode with user
 - [ ] Output specification content in Build Mode and commit
 - **Status:** pending

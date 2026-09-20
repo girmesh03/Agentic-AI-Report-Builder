@@ -116,6 +116,17 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Mode 3 Audio Dictation Flow | Ephemeral spoken Amharic dictation via Audio Orb; transient STT via Addis AI; text injected at cursor; zero audio files saved to server disk. |
 | Transliteration Chips in Composer | Real-time suggestion bar surfaces novel word chips (e.g. `chiller ➔ ቺለር [Convert]`); reinforces 4-stage organic learning lifecycle. |
 | In-Stream Action Cards & Matrices | Assistant bubbles render `[ View Full Report ]`, `[ Edit in Form ]`, `[ Copy Report Text ]`, responsive comparison matrices, and Google Sheets links. |
+| Mode Switching & Plan Mode Non-Destruction | Mode switches occur only on user request/confirmation; Plan Mode never overrides existing implementation_plan.md, only appends. |
+| Model Selector vs Preset Selector Decoupling | Model Selector manages runtime LLM params (Google/Addis/Nvidia, model, lang, reasoning) via Popover; Preset Selector manages full personas via MUI Dialog with EmptyState & react-hook-form. |
+| STT Provider Invariance | Model Selector LLM changes have 0 impact on STT; STT is always and exclusively handled by Addis AI. |
+| Universal `xs` Control Iconification | All text-labeled buttons and compound controls collapse to icon-only buttons on `xs` (<600px) with tooltips to prevent overflow. |
+| AppShell AppBar Control Cleanliness | Right-side of AppShell AppBar strictly limited to 3 items: Global Search, Theme Toggle, User Avatar (no bell, no font buttons). |
+| Strict Route Boundary Invariant | Authenticated users locked out of public routes (`/`, `/login`, `/register`) with immediate replace redirect to `/dashboard`. |
+| Unified `BranchDialog` (No Dedicated Routes) | Branch creation and edit handled by a single `BranchDialog` (`MuiDialog`), eliminating `/branches/new` and `/branches/:branchId/edit`. |
+| Universal `react-hook-form` & onBlur helperText | All forms use `react-hook-form` with `mode: 'onBlur'`; validation errors rendered strictly as inline red `helperText`. |
+| Consolidated `/profile` Route | Replaces standalone `/settings`; houses profile info, security/password, preferences, and account deletion with dual entry from AppBar and Sidebar. |
+| Universal Reusable Inputs & Adornment Law | `MuiTextField`, `MuiSelect`, `MuiAutocomplete` etc. must feature both Start Adornment (context icon) and End Adornment (clear icon/visibility/caret). |
+| Self-Service Account Deletion Protocol | `DELETE /api/v1/users/me` on `/profile` runs atomic 7-collection transaction cascade and cookie clearance; admin user deletion remains forbidden. |
 | 10-Row Initiation Form (`/reports/new`) | 2-column split (form left, sticky plain-text Amharic preview right); Rows 1–10 with Tri-Modal Audio Ingestion and Method 1 in-memory Blob players. |
 
 ## Locked Package Manifest

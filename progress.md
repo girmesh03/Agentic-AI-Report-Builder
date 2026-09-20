@@ -206,12 +206,40 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+### Section 9 Active Review & 10 Architectural Amendments
+- **Status:** complete
+- **Started:** 2026-09-20T17:40:00+03:00
+- **Completed:** 2026-09-20T18:40:00+03:00
+- Actions taken:
+  - Reviewed Section 9 Conversational Agent UI with user in Plan Mode.
+  - Re-anchored Plan Mode preservation principle: Plan Mode never wipes or overrides `implementation_plan.md`; only appends new items additively. Mode switching occurs strictly on user request/confirmation.
+  - Formulated strict architectural separation between **Model Selector** (runtime LLM configuration popover/menu: Google/Addis/Nvidia, model, lang, reasoning with provider doc capabilities and default Google/Gemini/Amharic/max) and **Preset Selector** (MUI Dialog with `MuiEmptyState` and `react-hook-form` creation modal).
+  - Confirmed STT Provider Invariance: Model Selector changes have zero impact on STT; STT is always and exclusively executed by Addis AI.
+  - Established Universal Responsive Control Iconification Mandate: on `xs` (<600px), all text-labeled buttons and compound controls collapse into compact icon-only buttons (`MuiIconButton` wrapped in `MuiTooltip`) to eliminate overflow.
+  - Cleaned up AppShell `MuiAppbar`: right side strictly limited to 3 controls (Global Search `[ 🔍 ]`, Theme Toggle `[ 🌓 ]`, User Avatar `[ 👤 ]`), completely removing bell notifications and font stepper buttons `[ A- A+ ]`.
+  - Specified PublicLayout `MuiAppbar` right side: Theme Toggle, Login, Sign Up/Register.
+  - Formalized Strict Public vs. Protected Route Boundaries: authenticated users are locked out of public routes (`/`, `/login`, `/register`) with immediate replace redirect to `/dashboard`.
+  - Specified unified `BranchDialog` (`MuiDialog`) for both Create and Edit modes, eliminating dedicated `/branches/new` and `/branches/:branchId/edit` routes.
+  - Formalized universal `react-hook-form` validation standard: `mode: 'onBlur'` with inline red `helperText` error rendering across all forms.
+  - Specified consolidated `/profile` route replacing `/settings`, housing Profile details, Security, Preferences, and Danger Zone with dual navigation from AppBar and Sidebar.
+  - Standardized universal input components under `client/src/components/reusable/*` (`MuiTextField`, `MuiSelect`, `MuiAutocomplete`, `MuiDatePicker`, `MuiTimePicker`) with mandatory Start and End Adornments.
+  - Confirmed user self-service account deletion protocol (`DELETE /api/v1/users/me`) with 7-collection atomic transaction cascade, while forbidding third-party admin user deletion.
+  - User reviewed, approved, and authorized transition to Build Mode.
+  - Appended all 10 architectural amendments to `implementation_plan.md`.
+  - Updated `findings.md`, `task_plan.md`, and `progress.md`.
+- Files created/modified:
+  - `implementation_plan.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+  - `docs/specifications/master_specification.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 8 committed (`9eb67c2`); Section 9 drafted in `master_specification.md` and presented for user review before committing. |
-| Where am I going? | User confirmation of Section 9 -> Commit -> Section 10 (Frontend Routing, Shell Layout & Component Matrix). |
+| Where am I? | Build Mode active; 10 architectural amendments integrated into `implementation_plan.md`, `findings.md`, and `task_plan.md`. Updating Section 9 and Section 10 in `master_specification.md`. |
+| Where am I going? | Complete specification integration in `master_specification.md` -> Commit on `phase-0-specification` -> Proceed to Section 10. |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | MUI X Chat `<ChatBox>` with `conversationHeader: false` and `conversationList: false` delivers an ergonomic single-column conversational experience without duplicate headers; 17px default font size ensures crisp Ge'ez legibility; in-stream interactive triggers empower supervisors to view, edit, or copy reports directly without modals. |
-| What have I done? | Updated TOC; authored and appended Section 9 to `master_specification.md` (now 5,204 lines); updated `task_plan.md`, `findings.md`, and `progress.md`. |
+| What have I learned? | Clear separation between runtime Model Selector and persistent Preset Dialog prevents confusion; universal `xs` iconification protects mobile layouts; consolidated `/profile` streamlines user settings without route fragmentation. |
+| What have I done? | Formulated 10 architectural mandates with user in Plan Mode; switched to Build Mode on user confirmation; updated `implementation_plan.md`, `findings.md`, `task_plan.md`, and `progress.md`. |

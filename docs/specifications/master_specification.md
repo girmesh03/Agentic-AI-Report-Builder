@@ -18,7 +18,7 @@
 7. [Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime](#section-7-agentic-reasoning-multi-tier-fallback--gemini-runtime)
 8. [Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance](#section-8-workplace-transliteration-engine--in-context-phonetic-guidance)
 9. [Section 9: Conversational Agent UI & MUI X Chat Integration](#section-9-conversational-agent-ui--mui-x-chat-integration)
-10. *Section 10: Frontend Routing, Shell Layout & Component Matrix (Pending)*
+10. [Section 10: Frontend Routing, Shell Layout & Component Matrix](#section-10-frontend-routing-shell-layout--component-matrix)
 11. *Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes (Pending)*
 12. *Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks (Pending)*
 13. *Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists (Pending)*
@@ -4994,59 +4994,113 @@ When the agent executes `export_to_google_sheet`, it returns an interactive chip
 
 ---
 
-### 9.6 Preset Switcher & Modal Specification
+### 9.6 Model Selector & Preset Management Architecture
 
-#### 9.6.1 Top `AppBar` Preset Selector Placement
-The active operational persona is controlled via the **Preset Selector** mounted in the sticky top `AppShell` `AppBar`:
-- **Visual Appearance**: A sleek outlined button with dropdown chevron: `[ Preset: Operations Assistant ▾ ]`.
-- **System Presets Catalog**:
-  1. **Operations Assistant** (Default): Practical supervisor routine co-pilot. Focuses on branch visits, equipment maintenance tracking, and compiling locked daily reports.
-  2. **Audit & Compliance Inspector**: Rigorous quality control persona. Evaluates hygiene standards, food safety protocols, and operational checklists against company SOPs.
-  3. **Executive Summary & Analytics**: Analytical executive persona. Summarizes multi-branch trends, calculates financial anomalies, and drafts formal escalation memos for executive leadership.
-- **Dropdown List**: Displays all active presets with an active checkmark icon next to the currently selected preset. At the bottom of the list sits a permanent action: **`[ + Create New Preset ]`**.
-
-#### 9.6.2 `[ + Create New Preset ]` Modal Specification
-Clicking `[ + Create New Preset ]` opens an accessible, validated Material UI dialog:
-
-```
-+-----------------------------------------------------------------------+
-| Create New Agent Preset                                           [✕] |
-+-----------------------------------------------------------------------+
-| Preset Name *                                                         |
-| [ e.g., Maintenance & Facilities Auditor                            ] |
-|                                                                       |
-| Description                                                           |
-| [ Specialized persona for electrical and HVAC equipment inspection  ] |
-|                                                                       |
-| System Persona & Tone *                                               |
-| (•) Formal Professional   ( ) Concise Direct   ( ) Technical Auditor  |
-|                                                                       |
-| Custom Instructions & SOP Rules (Markdown / Plain Text)               |
-| +-------------------------------------------------------------------+ |
-| | Always check generator fuel levels and verify chiller temperature | |
-| | logs before approving daily maintenance status.                   | |
-| +-------------------------------------------------------------------+ |
-|                                                                       |
-| Enabled Tools                                                         |
-| [✓] Query Operational Data    [✓] Generate Comparison Matrix          |
-| [✓] Update Report Item        [✓] Export to Google Sheets             |
-|                                                                       |
-| Default Branch Scope (Optional)                                       |
-| [ Select Branch Scope: All Branches ▾                               ] |
-+-----------------------------------------------------------------------+
-| [ Cancel ]                                         [ Create Preset ]  |
-+-----------------------------------------------------------------------+
-```
-- **Validation**: Name is required (3–50 chars); custom instructions max 2,000 chars.
-- **Persistence**: Saved to the `Preset` collection via `POST /api/v1/presets` and immediately selectable in the dropdown.
-
-#### 9.6.3 Mid-Chat Preset Switching Behavior
-A supervisor may change the preset in the middle of an ongoing conversation:
-- **Zero Thread Disruption**: Switching preset does **not** wipe or reload the current chat history.
-- **Dynamic Context Update**: The next message sent uses the new preset's persona and system instructions.
-- **Past Message Integrity**: Past message nodes retain the exact preset ID and model parameters under which they were generated (`aiMetadata.preset`).
+#### 9.6.1 Strict Architectural Separation of Model Selector vs. Preset Selector
+To eliminate configuration confusion, Section 9 establishes a strict functional and visual separation between runtime LLM parameter selection and persistent persona presets:
+1. **The Model Selector**: Manages runtime LLM execution parameters (Provider, Model, Language, and Reasoning effort) on the fly via an accessible Popover/Menu.
+2. **The Preset Selector**: Manages reusable operational personas, system prompts, and SOP instructions via a dedicated Material UI Dialog featuring empty-state handling and `react-hook-form`.
 
 ---
+
+#### 9.6.2 Control A: The Model Selector (LLM Runtime Configuration)
+- **Placement & UI Trigger**: Mounted on the Chat Composer action row and Chat header via a model badge/icon button: `[ ⚙️ Google / Gemini 2.5 ▾ ]`. Clicking opens an **MUI Menu / Popover**.
+- **Configurable Dimensions (Derived from Provider Documentation)**:
+  1. **Provider**: `Google` | `Addis AI` | `NVIDIA`.
+  2. **Model**: Filtered dynamically by selected provider:
+     - Google: `gemini-2.5-flash` (default), `gemini-2.5-flash-lite`.
+     - Addis AI: `addis-1-alef`.
+     - NVIDIA NIM: `meta/llama-3.1-nemotron-70b-instruct`.
+  3. **Language**: `Amharic` (`am`, default) | `English` (`en`) based on provider doc capabilities.
+  4. **Reasoning Effort / Budget**: Dynamically displayed according to upstream provider capabilities:
+     - **Addis AI**: Does not support reasoning parameters $\rightarrow$ field is hidden or disabled.
+     - **Google Gemini**: Supports reasoning $\rightarrow$ exposed with selectable values `default`, `high`, `max` (defaulting to `max`).
+- **System Defaults**:
+  - **Provider**: `Google`
+  - **Model**: `gemini-2.5-flash`
+  - **Language**: `Amharic`
+  - **Reasoning**: `max` (highest available supported by the provider)
+- **STT Invariance Law**: Selecting or altering the LLM provider, model, language, or reasoning has **zero effect on Speech-to-Text**. In-browser audio dictation and uploaded voice notes are **always and exclusively** transcribed by **Addis AI** (`addisai` SDK).
+
+```
+MODEL SELECTOR POPOVER / MENU WIREFRAME:
+┌────────────────────────────────────────────────────────┐
+│ ⚙️ AI Model Configuration                              │
+├────────────────────────────────────────────────────────┤
+│ Provider:   [ Google ▾ ]  (Google | Addis AI | NVIDIA) │
+│ Model:      [ gemini-2.5-flash ▾ ]                     │
+│ Language:   [ Amharic (አማርኛ) ▾ ]                       │
+│ Reasoning:  [ Max / Deep Thought ▾ ]                   │
+│             (Dynamically disabled if Addis AI selected)│
+│                                                        │
+│ ℹ️ STT Voice Narration is always powered by Addis AI   │
+│                                           [ Apply ]    │
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 9.6.3 Control B: The Preset Selector & Management Dialog (`MuiDialog`)
+- **Placement & UI Trigger**: Triggered via `[ 📋 Presets ▾ ]` button in the composer action toolbar or App bar.
+- **Dialog Architecture & Two-State Flow**:
+  - **State 1: Empty State (When no presets exist for user)**:
+    - Centers an **`MuiEmptyState`** component inside the dialog:
+      - Icon: Document / Persona icon (`FolderSpecialIcon` or `AssignmentIndIcon`).
+      - Title: *"No Presets Found"*.
+      - Description: *"You have not created any custom agent presets. Create a tailored persona with custom prompts and AI parameters."*
+      - Primary Action Button: **`[ + Create Preset ]`** (size="small", contained).
+  - **State 2: Preset Creation / Edit Form (`react-hook-form`)**:
+    - Clicking `[ + Create Preset ]` renders the structured creation form built with `react-hook-form` using `mode: 'onBlur'`:
+      1. **`name`**: Preset name string (Required, 3–50 chars, inline `helperText` on error).
+      2. **`persona`**: Operational persona / role prompt (Required textarea, min 2 rows).
+      3. **`system`**: Foundational system prompt and SOP checklist (Required textarea, min 4 rows).
+      4. **`providerConfig`**: Embedded Model Selector configuration incorporating Provider, Model, Language, and Reasoning (as specified in Subsection 9.6.2).
+- **Responsive Layout**: Renders fullscreen on `xs` without border radius; centered 560px modal on `sm+`.
+- **Validation**: Strict `mode: 'onBlur'` evaluation; all validation errors surface via red `helperText` beneath the corresponding inputs.
+
+```
+PRESET DIALOG - STATE 1: EMPTY STATE
+┌────────────────────────────────────────────────────────┐
+│ Presets                                            [✕] │
+├────────────────────────────────────────────────────────┤
+│                                                        │
+│                      [ 📋 Icon ]                       │
+│                   No Presets Found                     │
+│    You haven't created any custom agent presets yet.   │
+│                                                        │
+│                 [ + Create Preset ]                    │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+
+PRESET DIALOG - STATE 2: REACT-HOOK-FORM CREATION
+┌────────────────────────────────────────────────────────┐
+│ New Agent Preset                                   [✕] │
+├────────────────────────────────────────────────────────┤
+│ Preset Name:                                           │
+│ [ e.g. Strict Food Safety Auditor                    ] │
+│                                                        │
+│ Persona Prompt:                                        │
+│ [ You are an uncompromising restaurant hygiene...    ] │
+│                                                        │
+│ System Prompt:                                         │
+│ [ Evaluate kitchen checklist adherence against...    ] │
+│                                                        │
+│ ── AI Model Configuration ──────────────────────────── │
+│ Provider:   [ Google ▾ ]                               │
+│ Model:      [ gemini-2.5-flash ▾ ]                     │
+│ Language:   [ Amharic ▾ ]   Reasoning: [ Max ▾ ]       │
+│                                                        │
+│                             [ Cancel ]   [ Save Preset]│
+└────────────────────────────────────────────────────────┘
+```
+
+#### 9.6.4 Mid-Chat Switching Behavior
+- **Zero Thread Disruption**: Switching model configuration or preset does not reload or truncate the active thread.
+- **Dynamic Context Transition**: Future messages immediately adopt the new runtime parameters or system instructions.
+- **Immutable Historical Node Execution**: Past message nodes permanently store the executed parameters (`aiMetadata.provider`, `aiMetadata.model`, `aiMetadata.reasoning`, `aiMetadata.preset`).
+
+---
+
 
 ### 9.7 The 10-Row Symmetrical Report Initiation Form (`/reports/new`)
 
@@ -5190,14 +5244,19 @@ When a supervisor encounters or dictates a novel English workplace term (e.g. `a
 | **Direct Request/Response Model** | Direct execution without `ChatConfirmation` approval dialogs or blocking popups. |
 | **Zero Inner Chat Header** | `ChatBox` sets `features={{ conversationHeader: false }}`; `AppShell` `AppBar` is the only header. |
 | **Legibility & Ge'ez Typography** | Default base font size **17px**, `lineHeight: 1.75`, `Noto Sans Ethiopic` font family. |
-| **Dynamic Font Scaling** | `[ A- A+ ]` header buttons adjust `fontSizeDelta` (`-2`, `0`, `+2`, `+4`) with `localStorage` persistence. |
+| **Clean App Bar Right Controls** | `AppShell` `AppBar` right side strictly limited to Global Search `[ 🔍 ]`, Theme Toggle `[ 🌓 ]`, and User Avatar `[ 👤 ]` (zero bell icon, zero font stepper buttons). |
+| **Model Selector & Preset Separation** | Model Selector handles runtime LLM params via Popover with default Google/Gemini/Amharic/max; Preset Selector manages personas via MUI Dialog with `MuiEmptyState` and `react-hook-form`. |
+| **STT Provider Invariance** | Changing LLM model, provider, or reasoning has 0 impact on STT; STT is always and exclusively executed by Addis AI (`addisai` SDK). |
+| **Universal `xs` Control Iconification** | All text-labeled buttons and compound controls collapse into compact icon-only buttons with tooltips on `xs` (<600px) to prevent overflow. |
+| **Universal Reusable Inputs & Adornments** | `MuiTextField`, `MuiSelect`, `MuiAutocomplete` under `client/src/components/reusable/*` feature mandatory contextual Start Adornments and functional End Adornments. |
+| **Universal `react-hook-form` Validation** | All forms evaluate validation on blur (`mode: 'onBlur'`) with red inline `helperText` error rendering. |
 | **Custom SSE Streaming Adapter** | `createChatStreamAdapter` maps SSE chunks to typed MUI X Chat events (`text_delta`, `tool_call`, etc.). |
 | **Clean Stream Abort Protocol** | Stop button triggers `AbortController.abort()` and `POST /api/v1/chats/:chatId/abort` to release lock. |
 | **Sub-5ms Typing Latency** | `React.memo` composer isolation, uncontrolled input state, zero Redux dispatch on keystroke. |
 | **Mode 3 Audio Dictation** | Ephemeral voice recording via Audio Orb transcribes to Amharic text at cursor; 0 disk files saved. |
 | **Interactive Action Triggers** | Every report response renders `[ View Full Report ]`, `[ Edit in Form ]`, and `[ Copy Report Text ]`. |
-| **App Bar Preset Switcher** | Sticky header houses `[ Preset: Operations Assistant ▾ ]` and `[ + Create New Preset ]` modal. |
 | **The 10-Row Initiation Form** | 2-column split at `/reports/new`: structured form on left, sticky live Amharic plain-text preview on right. |
 | **Method 1 In-Memory Audio Playback** | Row 8 audio players stream directly from client memory Blob URLs; zero server re-download. |
 
 ---
+
