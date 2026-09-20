@@ -22,7 +22,7 @@
 11. [Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes](#section-11-rest-api-endpoint-inventory-validation-chains--response-envelopes)
 12. [Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks](#section-12-backend-infrastructure-winston-logging--sweeper-tasks)
 13. [Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists](#section-13-verification-protocols-quality-gates--zero-error-checklists)
-14. *Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap (Pending)*
+14. [Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap](#section-14-deployment-environment-variables-locked-dependencies--execution-roadmap)
 
 ---
 
@@ -8477,5 +8477,533 @@ Development proceeds in strict, reviewable phases. When completing any phase:
 | **Codebase-Wide Arrow Functions Law** | Every function across backend and frontend must be an arrow function (except Mongoose hooks using `this`). |
 | **Universal Form Fields `React.forwardRef`** | All reusable form inputs wrapped in `React.forwardRef` with explicit `displayName` for `react-hook-form` ref integration. |
 | **Universal JSDoc `@module` Standard** | Every file begins with `@module path/name` with complete annotations. |
+
+---
+
+# Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap
+
+### 14.1 Root Monorepo Architecture & NPM Workspaces (`package.json`)
+
+The Report Builder repository is structured as a unified, lightweight **npm workspaces monorepo** uniting the Node.js ES module backend (`backend/`) and the Vite React single-page application (`client/`) under a single root orchestration manifest.
+
+#### 14.1.1 Root Configuration (`package.json`)
+```json
+{
+  "name": "agentic-ai-report-builder",
+  "version": "1.0.0",
+  "description": "MERN Stack Agentic AI Operational Report Builder for Multi-Branch Field Supervisors",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"backend,client\" -c \"blue,magenta\" \"npm run dev --workspace=backend\" \"npm run dev --workspace=client\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:client": "npm run dev --workspace=client",
+    "verify": "npm run verify --workspace=backend && npm run verify --workspace=client",
+    "test:api": "npm run test:api --workspace=backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
+```
+
+- **`npm run dev`**: Concurrently launches the Express backend on port `4000` and the Vite client on port `3000`.
+- **`npm run verify`**: Runs the sub-second backend syntax compiler (`backend/scripts/verifyCodebase.js`) and the frontend production build verification with automatic `dist/` cleanup in a single command.
+- **`npm run test:api`**: Executes the master domain API test suite (`backend/scripts/testAll.js`).
+
+---
+
+### 14.2 Complete Environment Variables & Secrets Blueprint
+
+#### 14.2.1 Backend Environment Blueprint (`backend/.env`)
+The backend relies on 13 environment variables declared in `backend/.env`. In strict adherence to core security constraints:
+- `backend/.env` is **always gitignored**.
+- `.env.example` is **strictly prohibited from ever being created**.
+- All configuration values are validated at application boot and exported as an immutable, deeply frozen object (`Object.freeze()`) via `backend/src/config/env.js`.
+
+| Variable Key | Type | Default / Example Value | Description & Constraints |
+| :--- | :--- | :--- | :--- |
+| `NODE_ENV` | `string` | `'development'` | Runtime environment: `'development'` or `'production'`. |
+| `PORT` | `number` | `4000` | HTTP server port. Strictly bound to port `4000`. |
+| `MONGODB_URI` | `string` | `mongodb://localhost:27017/report_builder` | MongoDB connection URI with optional auth and replica set params. |
+| `JWT_ACCESS_SECRET` | `string` | `[64-character hex string]` | HMAC SHA-256 secret for 15-minute access tokens. |
+| `JWT_REFRESH_SECRET` | `string` | `[64-character hex string]` | HMAC SHA-256 secret for 7-day refresh tokens. |
+| `ADDIS_AI_API_KEY` | `string` | `addis_live_...` | Exclusive API key for Addis AI Speech-to-Text (`addisai` SDK). |
+| `GEMINI_API_KEY` | `string` | `AIzaSy...` | API key for Google Gemini Free Tier (`gemini-2.5-flash`). |
+| `NVIDIA_API_KEY` | `string` | `nvapi-...` | Optional fallback tier API key for NVIDIA NIM API. |
+| `GOOGLE_CLIENT_ID` | `string` | `...apps.googleusercontent.com` | Google OAuth 2.0 Client ID for raw code PKCE login and Drive export. |
+| `GOOGLE_CLIENT_SECRET`| `string` | `GOCSPX-...` | Google OAuth 2.0 Client Secret. |
+| `GOOGLE_REDIRECT_URI` | `string` | `http://localhost:4000/api/v1/auth/google/callback` | OAuth redirect callback URI. |
+| `ALLOWED_ORIGINS` | `string` | `http://localhost:3000` | Comma-separated CORS allowed origin URLs. |
+| `AI_TIMEOUT_MS` | `number` | `25000` | Hard bounded timeout for third-party LLM inference requests (25 seconds). |
+
+> [!IMPORTANT]
+> **Zero `GOOGLE_*` LLM Confusion Law**:
+> Google Gemini inference uses `GEMINI_API_KEY` exclusively. The variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are reserved strictly for raw Google OAuth authentication and the backend Google Drive export service (`drive.file` scope).
+
+#### 14.2.2 Frontend Environment Blueprint (`client/.env`)
+The Vite frontend reads environment variables prefixed with `VITE_`:
+
+| Variable Key | Type | Default Value | Description |
+| :--- | :--- | :--- | :--- |
+| `VITE_API_BASE_URL` | `string` | `http://localhost:4000/api/v1` | Authoritative base URL for all REST API and SSE stream endpoints. |
+
+#### 14.2.3 Cryptographic Secret Generation Protocol
+JWT secrets must be cryptographically random 256-bit (64-hexadecimal character) strings generated via Node.js native `crypto`:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+---
+
+### 14.3 Locked Package Manifests
+
+The application relies strictly on locked, approved dependencies. **Installing any unstated packages without explicit user approval is strictly prohibited**.
+
+#### 14.3.1 Backend Locked Dependencies (`backend/package.json`)
+```json
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "verify": "node scripts/verifyCodebase.js",
+    "test:api": "node scripts/testAll.js"
+  },
+  "dependencies": {
+    "addisai": "^1.0.0",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-async-handler": "^1.2.0",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "mongoose-paginate-v2": "^1.8.5",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "sharp": "^0.33.5",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "morgan": "^1.10.0",
+    "nodemon": "^3.1.9"
+  }
+}
+```
+
+#### 14.3.2 Frontend Locked Dependencies (`client/package.json`)
+```json
+{
+  "name": "client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "verify": "vite build && node scripts/cleanDist.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@fontsource/noto-sans-ethiopic": "^5.1.0",
+    "@fontsource/roboto": "^5.1.0",
+    "@mui/icons-material": "^6.4.0",
+    "@mui/material": "^6.4.0",
+    "@mui/x-charts": "^7.24.0",
+    "@mui/x-chat": "^0.1.0",
+    "@mui/x-data-grid": "^7.24.0",
+    "@mui/x-date-pickers": "^7.24.0",
+    "@reduxjs/toolkit": "^2.5.0",
+    "async-mutex": "^0.5.0",
+    "dayjs": "^1.11.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-error-boundary": "^5.0.0",
+    "react-hook-form": "^7.54.2",
+    "react-redux": "^9.2.0",
+    "react-router": "^7.1.3",
+    "react-toastify": "^11.0.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}
+```
+
+---
+
+### 14.4 Authoritative Complete Directory & File Tree Blueprint
+
+```
+Agentic-AI-Report-Builder/
+├── package.json                                    <-- Monorepo root manifest with npm workspaces
+├── .gitignore                                      <-- Universal gitignore (node_modules, .env, dist, logs, uploads)
+├── backend/
+│   ├── package.json                                <-- Backend package manifest
+│   ├── scripts/
+│   │   ├── verifyCodebase.js                       <-- Ultra-fast sub-second node --check parallel runner
+│   │   ├── killPort.js                             <-- Cross-platform port collision cleaner (ports 4000 & 3000)
+│   │   ├── testUtils.js                            <-- Native fetch assertion helper and cookie jar
+│   │   ├── testAuth.js                             <-- Auth domain contract test suite
+│   │   ├── testBranches.js                         <-- Branches domain contract test suite
+│   │   ├── testReports.js                          <-- Reports & Amharic formatter test suite
+│   │   ├── testChats.js                            <-- Chats & SSE streaming contract test suite
+│   │   ├── testDashboard.js                        <-- Dashboard analytics contract test suite
+│   │   ├── testPresets.js                          <-- Presets contract test suite
+│   │   ├── testSearch.js                           <-- Global Search accordion test suite
+│   │   ├── testSweeper.js                          <-- 30-day soft-delete purge test suite
+│   │   └── testAll.js                              <-- Master sequential API test orchestrator
+│   └── src/
+│       ├── server.js                               <-- HTTP bootstrap, pre-boot checks, graceful shutdown
+│       ├── app.js                                  <-- 11-step immutable Express middleware pipeline
+│       ├── config/
+│       │   ├── env.js                              <-- Frozen backend environment variables
+│       │   ├── db.js                               <-- Mongoose connection with exponential backoff
+│       │   ├── logger.js                           <-- Winston multi-transport logger (30d rotation)
+│       │   └── httpStatus.js                       <-- Centralized immutable HTTP status dictionary
+│       ├── errors/
+│       │   ├── CustomError.js                      <-- Base domain error class
+│       │   └── index.js                            <-- Specific domain error subclasses
+│       ├── middlewares/
+│       │   ├── auth.js                             <-- JWT cookie verification & user injection
+│       │   ├── errorHandler.js                     <-- Centralized error response formatter
+│       │   ├── rateLimiter.js                      <-- express-rate-limit tiered sliding windows
+│       │   └── requestLogger.js                    <-- Morgan logger with dev terminal & PII masking
+│       ├── models/
+│       │   ├── User.js                             <-- User entity schema
+│       │   ├── RefreshToken.js                     <-- Token family schema with single TTL index
+│       │   ├── Branch.js                           <-- Branch entity schema
+│       │   ├── Report.js                           <-- Report entity schema (locked Amharic body)
+│       │   ├── AudioClip.js                        <-- Preprocessed audio clip metadata schema
+│       │   ├── Chat.js                             <-- Conversational thread schema
+│       │   ├── Message.js                          <-- Individual message node schema
+│       │   └── Preset.js                           <-- Persona & model configuration schema
+│       ├── routes/
+│       │   ├── index.js                            <-- Authoritative /api/v1 router mount
+│       │   ├── authRoutes.js                       <-- Authentication endpoints
+│       │   ├── userRoutes.js                       <-- User self-service & profile endpoints
+│       │   ├── dashboardRoutes.js                  <-- Dashboard aggregation endpoints
+│       │   ├── branchRoutes.js                     <-- Branch management endpoints
+│       │   ├── reportRoutes.js                     <-- Reports & nested clips endpoints
+│       │   ├── chatRoutes.js                       <-- Chats & SSE streaming message endpoints
+│       │   ├── audioRoutes.js                      <-- Ephemeral Mode 3 audio transcription endpoint
+│       │   ├── presetRoutes.js                     <-- Agent preset endpoints
+│       │   └── searchRoutes.js                     <-- Multi-entity global search endpoint
+│       ├── controllers/
+│       │   ├── authController.js                   <-- Auth controllers wrapped in asyncHandler
+│       │   ├── userController.js                   <-- Profile controllers wrapped in asyncHandler
+│       │   ├── dashboardController.js              <-- Dashboard controllers wrapped in asyncHandler
+│       │   ├── branchController.js                 <-- Branch controllers wrapped in asyncHandler
+│       │   ├── reportController.js                 <-- Report controllers wrapped in asyncHandler
+│       │   ├── chatController.js                   <-- Chat & SSE stream controllers
+│       │   ├── audioController.js                  <-- In-memory ephemeral dictation controller
+│       │   ├── presetController.js                 <-- Preset controllers wrapped in asyncHandler
+│       │   └── searchController.js                 <-- Global search controller wrapped in asyncHandler
+│       ├── services/
+│       │   ├── authService.js                      <-- Authentication & token rotation business logic
+│       │   ├── reportFormatter.js                  <-- Deterministic plain-text Amharic synthesis engine
+│       │   ├── transliterationEngine.js            <-- Phonetic normalizer & workplace dictionary
+│       │   ├── audioService.js                     <-- FFmpeg 16kHz mono WAV conversion pipeline
+│       │   ├── agentService.js                     <-- Addis -> Gemini -> Nvidia multi-tier fallback
+│       │   ├── sweeperService.js                   <-- node-cron daily 00:00 UTC 30-day purge
+│       │   └── googleDocsService.js                <-- Backend Google Drive API document export
+│       └── validators/
+│           ├── validation.js                       <-- Generic validate runner populating req.validated
+│           ├── auth.js                             <-- Auth validation rule chains
+│           ├── branch.js                           <-- Branch validation rule chains
+│           ├── report.js                           <-- Report validation rule chains
+│           ├── chat.js                             <-- Chat validation rule chains
+│           ├── preset.js                           <-- Preset validation rule chains
+│           ├── user.js                             <-- User profile validation rule chains
+│           └── search.js                           <-- Search query validation rule chains
+└── client/
+    ├── package.json                                <-- Frontend package manifest
+    ├── vite.config.js                              <-- Vite configuration (port 3000, strictPort: true)
+    ├── index.html                                  <-- SPA entrypoint
+    ├── scripts/
+    │   └── cleanDist.js                            <-- Mandatory post-build dist/ directory cleaner
+    └── src/
+        ├── main.jsx                                <-- React 18 createRoot & createBrowserRouter
+        ├── App.jsx                                 <-- AppTheme, CssBaseline, ErrorBoundary, Toast
+        ├── config/
+        │   └── env.js                              <-- Frozen client environment variables
+        ├── theme/
+        │   ├── AppTheme.jsx                        <-- MUI ThemeProvider with Light/Dark palettes
+        │   └── typography.js                       <-- Noto Sans Ethiopic typography tokens (17px, 1.75)
+        ├── components/
+        │   ├── reusable/
+        │   │   ├── Logo.jsx                        <-- Brand logo component
+        │   │   ├── LoadingSpinner.jsx              <-- Standard async loading indicator
+        │   │   ├── MuiAudioPlayer.jsx              <-- Client Blob URL in-memory audio player
+        │   │   ├── MuiAutocomplete.jsx             <-- Free-solo autocomplete with forwardRef
+        │   │   ├── MuiButton.jsx                   <-- Reusable MUI Button with loading state
+        │   │   ├── MuiConfirmDialog.jsx            <-- Accessible confirmation dialog modal
+        │   │   ├── MuiDataGrid.jsx                 <-- Wrapped DataGrid with flex sizing
+        │   │   ├── MuiDatePicker.jsx               <-- Ethiopian date picker with forwardRef
+        │   │   ├── MuiDialog.jsx                   <-- Reusable modal with standardized action buttons
+        │   │   ├── MuiEmptyState.jsx               <-- Visual empty state placeholder
+        │   │   ├── MuiFileInput.jsx                <-- Drag-and-drop file input with forwardRef
+        │   │   ├── MuiPageHeader.jsx               <-- Header with breadcrumbs & view toggles
+        │   │   ├── MuiPagination.jsx               <-- Standard list view pagination component
+        │   │   ├── MuiRecorder.jsx                 <-- Web Audio API live recording orb
+        │   │   ├── MuiSelect.jsx                   <-- Standardized dropdown select with forwardRef
+        │   │   ├── MuiTextField.jsx                <-- Text field with Start/End adornments & forwardRef
+        │   │   └── MuiTimePicker.jsx               <-- 24h time picker with forwardRef
+        │   └── columns/
+        │       ├── branch.jsx                      <-- Branch DataGrid column definitions
+        │       └── report.jsx                      <-- Report DataGrid column definitions
+        ├── layouts/
+        │   ├── PublicLayout.jsx                    <-- Public header (Theme, Login, Sign Up) + Outlet
+        │   ├── AppShell.jsx                        <-- Protected shell: Sidebar + Clean 3-control AppBar
+        │   ├── Sidebar.jsx                         <-- Mini/collapsible sidebar with Recent Chats
+        │   └── MuiAppbar.jsx                       <-- Clean AppBar (Search, Theme, Avatar only)
+        ├── pages/
+        │   ├── Landing.jsx                         <-- Option A public landing page
+        │   ├── Login.jsx                           <-- Email/Password & Google OAuth login
+        │   ├── Register.jsx                        <-- Registration page (redirects to /login)
+        │   ├── Dashboard.jsx                       <-- KPI cards & 4 @mui/x-charts
+        │   ├── Branches.jsx                        <-- Branch management ledger & DataGrid
+        │   ├── BranchDetail.jsx                    <-- Single branch metrics & reports
+        │   ├── Reports.jsx                         <-- Reports ledger, DataGrid & Filter Drawer
+        │   ├── ReportDetail.jsx                    <-- Plain-text report view & 4 export channels
+        │   ├── Chat.jsx                            <-- Conversational agent & in-canvas 10-row form
+        │   ├── Profile.jsx                         <-- Consolidated profile, security & preferences
+        │   └── NotFound.jsx                        <-- 404 fallback page
+        ├── features/
+        │   ├── api/
+        │   │   └── apiSlice.js                     <-- RTK Query baseQueryWithReauth with async-mutex
+        │   ├── auth/
+        │   │   ├── authSlice.js                    <-- Auth state & session reducers
+        │   │   └── authApi.js                      <-- Auth RTK Query endpoints
+        │   ├── dashboard/
+        │   │   ├── dashboardSlice.js               <-- Dashboard state slice
+        │   │   └── dashboardApi.js                 <-- Dashboard RTK Query endpoints
+        │   ├── branches/
+        │   │   ├── branchSlice.js                  <-- Branches state slice
+        │   │   └── branchApi.js                    <-- Branches RTK Query endpoints
+        │   ├── reports/
+        │   │   ├── reportSlice.js                  <-- Reports state slice
+        │   │   └── reportApi.js                    <-- Reports RTK Query endpoints
+        │   ├── chats/
+        │   │   ├── chatSlice.js                    <-- Chats & streaming state slice
+        │   │   └── chatApi.js                      <-- Chats RTK Query endpoints
+        │   ├── presets/
+        │   │   ├── presetSlice.js                  <-- Presets state slice
+        │   │   └── presetApi.js                    <-- Presets RTK Query endpoints
+        │   └── theme/
+        │       └── themeSlice.js                   <-- Theme mode & font size delta state
+        ├── routes/
+        │   ├── router.jsx                          <-- createBrowserRouter flat route definitions
+        │   ├── ProtectedRoute.jsx                  <-- Unauthenticated lockout (redirects to /login)
+        │   └── PublicRoute.jsx                     <-- Authenticated lockout (redirects to /dashboard)
+        └── services/
+            ├── apiClient.js                        <-- Native fetch client with credentials: 'include'
+            └── sseStreamAdapter.js                 <-- Maps SSE chunks to typed MUI X Chat events
+```
+
+---
+
+### 14.5 Incremental Full-Stack Implementation Roadmap (9 Vertical Slice Phases)
+
+To ensure that progress is directly visualizable in the browser after every phase, the implementation roadmap is structured as **full-stack vertical slices**. Each phase implements its respective backend models, controllers, and services, paired immediately with the corresponding frontend views, components, and user actions:
+
+```
++---------------------------------------------------------------------------------------------------+
+| THE 9 INCREMENTAL FULL-STACK VERTICAL SLICE IMPLEMENTATION PHASES                                  |
++---------------------------------------------------------------------------------------------------+
+| Phase 1: Foundation, Monorepo Scaffolding & Option A Landing Page                                 |
+| Phase 2: Authentication, Session Security & Consolidated Profile (/profile)                      |
+| Phase 3: Branch Management & Reusable BranchDialog (Create/Edit Modal)                            |
+| Phase 4: Amharic Report Engine & In-Canvas 10-Row Form (/chat mounting)                          |
+| Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation (Orb + Blob players)               |
+| Phase 6: Conversational Agent, Gemini Multi-Tier Fallback & SSE Streaming                         |
+| Phase 7: Reports Ledger, Details View & Multi-Channel Export Actions                              |
+| Phase 8: Dashboard Visual Analytics & Multi-Entity Global Search Dialog                           |
+| Phase 9: Background Sweepers, Quality Gates & Project Handover                                    |
++---------------------------------------------------------------------------------------------------+
+```
+
+#### Phase 1: Foundation, Monorepo Scaffolding & Option A Landing Page
+- **Backend Deliverables**: Root monorepo setup, backend dependencies, `server.js` boot sequence, `app.js` fixed 11-step pipeline, `config/env.js` (Object.freeze), `config/db.js` (exponential backoff), `config/logger.js`, `errors/`, `middlewares/errorHandler.js`, `backend/scripts/verifyCodebase.js`.
+- **Frontend Deliverables**: Vite SPA (port 3000 `strictPort: true`), `AppTheme.jsx` (light/dark themes, Noto Sans Ethiopic typography), `PublicLayout.jsx` with AppBar (Theme toggle, Login, Sign Up buttons), Option A `Landing.jsx` with Hero section and 3 feature highlight cards.
+- **Visual Verification**: User visits `http://localhost:3000` and sees the production-ready landing page with responsive typography, theme switcher, and navigation actions.
+- **Quality Gates**: `npm run verify` passes (sub-second backend compilation + Vite build with `cleanDist.js`).
+
+#### Phase 2: Authentication, Session Security & Consolidated Profile
+- **Backend Deliverables**: User & RefreshToken schemas (with TTL index), raw Google OAuth PKCE exchange, dual httpOnly JWT cookies (`accessToken` 15m, `refreshToken` 7d), token family reuse detection, logout, self-service account deletion cascade (`DELETE /users/me`), `backend/scripts/testAuth.js`.
+- **Frontend Deliverables**: `features/auth/authSlice.js`, `apiSlice.js` (`baseQueryWithReauth` with `async-mutex`), `Login.jsx`, `Register.jsx` (redirects to `/login`), `PublicRoute`, `ProtectedRoute`, `AppShell.jsx` scaffolding, and consolidated `Profile.jsx` (Profile info, avatar upload via Sharp, password change, preferences, Danger Zone account deletion).
+- **Visual Verification**: User registers a new account, logs in, is redirected to `/dashboard`, visits `/profile`, updates profile details, changes password, uploads avatar, and logs out.
+- **Quality Gates**: `testAuth.js` passes; Chrome DevTools console: 0 errors; browser control audit on mobile `xs` and desktop `md+`.
+
+#### Phase 3: Branch Management & Reusable BranchDialog
+- **Backend Deliverables**: Branch schema, CRUD endpoints (`GET`, `POST`, `GET :id`, `PUT :id`, `DELETE :id` soft-archive, `PATCH :id/restore`), `backend/scripts/testBranches.js`.
+- **Frontend Deliverables**: `features/branches/branchSlice.js`, `Branches.jsx` with `MuiDataGrid` (flex columns) and mobile card view, reusable `BranchDialog.jsx` (`MuiDialog` with standardized action buttons for Create and Edit modes), `BranchDetail.jsx`.
+- **Visual Verification**: User navigates to `/branches`, clicks `[ + Add Branch ]`, fills `BranchDialog` (fullscreen on `xs`, modal on `sm+`), submits, sees branch in table, edits branch, soft-archives, filters by archived, and restores branch.
+- **Quality Gates**: `testBranches.js` passes; browser control validates zero horizontal overflow on mobile `xs`.
+
+#### Phase 4: Amharic Report Engine & In-Canvas 10-Row Form
+- **Backend Deliverables**: Report schema, `reportFormatter.js` (deterministic plain-text Amharic synthesis engine with locked headers, Ethiopian date, 24h clock, Amharic bullet markers `•`), phonetic transliteration normalizer.
+- **Frontend Deliverables**: `/chat` view with centered composer, In-Canvas 10-Row Form mounting upon clicking `[ + New Report ]` (Ethiopian date picker synced with Gregorian, 24h time pickers, multi-branch visits picker dialog, live sticky plain-text Amharic preview on right column, cancel confirmation dialog, submit validation).
+- **Visual Verification**: User navigates to `/chat`, clicks `[ + New Report ]`, fills 10-row structured fields, observes plain-text Amharic report updating in real time in the right-column preview, tests cancel confirmation dialog, submits report.
+- **Quality Gates**: Plain-text Amharic output matches Section 3 specification verbatim.
+
+#### Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation
+- **Backend Deliverables**: FFmpeg mono 16kHz WAV conversion pipeline, `addisai` SDK integration, audio clip upload sub-resource (`POST /reports/:id/clips`), ephemeral live dictation endpoint `POST /api/v1/audio/transcribe` with memory buffer and 0 disk files.
+- **Frontend Deliverables**: Web Audio API live recording orb in Row 7 of form and chat composer, frequency animation, 120s timer countdown, Row 8 & 9 audio player deck with in-memory Blob URL playback (`MuiAudioPlayer.jsx`).
+- **Visual Verification**: User records spoken Amharic audio via Audio Orb in the 10-row form, verifies audio item renders in deck with playback controls, and dictates live Amharic text directly into composer.
+- **Quality Gates**: 0 disk files retained for Mode 3 dictation; audio player streams from client memory Blob URLs without server re-download.
+
+#### Phase 6: Conversational Agent, Gemini Multi-Tier Fallback & SSE Streaming
+- **Backend Deliverables**: `agentService.js` with multi-tier fallback (Addis $ightarrow$ Gemini $ightarrow$ Nvidia), tool execution loop, SSE streaming endpoint (`POST /chats/:chatId/messages`), stream abort protocol (`POST /chats/:chatId/abort`), `backend/scripts/testChats.js`.
+- **Frontend Deliverables**: Single-column `<ChatBox>` canvas, custom SSE adapter (`createChatStreamAdapter`), Stop button abort handling, Model Selector Popover, Preset Selector Dialog with `MuiEmptyState` and `react-hook-form`, interactive report action triggers (`[ View Full Report ]`, `[ Edit in Form ]`, `[ Copy Report Text ]`).
+- **Visual Verification**: User chats with AI agent, watches real-time token streaming, tests Stop button abort, configures LLM model via popover, creates custom persona preset via modal, and interacts with report action cards.
+- **Quality Gates**: `testChats.js` passes; typing keystroke latency < 5ms.
+
+#### Phase 7: Reports Ledger, Details View & Multi-Channel Export Actions
+- **Backend Deliverables**: Reports listing with pagination and date/branch filters, report detail retrieval, backend Google Docs export via Google Drive API (`drive.file` scope), `backend/scripts/testReports.js`.
+- **Frontend Deliverables**: `Reports.jsx` with `MuiDataGrid` and mobile card view, filter drawer with removable chips, `ReportDetail.jsx` with full plain-text formatted view, Copy to clipboard button with toast, Download `.txt` button, Print-to-PDF stylesheet, and Google Docs export button.
+- **Visual Verification**: User browses reports, applies date and branch filters, views full report detail, copies formatted plain-text to clipboard, downloads `.txt`, tests print preview, and exports report to Google Docs.
+- **Quality Gates**: `testReports.js` passes; Google Docs document formatted with proper Amharic encoding.
+
+#### Phase 8: Dashboard Visual Analytics & Multi-Entity Global Search Dialog
+- **Backend Deliverables**: Dashboard KPI aggregations (total reports, monthly reports, open issues, branches visited), 4 chart dataset pipelines, needs-attention list, multi-entity Global Search endpoint, `backend/scripts/testDashboard.js`, `backend/scripts/testSearch.js`.
+- **Frontend Deliverables**: `Dashboard.jsx` with 4 KPI cards, 4 `@mui/x-charts` (reports over time, issues by status, issues per branch, visit frequency), recent reports ledger, needs-attention panel; `GlobalSearchDialog.jsx` (MUI Dialog with accordion results, left close arrow, clear end adornment, edge-to-edge on `xs`, modal on `sm+`).
+- **Visual Verification**: User views live dashboard KPIs and charts on desktop and mobile; clicks Search icon `[ 🔍 ]` in AppBar to query reports, branches, and chat nodes simultaneously via accordion results.
+- **Quality Gates**: `testDashboard.js` and `testSearch.js` pass; search input produces 0 typing lag.
+
+#### Phase 9: Background Sweepers, Quality Gates & Project Handover
+- **Backend Deliverables**: `sweeperService.js` with `node-cron` daily 00:00 UTC 30-day archival purge (cascading clip deletion in transaction and disk audio directory removal), `backend/scripts/verifyCodebase.js`, `backend/scripts/testSweeper.js`, `backend/scripts/testAll.js`.
+- **Frontend Deliverables**: Final frontend build verification with `cleanDist.js`, complete browser control inspection across `xs`, `sm`, and `md+` viewports, Chrome DevTools zero console error verification.
+- **Visual Verification**: User executes `npm run test:api` to see all 8 test suites pass; executes `npm run verify` to verify sub-second syntax checks and production build integrity.
+- **Quality Gates**: 100% adherence to all 14 specification sections; clean git working tree; final project sign-off.
+
+---
+
+### 14.6 The 5-Step Implementation Protocol & Git Lifecycle
+
+Every subsequent implementation phase (Phases 1 through 9) must strictly execute the **5-Step Implementation Protocol**. No step may be bypassed:
+
+```
++---------------------------------------------------------------------------------------------------+
+| THE 5-STEP IMPLEMENTATION LIFECYCLE                                                               |
++---------------------------------------------------------------------------------------------------+
+| Step 1: Pre-Git               --> Clean status check, git branch -vv, create phase-N-description |
+| Step 2: Deep Codebase Analysis--> Exhaustive review of schemas, specs, and existing code          |
+| Step 3: Execution & Validation--> Vertical slice implementation + mandatory browser control audit |
+| Step 4: User Review & Approval--> Present walkthrough; update planning files; wait for order      |
+| Step 5: Post-Git Merge & Clean--> Stage, commit, push, merge to main, delete feature branch      |
++---------------------------------------------------------------------------------------------------+
+```
+
+#### Step 1: Pre-Git Protocol
+1. Verify working directory is completely clean: `git status`.
+2. Inspect branch tracking status: `git branch -vv`.
+3. Fetch and pull latest changes from `main`: `git checkout main && git pull origin main`.
+4. Create and checkout dedicated feature branch named `phase-N-description`:
+   ```bash
+   git checkout -b phase-1-foundation-scaffolding
+   ```
+5. **Strict Invariant**: Direct commits to `main` are strictly prohibited.
+
+#### Step 2: Deep Codebase Analysis
+1. Inspect all existing files, schemas, dependencies, and configurations relevant to the phase without skipping a single detail.
+2. Cross-reference requirements against the Master Technical Specification.
+3. Identify all exact file paths, exported symbol names, and component interfaces before writing code.
+
+#### Step 3: Phase Execution & Validation
+1. Implement both backend and frontend components of the vertical slice.
+2. If frontend is involved: **Mandatory Browser Control Session**:
+   - Navigate to running application at `http://localhost:3000`.
+   - Analyze visual UI polish, typography (`Noto Sans Ethiopic`), and brand styling.
+   - Test end-to-end interactive functionality (form inputs, buttons, streaming, modals).
+   - Validate multi-viewport responsiveness: mobile `xs` (375px - button iconification, zero overflow), tablet `sm` (768px), desktop `md+` (1440px).
+   - Inspect Chrome DevTools console: **guarantee exactly 0 console errors**, 0 unhandled promise rejections, 0 React warnings.
+3. Execute backend verification: `cd backend && npm run verify`.
+4. Execute relevant domain API test suites: `cd backend && npm run test:<domain>`.
+
+#### Step 4: User Review & Explicit Approval
+1. Present completed vertical slice walkthrough and test evidence to the user.
+2. Update planning working files (`task_plan.md`, `findings.md`, `progress.md`).
+3. Amend specification if any specific adjustments were pointed out by the user.
+4. **Strict Invariant**: **Step 5 never runs without explicit user approval**.
+
+#### Step 5: Post-Git Merge & Cleanup Protocol
+Executed strictly after user confirmation:
+1. Verify working tree status: `git status` + `git branch -vv`.
+2. Fetch origin: `git fetch origin`.
+3. Review changes with `git diff`.
+4. Stage all changes: `git add .`.
+5. Commit using conventional format:
+   - Feature phases: `git commit -m "feat: phase N description"`
+   - Hardening / maintenance: `git commit -m "chore: phase N description"`
+   - **No amending after push**.
+6. Push feature branch to origin: `git push origin <branch>`.
+7. Switch to `main` and pull: `git checkout main && git pull origin main`.
+8. Merge feature branch into `main` (halt on any conflict and prompt user): `git merge <branch>`.
+9. Push updated `main`: `git push origin main`.
+10. Delete local and remote feature branch after verifying merge:
+    ```bash
+    git branch -d <branch>
+    git push origin --delete <branch>
+    ```
+11. Final verification: `git status` is clean, `git branch -vv` is in sync with origin/main, `git log --oneline -5` shows recent commit.
+
+---
+
+### 14.7 Superpowers, MCP Skills & Specification Immutability Invariant
+
+#### 14.7.1 Superpowers & Specialized Skills Mandate
+The downstream implementation agent is explicitly commanded to utilize all available superpowers, plugins, MCP servers, and specialized skills throughout the project lifecycle:
+- **`planning-with-files`**: Persistent file-based roadmap tracking with `task_plan.md`, `findings.md`, and `progress.md`.
+- **`browser-testing`**: Visual verification, mobile responsiveness inspection, and Chrome DevTools console error auditing.
+- **`systematic-debugging`**: Rigorous root-cause isolation before proposing bugfixes.
+- **`verification-before-completion`**: Requiring terminal execution evidence before making any success assertions.
+- **MCP Servers**: `gemini-api` for Gemini SDK docs; `mui` for Material-UI component docs and examples.
+
+#### 14.7.2 Specification Immutability Law
+The Master Technical Specification (`docs/specifications/master_specification.md`) is the **immutable ground truth** for the entire project:
+- Downstream implementation agents must **never change, loosen, or touch the specification** unless explicitly requested by the user.
+- Any requirement stated in the spec must be implemented verbatim.
+- Any unstated requirement must never be proactively assumed; the agent must enter Plan Mode and ask the user.
+
+#### 14.7.3 Historical Planning Working Files Preservation
+The existing planning working files (`task_plan.md`, `findings.md`, `progress.md`) created during Phase 0 Specification represent the permanent historical record of the specification engineering process:
+- Their contents must be preserved.
+- When project implementation begins, implementation tracking will append to or clearly demarcate the implementation phase records while preserving all historical Phase 0 specification milestones.
+
+---
+
+### 14.8 Section 14 Invariants & Non-Negotiable Rules Table
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Monorepo NPM Workspaces** | Root `package.json` manages `"backend"` and `"client"` workspaces with concurrent dev runner. |
+| **Zero `.env.example` Mandate** | `.env.example` is strictly forbidden. Environment variable definitions documented in Section 14.2. |
+| **Zero `GOOGLE_*` LLM Confusion** | Google Gemini uses `GEMINI_API_KEY` exclusively; `GOOGLE_CLIENT_ID/SECRET` reserved strictly for raw OAuth and Drive export. |
+| **Locked Package Manifests** | Strictly limited to the 20 backend and 18 frontend packages defined in Section 14.3. Zero unapproved packages. |
+| **Incremental Full-Stack Phases** | All 9 implementation phases deliver complete backend + frontend vertical slices visualizable in the browser. |
+| **Strict 5-Step Implementation Protocol** | Every implementation phase follows: Pre-Git ➔ Deep Analysis ➔ Execution & Browser Audit ➔ User Approval ➔ Post-Git Merge & Cleanup. |
+| **No Direct Commits to `main`** | All work developed on `phase-N-description` feature branches; merged to `main` only after user approval. |
+| **Mandatory Browser Control Session** | Downstream agent must audit visual UI polish, functionality, multi-viewport responsiveness (`xs`/`sm`/`md+`), and Chrome DevTools 0 console errors. |
+| **Specification Immutability Law** | Master Technical Specification is the immutable single source of truth; never modified without explicit user instruction. |
+| **Historical Planning Preservation** | Phase 0 specification records in `task_plan.md`, `findings.md`, and `progress.md` preserved permanently. |
 
 ---

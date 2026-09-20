@@ -160,22 +160,74 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Mandatory Agent Browser Control Audit | Implementing agent must verify UI polish, interactive flows, multi-viewport responsiveness (`xs`/`sm`/`md+`), and zero console errors. |
 | Vite Build Gate & Immediate Dist Cleanup | `vite build` verifies syntax/modules; `client/scripts/cleanDist.js` wipes `client/dist/` immediately after verification. |
 | UI Adherence & Anti-Invention Law | Stated UI must be implemented with 0 deviation or invention; underspecified UI mandates stopping and planning with user in Plan Mode. |
+| Root Monorepo NPM Workspaces (Option A) | Root `package.json` with npm workspaces (`"workspaces": ["backend", "client"]`) and concurrent dev runner (`concurrently`). |
+| Zero `.env.example` Mandate | `.env.example` is strictly forbidden from ever being created. Configurations documented in Section 14.2. |
+| Zero `GOOGLE_*` LLM Confusion Law | Gemini uses `GEMINI_API_KEY` exclusively; `GOOGLE_CLIENT_ID/SECRET` reserved strictly for raw OAuth and Drive export. |
+| 9 Full-Stack Vertical Slice Phases | Every implementation phase delivers complete backend + frontend vertical slice visualizable immediately in the browser. |
+| Strict 5-Step Implementation Protocol | Every phase follows: Pre-Git ➔ Deep Codebase Analysis ➔ Execution & Browser Audit ➔ User Approval ➔ Post-Git Merge & Cleanup. |
+| Specification Immutability Law | Master Technical Specification is the immutable single source of truth; never modified without explicit user order. |
+| Historical Planning Preservation | Phase 0 specification planning records in `task_plan.md`, `findings.md`, and `progress.md` preserved permanently. |
 
 
 ## Locked Package Manifest
 
-### Backend Dependencies (`package.json`)
-```bash
-npm install addisai bcryptjs compression cookie-parser cors dotenv express express-async-handler express-mongo-sanitize express-rate-limit express-validator helmet jsonwebtoken mongoose mongoose-paginate-v2 multer winston winston-daily-rotate-file
-npm install --save-dev morgan nodemon
+### Root Workspace Manifest (`package.json`)
+```json
+{
+  "name": "agentic-ai-report-builder",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["backend", "client"],
+  "scripts": {
+    "dev": "concurrently -n \"backend,client\" -c \"blue,magenta\" \"npm run dev --workspace=backend\" \"npm run dev --workspace=client\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:client": "npm run dev --workspace=client",
+    "verify": "npm run verify --workspace=backend && npm run verify --workspace=client",
+    "test:api": "npm run test:api --workspace=backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
 ```
 
-### Frontend Dependencies (`package.json`)
+### Backend Dependencies (`backend/package.json`)
 ```bash
-npm install @emotion/react @emotion/styled @mui/material @mui/x-chat @fontsource/inter @mui/icons-material @mui/x-charts @mui/x-data-grid @mui/x-date-pickers @reduxjs/toolkit dayjs react-error-boundary react-hook-form react-redux react-router react-toastify redux-persist
+npm install addisai@^1.0.0 bcryptjs@^2.4.3 compression@^1.7.5 cookie-parser@^1.4.7 cors@^2.8.5 dotenv@^16.4.7 express@^4.21.2 express-async-handler@^1.2.0 express-mongo-sanitize@^2.2.0 express-rate-limit@^7.5.0 express-validator@^7.2.1 helmet@^8.0.0 jsonwebtoken@^9.0.2 mongoose@^8.9.5 mongoose-paginate-v2@^1.8.5 multer@^1.4.5-lts.1 node-cron@^3.0.3 sharp@^0.33.5 winston@^3.17.0 winston-daily-rotate-file@^5.0.0
+npm install --save-dev morgan@^1.10.0 nodemon@^3.1.9
 ```
+
+### Frontend Dependencies (`client/package.json`)
+```bash
+npm install @emotion/react@^11.14.0 @emotion/styled@^11.14.0 @fontsource/noto-sans-ethiopic@^5.1.0 @fontsource/roboto@^5.1.0 @mui/icons-material@^6.4.0 @mui/material@^6.4.0 @mui/x-charts@^7.24.0 @mui/x-chat@^0.1.0 @mui/x-data-grid@^7.24.0 @mui/x-date-pickers@^7.24.0 @reduxjs/toolkit@^2.5.0 async-mutex@^0.5.0 dayjs@^1.11.13 react@^18.3.1 react-dom@^18.3.1 react-error-boundary@^5.0.0 react-hook-form@^7.54.2 react-redux@^9.2.0 react-router@^7.1.3 react-toastify@^11.0.3
+npm install --save-dev @vitejs/plugin-react@^4.3.4 vite@^6.0.7
+```
+
+## Pre-Scaffolded Client Foundation & Assets (`client/*`)
+
+The user has pre-initialized the `client/` workspace containing core configuration, entry points, and production visual assets:
+- **Vite & React Setup**:
+  - `client/vite.config.js`: Pre-configured with `@vitejs/plugin-react` and `server: { port: 3000 }` (port 3000 constraint satisfied).
+  - `client/index.html`: Pre-configured entry HTML with favicon link.
+  - `client/src/main.jsx`: Clean React entry point (`createRoot`).
+  - `client/src/App.jsx`: Clean arrow function root component (`const App = () => ...`).
+- **Environment Configuration (`client/.env`)**:
+  - `VITE_API_BASE_URL=http://localhost:4000/api/v1`
+  - `VITE_APP_NAME=Report Builder`
+- **Pre-Existing Page & Brand Assets (`client/src/assets/*` & `client/public/*`)**:
+  - `client/src/assets/hero.png` (13 KB): Dedicated visual asset for the Option A `Landing.jsx` hero section.
+  - `client/src/assets/notFound_404.svg` (4 KB): Dedicated illustration asset for `NotFound.jsx`.
+  - `client/public/favicon.svg` & `client/public/icons.svg`: Public brand favicon and icon assets.
+- **Downstream Phase 1 Integration**:
+  - Phase 1 scaffolding will build directly upon this foundation without re-inventing or replacing existing assets.
+  - Locked frontend dependencies from Section 14.3.2 will be installed into `client/package.json`.
+  - `hero.png` and `notFound_404.svg` will be directly imported into `Landing.jsx` and `NotFound.jsx` respectively.
 
 ## Resources & Reference Paths
 
 - Local `.env`: `backend/.env` (pre-configured with Mongo URI, Addis AI, Gemini, Nvidia, FFmpeg paths).
-- Addi AI SDK: `https://www.npmjs.com/package/addisai` and `https://docs.addisassistant.com/docs/get-started/introduction`.
+- Client `.env`: `client/.env` (`VITE_API_BASE_URL`, `VITE_APP_NAME`).
+- Addis AI SDK: `https://www.npmjs.com/package/addisai` and `https://docs.addisassistant.com/docs/get-started/introduction`.
+
+

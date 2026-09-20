@@ -342,15 +342,76 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+### Phase 14: Section 14 - Deployment, Environment Variables, Locked Dependencies & Execution Roadmap
+- **Status:** complete (uncommitted per user command)
+- **Started:** 2026-09-20T21:30:00+03:00
+- **Completed:** 2026-09-20T21:44:00+03:00
+- Actions taken:
+  - Formulated Option A Root Monorepo Architecture with npm workspaces (`package.json`) uniting `backend` and `client` workspaces with `concurrently` dev runner, unified `npm run verify`, and `npm run test:api`.
+  - Formulated Complete Environment Variables Blueprint:
+    - Backend (`backend/.env`): 13 variables (`NODE_ENV`, `PORT`, `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `ADDIS_AI_API_KEY`, `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `ALLOWED_ORIGINS`, `AI_TIMEOUT_MS`).
+    - Codified Zero `.env.example` Mandate: `.env.example` is strictly forbidden from ever being created.
+    - Codified Zero `GOOGLE_*` LLM Confusion Law: Google Gemini inference uses `GEMINI_API_KEY` exclusively; `GOOGLE_CLIENT_ID/SECRET` are strictly reserved for raw Google OAuth PKCE and Drive document export.
+    - Frontend (`client/.env`): `VITE_API_BASE_URL`.
+    - Cryptographic 256-bit hex secret generation protocol via native `crypto`.
+  - Specified Locked Dependency Manifests:
+    - Backend: 20 runtime dependencies (`addisai`, `bcryptjs`, `compression`, `cookie-parser`, `cors`, `dotenv`, `express`, `express-async-handler`, `express-mongo-sanitize`, `express-rate-limit`, `express-validator`, `helmet`, `jsonwebtoken`, `mongoose`, `mongoose-paginate-v2`, `multer`, `node-cron`, `sharp`, `winston`, `winston-daily-rotate-file`) + 2 devDependencies (`morgan`, `nodemon`).
+    - Frontend: 18 runtime dependencies (`@emotion/react`, `@emotion/styled`, `@fontsource/noto-sans-ethiopic`, `@fontsource/roboto`, `@mui/icons-material`, `@mui/material`, `@mui/x-charts`, `@mui/x-chat`, `@mui/x-data-grid`, `@mui/x-date-pickers`, `@reduxjs/toolkit`, `async-mutex`, `dayjs`, `react`, `react-dom`, `react-error-boundary`, `react-hook-form`, `react-redux`, `react-router`, `react-toastify`) + 2 devDependencies (`@vitejs/plugin-react`, `vite`).
+    - Root devDependency: `concurrently`.
+  - Cataloged Complete Directory & File Tree Blueprint across root monorepo, `backend/`, and `client/`.
+  - Engineered the 9 Incremental Full-Stack Vertical Slice Implementation Phases:
+    - Phase 1: Foundation, Monorepo Scaffolding & Option A Landing Page
+    - Phase 2: Authentication, Session Security & Consolidated Profile (`/profile`)
+    - Phase 3: Branch Management & Reusable `BranchDialog`
+    - Phase 4: Amharic Report Engine & In-Canvas 10-Row Form (`/chat` mounting)
+    - Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation (Orb + Blob players)
+    - Phase 6: Conversational Agent, Gemini Multi-Tier Fallback & SSE Streaming
+    - Phase 7: Reports Ledger, Details View & Multi-Channel Export Actions
+    - Phase 8: Dashboard Visual Analytics & Multi-Entity Global Search Dialog
+    - Phase 9: Background Sweepers, Quality Gates & Project Handover
+  - Engineered the Strict 5-Step Implementation Protocol & Git Lifecycle:
+    - Step 1: Pre-Git (clean tree check, `git branch -vv`, create `phase-N-description` feature branch; no direct commits to `main`).
+    - Step 2: Deep Codebase Analysis without skipping a single detail.
+    - Step 3: Phase Execution & Validation (vertical slice implementation + mandatory browser control testing: UI polish, interactivity, mobile responsiveness across `xs`/`sm`/`md+`, Chrome DevTools 0 console errors).
+    - Step 4: User Review & Explicit Approval (present walkthrough; update planning files; Step 5 never runs without explicit user approval).
+    - Step 5: Post-Git Merge & Cleanup (`git add .`, commit `feat: phase N description`, push branch, pull `main`, merge, push `main`, delete local and remote feature branch, final sync verification).
+  - Codified Superpowers & MCP Skills Mandate, Specification Immutability Law (immutable single source of truth; never modified without user order), and Historical Planning Preservation Invariant.
+  - Formulated Section 14 Invariants & Non-Negotiable Rules Table.
+  - Activated Section 14 link in Table of Contents (line 25).
+  - Authored and appended Section 14 to `docs/specifications/master_specification.md` (now 9,010 total lines).
+  - Updated `task_plan.md` and `findings.md`.
+  - **STRICTLY PRESERVED UNCOMMITTED WORKING DIRECTORY** per user explicit command ("don't commit").
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
+### User Pre-Scaffolded Client Registration (`client/*`)
+- **Status:** complete (uncommitted per user command)
+- **Started:** 2026-09-20T21:53:00+03:00
+- **Completed:** 2026-09-20T21:55:00+03:00
+- Actions taken:
+  - Cataloged user-created `client/*` directory structure, configuration, and production visual assets.
+  - Recorded configuration: `client/vite.config.js` (`port: 3000`), `client/.env` (`VITE_API_BASE_URL=http://localhost:4000/api/v1`, `VITE_APP_NAME=Report Builder`).
+  - Recorded pre-existing assets: `client/src/assets/hero.png` (13 KB Landing page Hero asset), `client/src/assets/notFound_404.svg` (4 KB NotFound page asset), `client/public/favicon.svg`, `icons.svg`.
+  - Documented that Phase 1 implementation will build directly upon this `client/` foundation, preserving and incorporating `hero.png` and `notFound_404.svg` into their respective views (`Landing.jsx` and `NotFound.jsx`).
+  - Updated `task_plan.md`, `findings.md`, and `progress.md`.
+  - **STRICTLY PRESERVED UNCOMMITTED WORKING DIRECTORY** per user explicit command ("don't commit").
+- Files created/modified:
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 13 (Verification Protocols, Quality Gates & Zero-Error Checklists) completed and appended to `master_specification.md` in Build Mode. All changes left in working tree uncommitted per explicit user command ("don't commit"). |
-| Where am I going? | Awaiting user review of Section 13 and instruction to switch to Plan Mode for Section 14 (Deployment, Environment Variables, Locked Dependencies & Execution Roadmap). |
-| What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder on branch `phase-0-specification`. |
-| What have I learned? | Ultra-fast `node --check` runner guarantees sub-second syntax checks without heavy test harness dependencies; native `fetch` domain scripts validate live API contracts with zero package bloat; browser control testing audits mobile responsiveness and DevTools console errors; UI Anti-Invention Law prevents speculative drift. |
-| What have I done? | Authored and appended Section 13 to `master_specification.md` (lines 7921–8482); updated TOC; updated `task_plan.md`, `findings.md`, and `progress.md`; kept changes uncommitted. |
+| Where am I? | Phase 0 Master Technical Specification is 100% complete across all 14 sections. User pre-scaffolded `client/*` structure, configuration, and visual assets (`hero.png`, `notFound_404.svg`, `favicon.svg`) registered in planning files. All changes left uncommitted in working directory per explicit user command ("don't commit"). |
+| Where am I going? | Awaiting user final review of Section 14 and explicit authorization to commit Section 14 on `phase-0-specification`, completing Phase 0 Specification. |
+| What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder on branch `phase-0-specification` with zero unstated assumptions, ready for autonomous end-to-end implementation. |
+| What have I learned? | User has initialized `client/` containing port 3000 configuration, `.env`, and production assets (`hero.png` for Landing Hero, `notFound_404.svg` for 404 page); Phase 1 will directly adopt and integrate these assets into the frontend views. |
+| What have I done? | Formulated and appended Section 14 to `master_specification.md` (9,010 total lines); registered user's `client/*` foundation in `task_plan.md`, `findings.md`, and `progress.md`; preserved working tree uncommitted per user command. |
 
 
 
