@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Plan Mode review and specification of Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists upon user confirmation.
+Plan Mode review and specification of Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap upon user confirmation.
 
 ## Current Phase
 
-Phase 13: Section 13 - Verification Protocols, Quality Gates & Zero-Error Checklists
+Phase 14: Section 14 - Deployment, Environment Variables, Locked Dependencies & Execution Roadmap
 
 ## Phases
 
@@ -182,13 +182,17 @@ Phase 13: Section 13 - Verification Protocols, Quality Gates & Zero-Error Checkl
 - **Status:** complete
 
 ### Phase 13: Section 13 - Verification Protocols, Quality Gates & Zero-Error Checklists
-- [ ] Detail `node --check` backend validation
-- [ ] Detail `npx vite build` zero-error requirement with post-build `dist/*` cleanup
-- [ ] Detail code hygiene checklists (no unused imports, vars, params, missing JSDoc, magic numbers, or deprecated props)
-- [ ] Detail phase commit protocol (`feat: phase N description` / `chore: phase N description`)
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail ultra-fast `node --check` backend validation runner (`backend/scripts/verifyCodebase.js`) with sub-second execution
+- [x] Detail frontend `npx vite build` zero-error requirement with post-build `dist/*` cleanup (`client/scripts/cleanDist.js`)
+- [x] Detail native Postman-like domain API test suites under `backend/scripts/test*.js` via pure `fetch` with zero new packages against live DB
+- [x] Detail port conflict auto-termination protocol for ports 4000 & 3000
+- [x] Detail mandatory implementing-agent browser verification protocol (UI polish, interactive functionality, mobile responsiveness across `xs`/`sm`/`md+`, Chrome DevTools console audit)
+- [x] Detail UI Specification Adherence & Anti-Invention Law (strict compliance with stated UI, interactive planning on underspecified cases)
+- [x] Detail code hygiene checklists (no unused imports, vars, params, missing JSDoc, magic numbers, universal arrow functions, universal `forwardRef`)
+- [x] Detail phase commit protocol (`feat: phase N description` / `chore: phase N description`)
+- [x] Review in Plan Mode with user
+- [x] Output Section 13 specification content to `docs/specifications/master_specification.md` in Build Mode (uncommitted per user command)
+- **Status:** complete
 
 ### Phase 14: Section 14 - Deployment, Environment Variables, Locked Dependencies & Execution Roadmap
 - [ ] Detail `config/env.js` and `backend/.env` variable definitions

@@ -21,7 +21,7 @@
 10. [Section 10: Frontend Routing, Shell Layout & Component Matrix](#section-10-frontend-routing-shell-layout--component-matrix)
 11. [Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes](#section-11-rest-api-endpoint-inventory-validation-chains--response-envelopes)
 12. [Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks](#section-12-backend-infrastructure-winston-logging--sweeper-tasks)
-13. *Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists (Pending)*
+13. [Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists](#section-13-verification-protocols-quality-gates--zero-error-checklists)
 14. *Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap (Pending)*
 
 ---
@@ -7915,5 +7915,567 @@ export const apiClient = async (endpoint, options = {}) => {
 | **Daily 00:00 UTC 30-Day Sweeper** | `node-cron` job (`0 0 * * *`) purges soft-archived reports, cascades clips in a transaction, and deletes disk files. |
 | **Mutex-Locked 401 Token Refresh** | `client/src/features/api/apiSlice.js` queues concurrent queries via `async-mutex` during token refresh; zero toast on 401. |
 | **Zero Orphaned Files Guarantee** | Pre-boot defensive directory checks and automated 24-hour temporary upload directory cleanups. |
+
+---
+
+# Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists
+
+### 13.1 The Quality Philosophy & Verification Architecture
+
+The Report Builder application operates under a strict, pragmatic engineering philosophy designed for rapid, defect-free agentic implementation. Rather than introducing fragile, heavy automated test harnesses (e.g. Jest, Vitest, Cypress, Mocha, Supertest) that impose massive configuration overhead and brittle mock maintenance, the application enforces a **Zero-Automated-Test-Framework Mandate** coupled with a rigorous **5-Tier Verification Hierarchy**.
+
+```
++---------------------------------------------------------------------------------------------------+
+| THE 5-TIER PRAGMATIC VERIFICATION HIERARCHY                                                       |
++---------------------------------------------------------------------------------------------------+
+| Tier 1: Ultra-Fast Backend Syntax Compilation (`node --check` via verifyCodebase.js)              |
+| Tier 2: Frontend Production Build & Module Tree Gate (`npx vite build` + cleanDist.js)            |
+| Tier 3: Native Postman-Like Domain API Test Suites (`backend/scripts/test*.js` via pure fetch)   |
+| Tier 4: Implementing-Agent Browser Verification (UI polish, functionality, responsiveness, DevTools)|
+| Tier 5: Codebase Hygiene, JSDoc & Architectural Rule Audit (Zero-defect checklists)               |
++---------------------------------------------------------------------------------------------------+
+```
+
+---
+
+### 13.2 Ultra-Fast Backend Static Compilation (`backend/scripts/verifyCodebase.js`)
+
+Every backend JavaScript source file must pass static syntax analysis using Node.js's native syntax compiler (`node --check`). To prevent blocking development workflows, this verification script is optimized for **sub-second, ultra-fast parallel execution**.
+
+#### 13.2.1 Script Implementation (`backend/scripts/verifyCodebase.js`)
+The script recursively discovers all `.js` files under `backend/src/` using Node's asynchronous `fs.promises.readdir`, batches syntax checks concurrently via `Promise.all` and `child_process.execFile`, and outputs a clean aggregated terminal report:
+
+```javascript
+/**
+ * @module scripts/verifyCodebase
+ * @description Ultra-fast parallel static syntax compiler checking all backend files with node --check.
+ */
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+const SRC_DIR = path.resolve('src');
+
+/**
+ * Recursively crawls a directory for all .js files.
+ * @param {string} dir - Root directory path.
+ * @returns {Promise<string[]>} List of absolute file paths.
+ */
+const discoverJsFiles = async (dir) => {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const res = path.resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        return discoverJsFiles(res);
+      }
+      return entry.isFile() && entry.name.endsWith('.js') ? [res] : [];
+    })
+  );
+  return files.flat();
+};
+
+/**
+ * Main verification runner executing parallel node --check validations.
+ */
+const runVerification = async () => {
+  const startTime = Date.now();
+  console.log('⚡ Starting ultra-fast backend static syntax compilation...');
+
+  try {
+    const files = await discoverJsFiles(SRC_DIR);
+    if (files.length === 0) {
+      console.warn('⚠️ No JavaScript files found in src directory.');
+      process.exit(0);
+    }
+
+    let failureCount = 0;
+    const failureDetails = [];
+
+    // Parallel execution across all discovered files
+    await Promise.all(
+      files.map(async (file) => {
+        try {
+          await execFileAsync(process.execPath, ['--check', file]);
+        } catch (err) {
+          failureCount += 1;
+          failureDetails.push({
+            file: path.relative(process.cwd(), file),
+            error: err.stderr || err.message,
+          });
+        }
+      })
+    );
+
+    const duration = Date.now() - startTime;
+
+    if (failureCount === 0) {
+      console.log(`✅ [PASS] 100% of backend codebase compiled successfully (${files.length} files in ${duration}ms).`);
+      process.exit(0);
+    } else {
+      console.error(`❌ [FAIL] Syntax compilation failed in ${failureCount} file(s) (${duration}ms):\n`);
+      failureDetails.forEach(({ file, error }) => {
+        console.error(`  - ${file}:`);
+        console.error(`    ${error.trim().split('\n').join('\n    ')}\n`);
+      });
+      process.exit(1);
+    }
+  } catch (fatalError) {
+    console.error('Fatal error during verification run:', fatalError);
+    process.exit(1);
+  }
+};
+
+runVerification();
+```
+
+#### 13.2.2 NPM Script Binding (`backend/package.json`)
+```json
+{
+  "scripts": {
+    "verify": "node scripts/verifyCodebase.js",
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js"
+  }
+}
+```
+
+---
+
+### 13.3 Native Postman-Like Domain API Test Suites (`backend/scripts/test*.js`)
+
+To rigorously validate all 45 REST endpoints against the live server and existing MongoDB database without introducing external testing dependencies (no Axios, no Mocha, no Supertest), the project maintains a suite of **native, Postman-like API verification scripts** in `backend/scripts/`.
+
+#### 13.3.1 Architectural Principles of Native Test Scripts
+1. **Zero New Packages**: Built strictly using Node.js 18+ global `fetch`, native `node:assert`, and standard JavaScript.
+2. **Live Server & Database Execution**: Tests run against the running server (`http://localhost:4000/api/v1`) with live database persistence.
+3. **Automated State & Cookie Handling**: A shared utility (`testUtils.js`) parses `Set-Cookie` headers, persists cookies across requests, and injects session headers automatically.
+4. **Clean Domain Isolation**: Each business domain maintains its own independent test script.
+
+#### 13.3.2 Shared Test Utilities (`backend/scripts/testUtils.js`)
+```javascript
+/**
+ * @module scripts/testUtils
+ * @description Lightweight assertion helpers, cookie jar, and colored terminal reporting for API tests.
+ */
+import assert from 'node:assert';
+
+const BASE_URL = process.env.API_BASE_URL || 'http://localhost:4000/api/v1';
+
+export class TestClient {
+  constructor() {
+    this.cookieJar = new Map();
+  }
+
+  /**
+   * Performs an HTTP request, automatically managing cookies and parsing JSON.
+   */
+  async request(endpoint, options = {}) {
+    const url = `${BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    const headers = new Headers(options.headers || {});
+
+    // Inject persisted cookies
+    if (this.cookieJar.size > 0) {
+      const cookieHeader = Array.from(this.cookieJar.entries())
+        .map(([key, val]) => `${key}=${val}`)
+        .join('; ');
+      headers.set('Cookie', cookieHeader);
+    }
+
+    if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+      options.body = JSON.stringify(options.body);
+    }
+
+    const response = await fetch(url, { ...options, headers });
+
+    // Store incoming Set-Cookie headers
+    const rawSetCookies = response.headers.getSetCookie ? response.headers.getSetCookie() : [];
+    rawSetCookies.forEach((cookieStr) => {
+      const [pair] = cookieStr.split(';');
+      const [key, value] = pair.split('=');
+      if (key && value) this.cookieJar.set(key.trim(), value.trim());
+    });
+
+    let data = null;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    }
+
+    return { status: response.status, headers: response.headers, data };
+  }
+
+  assert(condition, message) {
+    assert.ok(condition, `❌ Assertion failed: ${message}`);
+  }
+
+  logStep(stepName) {
+    console.log(`  🔹 ${stepName}`);
+  }
+}
+```
+
+#### 13.3.3 Per-Domain Test Suites Catalog
+Each script exercises its respective domain endpoints, validates response envelopes (`{ success, message, data }`), and logs structured results:
+
+1. **`backend/scripts/testAuth.js`**:
+   - `POST /auth/register`: Verifies user registration, ensures 201 status, and verifies that no session cookie is automatically issued.
+   - `POST /auth/login`: Verifies successful authentication and extraction of httpOnly `accessToken` and `refreshToken` cookies.
+   - `GET /users/me`: Verifies protected route access with cookies.
+   - `POST /auth/refresh`: Verifies cryptographic token rotation and reuse detection.
+   - `POST /auth/logout`: Verifies cookie clearance and session invalidation.
+
+2. **`backend/scripts/testBranches.js`**:
+   - `POST /branches`: Creates branches (`name`, `location`, `phone`, `address`).
+   - `GET /branches`: Validates paginated response envelope (`docs`, `totalDocs`, `limit`, `page`).
+   - `GET /branches/:branchId`: Validates branch detail and computed metrics.
+   - `PUT /branches/:branchId`: Validates branch updates.
+   - `DELETE /branches/:branchId`: Validates soft-archival (`isArchived: true`, `archivedAt != null`).
+   - `PATCH /branches/:branchId/restore`: Validates branch unarchival.
+
+3. **`backend/scripts/testReports.js`**:
+   - `POST /reports`: Submits complete 10-row report with visits, activities, and issues.
+   - Verifies deterministic plain-text Amharic synthesis (`rawText`).
+   - `GET /reports/:reportId`: Validates report retrieval with populated branch relations.
+   - `POST /reports/:reportId/clips`: Tests audio clip attachment and metadata creation.
+   - `DELETE /reports/:reportId`: Validates soft-archival and secondary hard-deletion.
+
+4. **`backend/scripts/testChats.js`**:
+   - `POST /chats`: Creates general and report chat threads.
+   - `GET /chats/:chatId/messages`: Validates paginated message history.
+   - `POST /chats/:chatId/messages`: Consumes Server-Sent Events (SSE) streaming chunks (`text_delta`, `done`).
+   - `POST /chats/:chatId/abort`: Validates stream cancellation protocol.
+
+5. **`backend/scripts/testDashboard.js`**:
+   - `GET /dashboard`: Validates KPI aggregations, 4 chart dataset arrays, and needs-attention list.
+
+6. **`backend/scripts/testPresets.js`**:
+   - `GET /presets`: Lists system and custom presets.
+   - `POST /presets`: Creates custom preset.
+   - `PUT /presets/:presetId`: Updates custom preset.
+   - `DELETE /presets/:presetId`: Deletes custom preset.
+
+7. **`backend/scripts/testSearch.js`**:
+   - `GET /search?q=Bole`: Validates multi-entity accordion grouping across reports, branches, and chat nodes.
+
+8. **`backend/scripts/testSweeper.js`**:
+   - Creates an expired archived report and branch (`archivedAt: Date.now() - 31 days`).
+   - Executes `runArchivalSweep()`.
+   - Asserts permanent deletion of database documents and physical removal of `uploads/audio/${reportId}/`.
+
+9. **`backend/scripts/testAll.js` (Master Orchestrator)**:
+   - Runs all 8 test suites sequentially.
+   - Generates a formatted summary table:
+     ```
+     ┌────────────────────────────┬────────┬──────────┐
+     │ Test Suite                 │ Status │ Duration │
+     ├────────────────────────────┼────────┼──────────┤
+     │ testAuth.js                │ PASS   │ 210ms    │
+     │ testBranches.js            │ PASS   │ 145ms    │
+     │ testReports.js             │ PASS   │ 320ms    │
+     │ testChats.js               │ PASS   │ 410ms    │
+     │ testDashboard.js           │ PASS   │ 95ms     │
+     │ testPresets.js             │ PASS   │ 85ms     │
+     │ testSearch.js              │ PASS   │ 110ms    │
+     │ testSweeper.js             │ PASS   │ 180ms    │
+     └────────────────────────────┴────────┴──────────┘
+     Total: 8 passed, 0 failed. Execution time: 1555ms.
+     ```
+
+#### 13.3.4 NPM Script Binding (`backend/package.json`)
+```json
+{
+  "scripts": {
+    "test:api": "node scripts/testAll.js",
+    "test:auth": "node scripts/testAuth.js",
+    "test:branches": "node scripts/testBranches.js",
+    "test:reports": "node scripts/testReports.js",
+    "test:chats": "node scripts/testChats.js"
+  }
+}
+```
+
+---
+
+### 13.4 Port Conflict Auto-Termination Protocol (Ports 4000 & 3000)
+
+When automated agents or developers execute the backend (`PORT=4000`) or frontend (`PORT=3000`), port collision with stale, orphaned background processes is a frequent cause of build and execution failures.
+
+#### 13.4.1 Port Invariant
+- **Backend Port**: Strictly `4000`.
+- **Frontend Port**: Strictly `3000` (configured with `strictPort: true` in `client/vite.config.js`).
+
+#### 13.4.2 Automatic Conflict Detection & Termination Procedure
+If an agent or runner detects that port `4000` or `3000` is occupied by an orphaned process, the implementing agent **must terminate the occupying process and re-run on the canonical port**:
+
+1. **Windows PowerShell (Native One-Liner)**:
+   ```powershell
+   # Free Backend Port 4000
+   $bPid = Get-NetTCPConnection -LocalPort 4000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+   if ($bPid) { Stop-Process -Id $bPid -Force; Write-Host "Killed orphaned process on port 4000 (PID: $bPid)" }
+
+   # Free Frontend Port 3000
+   $fPid = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+   if ($fPid) { Stop-Process -Id $fPid -Force; Write-Host "Killed orphaned process on port 3000 (PID: $fPid)" }
+   ```
+
+2. **Cross-Platform Node Script (`backend/scripts/killPort.js`)**:
+   ```javascript
+   /**
+    * @module scripts/killPort
+    * @description Cross-platform port freer using native OS process inspection.
+    */
+   import { execSync } from 'node:child_process';
+
+   const freePort = (port) => {
+     try {
+       if (process.platform === 'win32') {
+         const out = execSync(`netstat -ano | findstr :${port}`).toString();
+         const lines = out.trim().split('\n');
+         const pids = new Set();
+         lines.forEach((line) => {
+           const parts = line.trim().split(/\s+/);
+           if (parts.length >= 5 && parts[1].endsWith(`:${port}`)) {
+             pids.add(parts[parts.length - 1]);
+           }
+         });
+         pids.forEach((pid) => {
+           execSync(`taskkill /F /PID ${pid}`);
+           console.log(`Terminated process ${pid} on port ${port}`);
+         });
+       } else {
+         execSync(`lsof -ti tcp:${port} | xargs kill -9`);
+         console.log(`Freed port ${port}`);
+       }
+     } catch {
+       // Port was not in use
+     }
+   };
+
+   const port = parseInt(process.argv[2] || '4000', 10);
+   freePort(port);
+   ```
+
+---
+
+### 13.5 Mandatory Implementing-Agent Browser Verification Protocol
+
+Before declaring any frontend feature, layout, or page complete, the implementing AI agent must launch an interactive browser control session (via `/browser` or Puppeteer/CDP browser controls) to validate four non-negotiable visual and functional quality gates:
+
+```
++---------------------------------------------------------------------------------------------------+
+| MANDATORY 4-POINT BROWSER CONTROL VERIFICATION PROTOCOL                                            |
++---------------------------------------------------------------------------------------------------+
+| 1. Visual Polish & Hierarchy   --> Accurate fonts ('Noto Sans Ethiopic'), spacing, brand colors  |
+| 2. End-to-End Functionality    --> Interactive forms, modals, chat streaming, and action buttons |
+| 3. Multi-Viewport Responsiveness--> Mobile xs (<600px) iconification, sm tablet, md+ desktop    |
+| 4. Chrome DevTools Console Gate --> Exactly 0 red console errors, 0 unhandled rejections, 0 React warnings|
++---------------------------------------------------------------------------------------------------+
+```
+
+#### 13.5.1 Multi-Viewport Verification Matrix
+The implementing agent must capture screenshots and audit layout geometry across three standard viewports:
+
+| Viewport Category | Resolution (Width x Height) | Required Visual & Functional Verification |
+| :--- | :--- | :--- |
+| **Mobile (`xs`)** | `375px x 812px` (iPhone) | 1. Universal Control Iconification: text-labeled buttons collapse to compact icon-only buttons (`MuiTooltip` active).<br>2. Zero Horizontal Scroll: `overflow-x: hidden` strictly enforced; horizontal scrollbars prohibited.<br>3. Fullscreen Modals: `GlobalSearchDialog` and `BranchDialog` render edge-to-edge absolute fullscreen.<br>4. AppShell AppBar: right side shows strictly Search, Theme, Avatar.<br>5. In-Canvas 10-Row Form: single-column full-width form stack (`Grid xs={12}`). |
+| **Tablet (`sm`)** | `768px x 1024px` (iPad) | 1. Collapsible Mini Sidebar or Temporary Drawer with smooth transition.<br>2. Centered Modals: dialogs switch from fullscreen to rounded centered modals with backdrop.<br>3. Two-Column Report Form: structured inputs on left, sticky Amharic live preview on right. |
+| **Desktop (`md+`)** | `1440px x 900px` (MacBook/PC) | 1. Permanent collapsible sidebar with Recent Chat thread ledger.<br>2. Centered Chat Canvas: `<ChatBox>` restricted to max-width `880px` with auto margins.<br>3. Symmetrical horizontal role alignment (Assistant on left, User on right).<br>4. `MuiDataGrid` with full flex column distribution. |
+
+#### 13.5.2 Chrome DevTools Zero-Error Gate
+During the browser control session, the agent must inspect the DevTools console log. The build is deemed **REJECTED** if any of the following appear:
+- ❌ Any red unhandled exception or network error (`net::ERR_*`, HTTP 500).
+- ❌ React ref-forwarding warning: `Function components cannot be given refs. Did you mean to use React.forwardRef()?`.
+- ❌ React key warning: `Each child in a list should have a unique "key" prop`.
+- ❌ MUI invalid prop warning: `Failed prop type: Invalid prop ... supplied to ...`.
+- ❌ Uncaught promise rejections.
+
+---
+
+### 13.6 Frontend Production Build Gate & Mandatory Post-Build Cleanup
+
+The frontend must successfully compile to production assets via Vite.
+
+#### 13.6.1 Build Quality Verification
+Executing `npx vite build` in `client/` confirms:
+1. Zero syntax errors in `.jsx` or `.js` modules.
+2. Complete tree-shaking and resolution of all `@mui/*` and `@reduxjs/toolkit` imports.
+3. Zero unresolved dynamic imports in lazy route definitions.
+4. Total vendor chunk distribution within reasonable performance budgets.
+
+#### 13.6.2 Mandatory Post-Build Cleanup (`client/scripts/cleanDist.js`)
+To prevent stale production builds from lingering in the working directory or polluting git status during active development, the `client/dist/` directory must be purged immediately following verification:
+
+```javascript
+// client/scripts/cleanDist.js
+import fs from 'node:fs';
+import path from 'node:path';
+
+const distPath = path.resolve('dist');
+if (fs.existsSync(distPath)) {
+  fs.rmSync(distPath, { recursive: true, force: true });
+  console.log('🧹 client/dist/ cleaned up successfully. Working tree preserved.');
+}
+```
+
+#### 13.6.3 NPM Script Binding (`client/package.json`)
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "verify": "vite build && node scripts/cleanDist.js",
+    "preview": "vite preview"
+  }
+}
+```
+
+---
+
+### 13.7 UI Specification Adherence & Anti-Invention Law
+
+Downstream implementing agents must adhere strictly to the **Anti-Invention Principle**:
+
+> [!IMPORTANT]
+> **The UI Specification Adherence & Anti-Invention Law**:
+> 1. **Pages with Clearly Stated UI**:
+>    For all pages, views, and modals whose UI, wireframes, and component hierarchies are already explicitly defined in the Master Specification (Sections 9 & 10):
+>    - Landing Page (`/` - Option A)
+>    - Login (`/login`) & Register (`/register`)
+>    - AppShell Layout & AppBar (3 controls strictly: Search, Theme, Avatar)
+>    - Chat Canvas (`/chat`, `/chat/:chatId`) & Centered Composer
+>    - In-Canvas 10-Row Symmetrical Report Initiation Surface
+>    - Dashboard KPIs & 4 Charts (`/dashboard`)
+>    - Branches (`/branches`), BranchDetail (`/branches/:branchId`), and `BranchDialog`
+>    - Reports (`/reports`) and ReportDetail (`/reports/:reportId`)
+>    - Consolidated Profile (`/profile`)
+>    - Global Search Dialog (`GlobalSearchDialog`)
+>    Implementing agents must build the exact specified layouts, wireframes, and tokens. **Inventing alternate UI designs, unstated buttons, extra headers, or differing layouts is strictly prohibited**.
+>
+> 2. **Underspecified UI or Edge Cases**:
+>    If an implementing agent encounters any UI component, dialog, or state that is not clearly detailed in the specification, **the agent must NEVER invent, assume, or guess the design**. Instead, the agent must:
+>    - Stop immediately before writing code.
+>    - Switch to **Plan Mode**.
+>    - Present the design question clearly to the user.
+>    - Formulate the implementation plan together with the user (exactly as executed during this master specification).
+
+---
+
+### 13.8 Comprehensive Code Hygiene & Architectural Checklists
+
+Before declaring any implementation task, feature, or phase complete, the following zero-defect checklists must be strictly satisfied:
+
+#### 13.8.1 Code Cleanliness Checklist
+- [ ] **Zero Unused Imports**: No unused module imports exist in any backend or frontend file.
+- [ ] **Zero Unused Variables/Parameters**: No unreferenced variables exist (unused middleware parameters must be prefixed with `_`, e.g. `_req`, `_next`).
+- [ ] **Zero Dead Code**: No commented-out blocks of code, unreachable branches, or dummy stubs.
+- [ ] **Zero Console Logs in Production**: Backend uses `logger` exclusively; frontend contains zero `console.log` statements.
+- [ ] **Zero TypeScript**: Exactly 0 `.ts` or `.tsx` files in the entire project.
+- [ ] **Zero Tailwind CSS**: Exactly 0 Tailwind classes, `@tailwind` directives, or Tailwind config files.
+- [ ] **Zero Magic Numbers**: All HTTP status codes imported from `config/httpStatus.js`; all timeouts, rate limits, and bounds imported from `config/env.js` or centralized constants.
+
+#### 13.8.2 Coding Conventions Checklist
+- [ ] **Universal Arrow Functions**: Every function (controllers, services, helpers, middlewares, React components, hooks) declared as an arrow function (`const fn = (...) => { ... }`), except Mongoose hooks using lexical `this`.
+- [ ] **Universal Controller `asyncHandler`**: Every controller function wrapped in `asyncHandler(async (req, res, next) => { ... })`.
+- [ ] **Sanitized `req.validated` Access**: Controllers read inputs strictly from `req.validated.<body|params|query>`. Zero direct access to raw `req.body/params/query`.
+- [ ] **Universal `React.forwardRef`**: All reusable input wrappers (`MuiTextField.jsx`, `MuiSelect.jsx`, `MuiAutocomplete.jsx`, `MuiDatePicker.jsx`, `MuiTimePicker.jsx`, `MuiFileInput.jsx`) wrapped in `React.forwardRef` with explicit `displayName`.
+- [ ] **Start and End Adornments**: Every form text input features a contextual Start icon and functional End clear/toggle icon.
+- [ ] **Universal `react-hook-form`**: All forms evaluate validation on blur (`mode: 'onBlur'`) and render errors as inline red `helperText`.
+- [ ] **JSDoc `@module` Standard**: Every file begins with `@module path/name` (never `@file`) with complete `@param`, `@returns`, `@throws`, `@type` tags.
+- [ ] **Identifier Rule**: Documents accessed strictly via `_id` (0 occurrences of `.id` or `id:` in schema/DTO properties).
+
+---
+
+### 13.9 End-to-End Manual Testing User Journeys
+
+Implementing agents and quality assurance reviewers must execute the following end-to-end manual verification flows:
+
+#### Journey 1: Authentication & Session Security
+1. Navigate to `/register`. Register a new supervisor with email and password. Confirm that registration returns HTTP 201 and immediately redirects to `/login` without auto-login.
+2. Log in with credentials. Confirm `accessToken` (15m) and `refreshToken` (7d) httpOnly cookies are set. Confirm redirect to `/dashboard`.
+3. Try accessing `/login` or `/register` while authenticated. Confirm immediate automatic redirect back to `/dashboard`.
+4. Allow `accessToken` to expire (or simulate 401). Confirm RTK Query `baseQueryWithReauth` silently refreshes tokens without toast notifications and retries the original request.
+5. Trigger user self-service account deletion on `/profile`. Confirm confirmation dialog (`DELETE`), 7-collection transaction cascade, disk file removal, and redirect to `/register`.
+
+#### Journey 2: Branch Management & Dialog
+1. Navigate to `/branches`. Click `[ + Add Branch ]`.
+2. Confirm `BranchDialog` opens: fullscreen edge-to-edge on `xs`, centered rounded modal on `sm+`.
+3. Fill fields (`name`, `location`, `phone`). Submit form. Confirm new branch appears in `MuiDataGrid`.
+4. Click Edit on branch row. Confirm `BranchDialog` opens in edit mode pre-populated with data. Save changes.
+5. Click Archive. Confirm branch row disappears from active view and appears under the Archived filter.
+6. Click Restore. Confirm branch returns to active ledger.
+
+#### Journey 3: In-Canvas Report Creation & Symmetrical 10-Row Form
+1. Navigate to `/chat`. Click `[ + New Report ]`.
+2. Confirm the centered composer temporarily hides and the In-Canvas 10-Row Form mounts in the conversational outlet.
+3. Row 1: Select Ethiopian date (synced with Gregorian) and select primary branch via `MuiAutocomplete`.
+4. Row 2: Select clock-in and clock-out times via 24h `MuiTimePicker`.
+5. Row 3: Open multi-branch visits dialog, select additional branch, confirm Row 4 Divider and Row 5 visit time pickers appear.
+6. Row 7: Click Audio Orb. Speak in Amharic. Confirm recording wave animation and timer countdown. Stop recording.
+7. Row 8 & 9: Confirm Narrations divider and audio player deck mount with in-memory Blob URL playback.
+8. Right Column: Confirm plain-text Amharic report preview renders live with locked headers and Amharic bullet markers (`•`).
+9. Click `[ Cancel ]`: Confirm `MuiConfirmDialog` prompts user, closes form, and restores centered composer.
+10. Click `[ Submit ]`: Confirm form validates, dismisses, restores composer in streaming state, and initiates SSE agent turn.
+
+#### Journey 4: Conversational Agent Streaming & Controls
+1. Type prompt in Amharic in composer. Click Send.
+2. Confirm Stop button appears during generation. Click Stop. Confirm stream cleanly aborts via `POST /chats/:chatId/abort`.
+3. Open Model Selector popover from toolbar: verify Google, Addis AI, Nvidia provider filtering and reasoning dropdown.
+4. Open Preset Selector modal: verify `MuiEmptyState` on first load and `react-hook-form` preset creation form.
+5. In assistant message bubble, verify interactive report action triggers: `[ View Full Report ]`, `[ Edit in Form ]`, `[ Copy Report Text ]`.
+
+#### Journey 5: Mode 3 Ephemeral Audio Dictation
+1. Click Audio Orb in chat composer. Dictate spoken Amharic sentence.
+2. Confirm audio streams to `POST /api/v1/audio/transcribe`.
+3. Confirm transcribed Amharic text is injected directly at cursor position in composer.
+4. Verify that 0 audio files were written to persistent server storage.
+
+#### Journey 6: Export Mechanisms
+1. On Report Detail (`/reports/:reportId`):
+   - Click `[ Copy Report Text ]`: verify clipboard receives exact Amharic plain-text and toast displays.
+   - Click `[ Download .txt ]`: verify browser downloads UTF-8 `.txt` file.
+   - Click `[ Print to PDF ]`: verify print stylesheet cleans chrome and opens print dialog.
+   - Click `[ Export to Google Docs ]`: verify backend Google Drive API creates document and returns valid edit URL.
+
+---
+
+### 13.10 Phase Completion & Git Commit Protocol
+
+Development proceeds in strict, reviewable phases. When completing any phase:
+
+1. **Pre-Commit Quality Audit**:
+   - Run backend syntax compilation: `cd backend && npm run verify`. Must pass with 0 errors.
+   - Run frontend production build: `cd client && npm run verify`. Must pass with 0 errors and clean `dist/`.
+   - Execute domain API test suite: `cd backend && npm run test:api`. All suites must pass.
+   - Audit code hygiene checklist (zero unused imports, zero dead code, universal arrow functions).
+2. **Planning Working Files Synchronization**:
+   - Update `task_plan.md`: mark completed phase items, advance current phase and next step.
+   - Update `findings.md`: log any new architectural discoveries or locked packages.
+   - Update `progress.md`: record completed phase actions and update 5-Question Reboot Check.
+3. **Strict User Commit Authorization**:
+   - **Never run `git commit` proactively**.
+   - Present completed work to the user and request explicit authorization to commit.
+   - Use conventional commit messages: `feat: phase N <description>` or `chore: phase N <description>`.
+
+---
+
+### 13.11 Section 13 Invariants & Non-Negotiable Rules Table
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Zero-Automated-Test-Framework Mandate** | Complete prohibition of Jest, Vitest, Cypress, Mocha, Supertest in dependencies. |
+| **Sub-Second Backend Syntax Verification** | `backend/scripts/verifyCodebase.js` runs `node --check` in parallel with sub-second execution duration. |
+| **Native Domain API Test Suites** | `backend/scripts/test*.js` exercises all 45 endpoints using native `fetch` with zero new package dependencies against live DB. |
+| **Port Conflict Auto-Termination Protocol** | Implementing agents must automatically kill occupying processes on ports 4000 and 3000 and re-run on canonical ports. |
+| **Mandatory Agent Browser Verification** | Implementing agent must launch browser control session to audit UI polish, interactivity, mobile responsiveness, and DevTools console errors. |
+| **Zero Console Errors Quality Gate** | Chrome DevTools console must have exactly 0 errors, 0 unhandled promise rejections, and 0 React warnings. |
+| **Vite Build Gate & Post-Build Cleanup** | `npx vite build` must pass with 0 errors; `client/dist/` must be immediately purged via `cleanDist.js`. |
+| **UI Adherence & Anti-Invention Law** | Clearly stated UI must be implemented strictly as specified; any underspecified UI requires stopping and planning with the user in Plan Mode. |
+| **Codebase-Wide Arrow Functions Law** | Every function across backend and frontend must be an arrow function (except Mongoose hooks using `this`). |
+| **Universal Form Fields `React.forwardRef`** | All reusable form inputs wrapped in `React.forwardRef` with explicit `displayName` for `react-hook-form` ref integration. |
+| **Universal JSDoc `@module` Standard** | Every file begins with `@module path/name` with complete annotations. |
 
 ---

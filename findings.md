@@ -153,6 +153,13 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Unified `CustomError` Hierarchy | Domain subclasses inherit from `CustomError` with HTTP status code and details; formatted via centralized `errorHandler.js`. |
 | 30-Day Sweeper Cron (`0 0 * * *` UTC) | Midnight UTC job purges soft-archived reports and branches older than 30 days, cascades clip deletion in transaction, and cleans up disk files. |
 | Mutex-Protected RTK Query Re-Auth | `baseQueryWithReauth` in `client/src/features/api/apiSlice.js` serializes 401 token refresh requests using `async-mutex`. |
+| Zero-Automated-Test Framework Mandate | Prohibition of Jest/Vitest/Cypress/Mocha/Supertest; quality enforced via static compiler, native API tests, and browser testing. |
+| Sub-Second Backend Syntax Runner | `backend/scripts/verifyCodebase.js` (`npm run verify`) runs parallel `node --check` across all src files in milliseconds. |
+| Native Postman-Like API Test Suites | `backend/scripts/test*.js` exercises all 45 endpoints using native Node `fetch` with zero new packages against live DB. |
+| Port Conflict Auto-Termination Protocol | Automatic detection and killing of occupying processes on ports 4000 (backend) and 3000 (frontend). |
+| Mandatory Agent Browser Control Audit | Implementing agent must verify UI polish, interactive flows, multi-viewport responsiveness (`xs`/`sm`/`md+`), and zero console errors. |
+| Vite Build Gate & Immediate Dist Cleanup | `vite build` verifies syntax/modules; `client/scripts/cleanDist.js` wipes `client/dist/` immediately after verification. |
+| UI Adherence & Anti-Invention Law | Stated UI must be implemented with 0 deviation or invention; underspecified UI mandates stopping and planning with user in Plan Mode. |
 
 
 ## Locked Package Manifest
