@@ -105,6 +105,11 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Bidirectional Chat Continuity Invariant | Report Chat can execute general multi-branch queries without losing report context; General Chat can inspect, mutate, create, and export specific reports without leaving the conversation, rendering interactive deep-link Report Reference Cards. |
 | Deterministic 3-Tier Fallback Chain | Tier 1 (Google Gemini 2.5 Flash / Flash Lite) -> Tier 2 (Addis AI `addis-1-alef`) -> Tier 3 (Nvidia NIM `meta/llama-3.1-nemotron-70b-instruct`) with backoff retries and transparent failover events. |
 | Concurrency Lock & Abort Protocol | Per-chat in-memory stream registry (`activeChatStreams`); HTTP 409 rejection on concurrent messages; `POST /chats/:chatId/abort` triggers `AbortController.abort()` to halt generation cleanly. |
+| Zero-DB-Table Transliteration Harvester | Samples last 4 approved reports to harvest Ge'ez transliterations into `<workplace_glossary>` XML injected into LLM prompt; 0 migrations, 0 admin dictionary maintenance. |
+| Novel Word Organic Learning Lifecycle | 4-step cycle: Rule-based English-to-Ge'ez syllabic phonetics -> Persistence in report -> Dynamic harvest loop -> User correction adaptation. |
+| Zero-Latin Pre-Save Linter | `reportSchema.pre('save')` regex `/[a-zA-Z]/` scans `plainTextReport` and executes automatic phonetic fallback normalization to guarantee zero raw Latin script. |
+| Canonical Homophone Normalizer | In-memory normalizer collapses Ge'ez homophones (`ሀ/ሐ/ኀ`, `ሰ/ሠ`, `አ/ዐ`, `ጸ/ፀ`) to canonical forms to ensure search and text indexing resilience. |
+| Single-Column ChatBox & Request/Response | Single-column MUI `<ChatBox>` (Agent Left, User Right); direct request/response with zero `ChatConfirmation`; 17px default font size for Ge'ez readability; interactive `[View Full Report]` trigger. |
 
 ## Locked Package Manifest
 

@@ -102,17 +102,21 @@ Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
 - [x] Detail fallback chain: Tier 1 (Gemini) -> Tier 2 (Addis AI) -> Tier 3 (Nvidia NIM) with backoff and error isolation
 - [x] Detail context window pruning (sliding 10-message window + summary) and daily token quota tracking
 - [x] Write complete Section 7 to `docs/specifications/master_specification.md`
-- [ ] User review and confirmation of Section 7
-- [ ] Commit Section 7 to `phase-0-specification`
-- **Status:** in_progress
+- [x] User review and confirmation of Section 7
+- [x] Commit Section 7 to `phase-0-specification` (`33477ef`)
+- **Status:** complete
 
 ### Phase 8: Section 8 - Workplace Transliteration Engine & In-Context Phonetic Guidance
-- [ ] Detail dynamic few-shot learning from last 3–5 approved reports (zero static glossary tables)
-- [ ] Detail phonetic Ge'ez transliteration rules (e.g. `deep fryer` -> `ዲፕ ፍራየር`)
-- [ ] Detail agent prompt enforcement (zero raw Latin in report body)
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail dynamic few-shot learning from last 4 approved reports (zero static glossary tables)
+- [x] Detail phonetic Ge'ez transliteration rules (e.g. `deep fryer` -> `ዲፕ ፍራየር`, `POS` -> `ፒኦኤስ`)
+- [x] Detail canonical homophone normalizer (`ሀ/ሐ/ኀ`, `ሰ/ሠ`, `አ/ዐ`, `ጸ/ፀ`) for search and indexing
+- [x] Detail agent prompt enforcement & deterministic pre-save linter (`/[a-zA-Z]/` zero-Latin check)
+- [x] Detail composer phonetic suggestion chips and Addis AI STT transliteration harmonization
+- [x] Detail novel technical word 4-stage organic learning lifecycle (detection -> persistence -> harvest loop -> user correction)
+- [x] Output complete Section 8 specification content to `docs/specifications/master_specification.md`
+- [ ] User review and confirmation of Section 8
+- [ ] Commit Section 8 to `phase-0-specification`
+- **Status:** in_progress
 
 ### Phase 9: Section 9 - Conversational Agent UI & MUI X Chat Integration
 - [ ] Detail MUI X Chat `ChatBox` configuration, centered composer, and free chat

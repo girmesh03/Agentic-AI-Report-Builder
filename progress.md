@@ -173,18 +173,30 @@ Use this file as the chronological record of work performed, files created, git 
       - Standardized SSE Streaming Protocol with full event catalog (`text_delta`, `tool_call_start`, `tool_call_result`, `report_updated`, `provider_fallback`, `stream_end`, `error`) and 15s keep-alive heartbeat.
       - Engineered stream concurrency lock (`activeChatStreams` in-memory Map) with HTTP 409 rejection and clean interruption endpoint (`POST /chats/:chatId/abort`) utilizing `AbortController`.
       - Detailed context window pruning (sliding 10-message window + summary) and token budgeting for Gemini Free Tier rate limits (15 RPM / 1M TPM / 1500 RPD).
+      - User reviewed and confirmed Section 7.
+      - Committed Section 7 to `phase-0-specification` (`33477ef`).
+    - Section 8 (Workplace Transliteration Engine & In-Context Phonetic Guidance) drafted and integrated into `master_specification.md`:
+      - Detailed sociolinguistic failure modes in Ethiopian field operations (raw Latin leaks, literal translations like `ጥልቅ መጥበሻ`, spelling fragmentation).
+      - Engineered Zero-DB-Table Dynamic Vocabulary Harvesting architecture: ingests last 4 approved reports to dynamically construct `<workplace_glossary>` XML injected into LLM system prompt.
+      - Standardized canonical Ge'ez orthography mapping matrix across kitchen/restaurant equipment, IT/electrical hardware, and operations/inventory supplies.
+      - Specified in-memory canonical homophone normalizer (`ሀ/ሐ/ኀ`, `ሰ/ሠ`, `አ/ዐ`, `ጸ/ፀ`) for search and text indexing resilience.
+      - Specified two-tier zero-Latin guardrail: LLM system prompt directive + deterministic pre-save linter (`reportSchema.pre('save')` regex check `/[a-zA-Z]/`) with automated phonetic fallback.
+      - Detailed in-composer real-time phonetic suggestion chips for QWERTY typing and Addis AI STT transliteration harmonization.
+      - Formalized 4-stage organic learning lifecycle for novel technical words (detection & syllabic phonetics -> document persistence -> dynamic harvest loop -> user correction adaptation).
+      - Updated `implementation_plan.md` recording all 17 active architectural decisions (English UI shell, Amharic content, single-column ChatBox, direct request/response, 17px default font, preset management, new report creation, and novel word lifecycle).
 - Files created/modified:
   - `docs/specifications/master_specification.md`
   - `findings.md`
   - `task_plan.md`
   - `progress.md`
+  - `implementation_plan.md`
 
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 7 drafted and appended to `master_specification.md`; ready for user review before committing. |
-| Where am I going? | User confirmation of Section 7 -> Commit -> Section 8 (Workplace Transliteration Engine & In-Context Phonetic Guidance). |
+| Where am I? | Section 7 committed (`33477ef`); Section 8 drafted in `master_specification.md` and awaiting user review before committing. |
+| Where am I going? | User confirmation of Section 8 -> Commit -> Section 9 (Conversational Agent UI & MUI X Chat Integration). |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Zero-DB-Table dynamic harvesting provides superior domain adaptation over static dictionaries; cross-chat query continuity ensures supervisors can ask multi-branch timeline questions mid-report; strict date attribution on all operational items gives complete chronological tracking. |
-| What have I done? | Drafted Section 7 (850+ lines) in `master_specification.md`; updated `findings.md`, `task_plan.md`, and `progress.md`; preparing user review summary. |
+| What have I learned? | Novel workplace words naturally enter the vocabulary through a 4-stage organic learning cycle without static database tables; English UI shell + Amharic content + single-column ChatBox with 17px font provides optimal supervisory UX. |
+| What have I done? | Formally drafted Section 8 in `master_specification.md`; updated `implementation_plan.md` with all 17 decisions; synchronized `findings.md`, `task_plan.md`, and `progress.md`. |

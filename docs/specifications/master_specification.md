@@ -16,7 +16,7 @@
 5. [Section 5: Chat, Message & Conversation Node Architecture](#section-5-chat-message--conversation-node-architecture)
 6. [Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine](#section-6-audio-pipeline-ffmpeg-preprocessing--addis-ai-stt-engine)
 7. [Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime](#section-7-agentic-reasoning-multi-tier-fallback--gemini-runtime)
-8. *Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance (Pending)*
+8. [Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance](#section-8-workplace-transliteration-engine--in-context-phonetic-guidance)
 9. *Section 9: Conversational Agent UI & MUI X Chat Integration (Pending)*
 10. *Section 10: Frontend Routing, Shell Layout & Component Matrix (Pending)*
 11. *Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes (Pending)*
@@ -4069,5 +4069,371 @@ To ensure continuous operation on the **Google Gemini Free Tier** (15 RPM / 1,00
    - If daily consumption exceeds 80% of the 1,500 RPD limit, the system proactively routes new non-critical analytical requests to Tier 2 (Addis AI) to preserve Gemini quota for real-time voice report drafting.
 
 ---
+
+# Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance
+
+### 8.1 The Transliteration Dilemma in Ethiopian Field Operations
+
+In Ethiopian multi-branch commercial enterprises (such as restaurant chains, supermarkets, retail outlets, diagnostic clinics, and logistics depots), field personnel routinely communicate in a natural blend of spoken Amharic and technical English loan words. Machinery, spare parts, electronic hardware, inventory supplies, and operational procedures are almost universally referred to by their English names.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                      THE THREE TRADITIONAL TRANSLITERATION FAILURES                     │
+├─────────────────────────┬───────────────────────────────┬───────────────────────────────┤
+│ Failure Mode            │ Concrete Example              │ Operational Consequence       │
+├─────────────────────────┼───────────────────────────────┼───────────────────────────────┤
+│ 1. Raw Latin Leaks      │ "የቦሌ deep fryer ተበላሽቷል"     │ Highly unprofessional layout; │
+│                         │                               │ violates corporate plain-text │
+│                         │                               │ report presentation standards.│
+├─────────────────────────┼───────────────────────────────┼───────────────────────────────┤
+│ 2. Literal Translation  │ Translating "deep fryer" to   │ Unrecognizable in the field;  │
+│                         │ "ጥልቅ መጥበሻ" or "POS" to       │ technicians and store managers│
+│                         │ "የመሸጫ ነጥብ ማሽን"            │ never use these terms.        │
+├─────────────────────────┼───────────────────────────────┼───────────────────────────────┤
+│ 3. Inconsistent Ge'ez   │ Supervisor A: "ዲፕ ፍራየር"     │ Search fragmentation; queries │
+│    Spelling             │ Supervisor B: "ዲፕ ፍራይር"     │ for equipment breakdowns miss │
+│                         │ Supervisor C: "ዲፍ ፍራየር"     │ historical maintenance logs.  │
+└─────────────────────────┴───────────────────────────────┴───────────────────────────────┘
+```
+
+#### 8.1.1 The Architectural Solution: Standardized Ge'ez Workplace Transliteration
+The Report Builder permanently resolves this linguistic dilemma through three core operational rules:
+1. **Zero Raw Latin in Reports**: English technical nouns are never left in raw Latin script within the report body.
+2. **Zero Literal Translations**: Technical equipment, hardware parts, and operational roles are never translated into literal, artificial Amharic phrases.
+3. **Standardized Ge'ez Phonetics**: Every technical loan word is phonetically transliterated into its canonical, established workplace Ge'ez syllabary (e.g., `ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`, `ቺለር`, `ጀነሬተር`, `ማይክሮዌቭ`).
+
+---
+
+### 8.2 Zero-DB-Table Dynamic Vocabulary Harvesting Architecture
+
+Traditional linguistic architectures rely on static database tables (e.g., a `Glossary` or `Dictionary` collection) where administrators must manually map English terms to Amharic equivalents. In real-world field operations, this static model fails:
+- Maintaining static tables requires continuous administrative overhead and database migrations.
+- Equipment makes, models, and colloquial pronunciations vary between branch networks and regions.
+- Hardcoded dictionaries cannot keep pace with new machinery or seasonal equipment acquisitions.
+
+```mermaid
+flowchart TD
+    UserReq["User Prompt / Audio Transcription"] --> AgentService["Agent Orchestration Engine"]
+    
+    subgraph ZeroDBHarvesting ["Zero-DB-Table Dynamic Ingestion"]
+        Mongo["MongoDB Report Collection"] -->|"Query Last 4 Approved Reports"| Ingest["Report.find({ user, 'issues.0': { $exists: true } }).limit(4)"]
+        Ingest --> RegexScanner["In-Memory Regex Lexical Extractor"]
+        RegexScanner --> VocabularyMap["Harvested Workplace Vocabulary Map"]
+    end
+    
+    VocabularyMap --> PromptCompiler["System Prompt Compiler"]
+    PromptCompiler --> InjectedPrompt["<workplace_glossary> XML Injected into LLM Context"]
+    InjectedPrompt --> LLM["Gemini 2.5 Flash / Addis AI Fallback"]
+    LLM --> GeneratedReport["100% Pure Ge'ez Operational Report"]
+    GeneratedReport --> PreSaveLinter["Pre-Save Zero-Latin Linter (/[a-zA-Z]/)"]
+    PreSaveLinter --> Database["MongoDB Atomic Save ({ session })"]
+```
+
+#### 8.2.1 The Harvesting Pipeline (`services/vocabularyHarvestService.js`)
+When an operational report or chat response is being compiled, the backend executes an in-memory scan of the user's recent approved reports:
+
+```javascript
+/**
+ * Dynamically extracts verified workplace transliterations from recent approved reports.
+ * Completely eliminates static glossary database tables.
+ * @param {string} userId - Authenticated user ID.
+ * @returns {Promise<string>} Formatted XML string for prompt injection.
+ */
+export const harvestWorkplaceVocabulary = async (userId) => {
+  const recentReports = await Report.find({
+    user: userId,
+    isArchived: false,
+    'issues.0': { $exists: true }
+  })
+  .sort({ reportDate: -1 })
+  .limit(4)
+  .select('branchesVisited activities issues opinions plainTextReport')
+  .lean();
+
+  if (!recentReports || recentReports.length === 0) {
+    return getDefaultWorkplaceGlossaryXml();
+  }
+
+  // Set of verified transliterated terms extracted from historical reports
+  const harvestedTerms = new Set();
+
+  const technicalKeywordsRegex = /(?:ፍራየር|ቺለር|ፍሪዘር|ፒኦኤስ|ጀነሬተር|ማይክሮዌቭ|ኤስፕሬሶ|ዋርመር|ቤንማሪ|ስታብላይዘር|ፋን|ዋይፋይ|ራውተር|ፓምፕ|ስቶክ|ፎይል)/g;
+
+  for (const report of recentReports) {
+    for (const issue of report.issues || []) {
+      const text = `${issue.description} ${issue.solutionDirection || ''}`;
+      const matches = text.match(technicalKeywordsRegex);
+      if (matches) {
+        matches.forEach(term => harvestedTerms.add(term));
+      }
+    }
+    for (const act of report.activities || []) {
+      const matches = act.task.match(technicalKeywordsRegex);
+      if (matches) {
+        matches.forEach(term => harvestedTerms.add(term));
+      }
+    }
+  }
+
+  // Construct in-memory few-shot XML block
+  let xml = '<workplace_glossary>\n';
+  harvestedTerms.forEach(term => {
+    xml += `  <term>${term}</term>\n`;
+  });
+  xml += '</workplace_glossary>';
+
+  return xml;
+};
+```
+
+---
+
+### 8.3 Standardized Ge'ez Orthography & Phonetic Mapping Registry
+
+To guarantee consistency across all reports, searches, and AI generations, the system establishes a canonical **Workplace Transliteration Registry**.
+
+#### 8.3.1 Commercial Kitchen & Restaurant Equipment
+| English Technical Term | Strict Workplace Ge'ez Transliteration | Forbidden Literal Translation (Never Use) |
+| :--- | :--- | :--- |
+| Deep Fryer | **ዲፕ ፍራየር** | ~~ጥልቅ መጥበሻ~~ |
+| Fryer / Fryer Basket | **ፍራየር / የፍራየር ቅርጫት** | ~~መጥበሻ~~ |
+| Chiller | **ቺለር** | ~~አቀዝቃዛ~~ |
+| Freezer / Deep Freezer | **ፍሪዘር / ዲፕ ፍሪዘር** | ~~በረዶ ቤት~~ |
+| Display Warmer | **ዲስፕሌይ ዋርመር** | ~~የምግብ ማሞቂያ ማሳያ~~ |
+| Bain-marie | **ቤንማሪ** | ~~የውሃ ትኩስ ገንዳ~~ |
+| Espresso Machine | **ኤስፕሬሶ ማሽን** | ~~የቡና ማሽን~~ |
+| Microwave Oven | **ማይክሮዌቭ** | ~~ፈጣን ሞገድ ማሞቂያ~~ |
+| Commercial Grill | **ግሪል / የንግድ ግሪል** | ~~መጥበሻ ብረት~~ |
+| Ice Cream Machine | **አይስክሬም ማሽን** | ~~የበረዶ ክሬም ማሽን~~ |
+| Exhaust Fan | **ኤግዞስት ፋን** | ~~የጭስ ማውጫ ማራገቢያ~~ |
+| Blender / Commercial Mixer | **ብሌንደር / ሚክሰር** | ~~መፍጫ~~ |
+| Meat Slicer | **ስላይሰር / የስጋ ስላይሰር** | ~~ስጋ መክተፊያ~~ |
+| Grease Trap | **ግሪስ ትራፕ** | ~~የቅባት መያዣ~~ |
+
+#### 8.3.2 Electronic, IT & Electrical Infrastructure
+| English Technical Term | Strict Workplace Ge'ez Transliteration | Forbidden Literal Translation (Never Use) |
+| :--- | :--- | :--- |
+| POS Machine / Terminal | **ፒኦኤስ ማሽን / ፒኦኤስ** | ~~የመሸጫ ነጥብ ማሽን~~ |
+| Generator | **ጀነሬተር** | ~~የኤሌክትሪክ አመንጪ~~ |
+| Voltage Stabilizer | **ስታብላይዘር** | ~~የኃይል ማመጣጠኛ~~ |
+| Wi-Fi Router | **ዋይፋይ / ራውተር** | ~~ሽቦ አልባ ቋት~~ |
+| CCTV Camera | **ሲሲቲቪ ካሜራ** | ~~የደህንነት ምስል መቅረጫ~~ |
+| Network Switch | **ኔትወርክ ስዊች** | ~~የመረብ መገናኛ~~ |
+| UPS (Uninterruptible Power) | **ዩፒኤስ** | ~~ተጠባባቂ ኃይል~~ |
+| Water Pump | **ዋተር ፓምፕ** | ~~የውሃ መሳቢያ~~ |
+| Water Filter / Cartridge | **ዋተር ፊልተር / ካርትሪጅ** | ~~የውሃ ማጣሪያ~~ |
+
+#### 8.3.3 Operations, Personnel & Inventory Terms
+| English Workplace Term | Strict Workplace Ge'ez Transliteration | Forbidden Literal Translation (Never Use) |
+| :--- | :--- | :--- |
+| Aluminum Foil | **ፎይል / አልሙኒየም ፎይል** | ~~ቀጭን ብረት ወረቀት~~ |
+| Stock / Inventory | **ስቶክ / ኢንቬንተሪ** | ~~ክምችት~~ *(ስቶክ is industry standard)* |
+| Stockout | **ስቶክ አውት** | ~~ክምችት ማለቅ~~ |
+| Cashier | **ካሺየር** | ~~ገንዘብ ተቀባይ~~ |
+| Shift Leader | **ሺፍት ሊደር** | ~~የፈረቃ መሪ~~ |
+| Order Taker | **ኦርደር ቴክተር** | ~~ትዕዛዝ ተቀባይ~~ |
+| Store Keeper | **ስቶር ኪፐር** | ~~የመጋዘን ኃላፊ~~ |
+
+---
+
+### 8.4 Homophonous Ge'ez Character Normalization (Search & Indexing Engine)
+
+Amharic contains historically distinct Ge'ez characters that share identical modern pronunciations. Supervisors frequently interchange these characters when searching or dictating:
+- **`ሀ, ሐ, ኀ`** (All pronounced *ha*)
+- **`አ, ዐ`** (Both pronounced *a*)
+- **`ጸ, ፀ`** (Both pronounced *tse*)
+- **`ሰ, ሠ`** (Both pronounced *se*)
+
+If a supervisor searches for `ማቀዝቀዣ` (with `ዘ`) but the document was saved as `ማቀዝቀዛ` (with `ዛ`), or searches for `አሰራር` while the document contains `ዐሰራር`, standard database string queries fail.
+
+#### 8.4.1 Canonical Normalization Rules (`utils/amharicNormalizer.js`)
+The application implements an in-memory linguistic normalizer applied to all search keywords and text index generation:
+
+```javascript
+/**
+ * Normalizes homophonous Ge'ez characters into canonical forms for search and indexing.
+ * @param {string} text - Raw Amharic text string.
+ * @returns {string} Normalized Amharic text.
+ */
+export const normalizeAmharicPhonetics = (text) => {
+  if (!text || typeof text !== 'string') return '';
+
+  return text
+    // Normalize H-series (ሐ, ኀ -> ሀ)
+    .replace(/[ሐኀ]/g, 'ሀ')
+    .replace(/[ሑኁ]/g, 'ሁ')
+    .replace(/[ሒኂ]/g, 'ሂ')
+    .replace(/[ሓኃ]/g, 'ሃ')
+    .replace(/[ሔኄ]/g, 'ሔ')
+    .replace(/[ሕኅ]/g, 'ህ')
+    .replace(/[ሖኆ]/g, 'ሆ')
+    // Normalize S-series (ሠ -> ሰ)
+    .replace(/ሠ/g, 'ሰ')
+    .replace(/ሡ/g, 'ሱ')
+    .replace(/ሢ/g, 'ሲ')
+    .replace(/ሣ/g, 'ሳ')
+    .replace(/ሤ/g, 'ሴ')
+    .replace(/ሥ/g, 'ስ')
+    .replace(/ሦ/g, 'ሶ')
+    // Normalize A-series (ዐ -> አ)
+    .replace(/ዐ/g, 'አ')
+    .replace(/ዑ/g, 'ኡ')
+    .replace(/ዒ/g, 'ኢ')
+    .replace(/ዓ/g, 'ኣ')
+    .replace(/ዔ/g, 'ኤ')
+    .replace(/ዕ/g, 'እ')
+    .replace(/ዖ/g, 'ኦ')
+    // Normalize Tse-series (ፀ -> ጸ)
+    .replace(/ፀ/g, 'ጸ')
+    .replace(/ፁ/g, 'ጹ')
+    .replace(/ፂ/g, 'ጺ')
+    .replace(/ፃ/g, 'ጻ')
+    .replace(/ፄ/g, 'ጼ')
+    .replace(/ፅ/g, 'ጽ')
+    .replace(/ፆ/g, 'ጾ');
+};
+```
+
+---
+
+### 8.5 Strict Agent Prompt Enforcement & Zero-Latin Script Linter
+
+To guarantee that raw Latin words never leak into finalized reports, the system implements a two-tier defense mechanism:
+
+#### 8.5.1 Tier 1: LLM System Instruction Directive
+The system prompt explicitly commands the model:
+```
+[የቋንቋና የፊደላት ሕግጋት / LINGUISTIC DIRECTIVES]
+1. በሪፖርቱ ውስጥ ምንም ዓይነት የእንግሊዝኛ የላቲን ፊደላት (Latin characters a-z, A-Z) መጠቀም በጥብቅ የተከለከለ ነው።
+2. የቴክኒክና የማሽነሪ መጠሪያዎች በቀጥታ ወደ አማርኛ አይተረጎሙም (ለምሳሌ "deep fryer" ወደ "ጥልቅ መጥበሻ" በፍጹም አይቀየርም)።
+3. ሁሉም የቴክኒክ መጠሪያዎች በስራ ቦታው በሚታወቀው ትክክለኛ የፊደል አጻጻፍ ብቻ በግዕዝ ፊደላት ይጻፉ (ምሳሌ፦ "ዲፕ ፍራየር"፣ "ፒኦኤስ ማሽን"፣ "ቺለር"፣ "ጀነሬተር")።
+```
+
+#### 8.5.2 Tier 2: Deterministic Pre-Save Linter (`models/Report.js`)
+Before any report document is persisted, Mongoose middleware inspects the assembled `plainTextReport`:
+
+```javascript
+reportSchema.pre('save', function (next) {
+  if (this.isModified('plainTextReport') && this.plainTextReport) {
+    // Regex matching any Latin characters, ignoring legitimate URLs
+    const sanitizedText = this.plainTextReport.replace(/https?:\/\/[^\s]+/g, '');
+    const latinMatch = sanitizedText.match(/[a-zA-Z]{2,}/);
+
+    if (latinMatch) {
+      logger.warn(`Zero-Latin Linter Warning: Leaked Latin word '${latinMatch[0]}' detected in report ${this._id}. Triggering phonetic normalization.`);
+      this.plainTextReport = applyPhoneticTransliterationFallback(this.plainTextReport);
+    }
+  }
+  next();
+});
+```
+
+---
+
+### 8.6 In-Context Phonetic Guidance in Chat Composer
+
+Field supervisors frequently type on smartphones or laptops with standard English QWERTY keyboard layouts and no dedicated Amharic keyboard enabled.
+
+#### 8.6.1 Real-Time Composer Suggestion Chips
+As the supervisor types in `<ChatComposerTextArea>`, the client monitors words against the phonetic dictionary:
+- If the user types `deep fryer` or `chiller` or `generator`, an unobtrusive suggestion chip appears above the composer:
+  ```
+  [ 💡 "chiller" ➔ ቺለር | 1-Click Convert ]
+  ```
+- Clicking the chip replaces the English Latin text with its canonical Ge'ez transliteration at the cursor position with zero input lag ($< 5\text{ms}$).
+
+#### 8.6.2 Addis AI STT Transliteration Harmonization
+When voice notes are transcribed via the Addis AI STT engine:
+- Spoken Amharic containing English technical terms is evaluated against the harvested workplace vocabulary.
+- The transcription engine normalizes speech artifacts into the canonical orthography (e.g., ensuring `ዲፕ ፍራየር` is rendered rather than `ዲፍ ፍራየር` or `ዲፕ ፍራይር`).
+
+---
+
+### 8.7 Novel Technical Words & The 4-Stage Organic Learning Lifecycle
+
+When a supervisor encounters and mentions a brand-new machine, imported tool, or chemical that was **never defined anywhere in advance** (e.g., `air fryer`, `sous-vide cooker`, `dough proofer`, `steamer`, `degreaser`, or a new brand like `Rational oven`):
+
+```mermaid
+flowchart TD
+    NewSpoken["Supervisor speaks or types new word: 'air fryer'"] --> Step1["Step 1: Rule-Based Syllabic Transliteration Engine"]
+    Step1 -->|"Converts phonetically (never raw Latin, never literal translation)"| GeEzForm["Generated Ge'ez Form: 'ኤር ፍራየር'"]
+    
+    GeEzForm --> Step2["Step 2: Immediate Persistence in Report Document"]
+    Step2 --> ReportDoc["Saved in MongoDB Report.issues or Report.activities"]
+    
+    ReportDoc --> Step3["Step 3: Promotion into the Dynamic Harvesting Loop"]
+    Step3 --> Harvester["harvestWorkplaceVocabulary(userId) scans last 4 approved reports"]
+    
+    Harvester -->|"Extracts 'ኤር ፍራየር' into <workplace_glossary>"| SystemPrompt["Injected into LLM System Prompt for Next Turns & Next Reports"]
+    SystemPrompt --> Established["Permanently Remembered for this Supervisor!"]
+    
+    subgraph UserCorrection ["Optional: Supervisor Spelling Correction"]
+        UserEdits["Supervisor edits 'ኤር ፍራየር' to 'ኤይር ፍራየር'"] --> SavedNew["Saved to MongoDB"]
+        SavedNew --> NextCycle["Next harvest cycle automatically adopts supervisor's preferred spelling!"]
+    end
+```
+
+#### Step 1: Real-Time Detection & Syllabic Transliteration
+When the supervisor speaks into the microphone (*"የኤር ፍራየሩ (air fryer) ቴምፕሬቸር አልሰራም"*) or types `air fryer`:
+1. The engine's **Rule-Based English-to-Ge'ez Syllabic Transliteration** decomposes the English phonemes into Ge'ez syllables:
+   - `air` $\rightarrow$ `ኤር`
+   - `fryer` $\rightarrow$ `ፍራየር`
+   - Combined $\rightarrow$ `ኤር ፍራየር`
+2. It strictly enforces the core linguistic rule: **never leave it in raw Latin** (`air fryer`) and **never literally translate it** into artificial phrases (`የአየር መጥበሻ`).
+
+#### Step 2: Immediate Persistence in the Active Report
+The newly transliterated term `ኤር ፍራየር` is immediately written into the report document:
+```javascript
+report.issues.push({
+  branch: 'ቦሌ',
+  description: 'የኤር ፍራየር የሙቀት መቆጣጠሪያ ብልሽት',
+  solutionDirection: 'በአዲስ ሊቀየር ታዟል',
+  status: 'reported'
+});
+```
+The supervisor sees it immediately in their draft report preview and chat response.
+
+#### Step 3: Automatic Promotion into the Dynamic Harvest Loop (Zero-DB Architecture)
+- On every prompt and report creation, the backend function `harvestWorkplaceVocabulary(userId)` queries the supervisor's **last 4 approved reports**:
+  ```javascript
+  Report.find({ user: req.user._id, isArchived: false, 'issues.0': { $exists: true } })
+    .sort({ reportDate: -1 })
+    .limit(4);
+  ```
+- Because the supervisor just filed a report containing `ኤር ፍራየር`, that report is now part of the historical dataset.
+- On the **very next turn or report**, the lexical extractor automatically discovers `ኤር ፍራየር` in those past reports, tags it as a verified workplace term, and includes it inside the `<workplace_glossary>` XML injected into the LLM system prompt:
+  ```xml
+  <workplace_glossary>
+    <term>ዲፕ ፍራየር</term>
+    <term>ፒኦኤስ ማሽን</term>
+    <term>ቺለር</term>
+    <term>ኤር ፍራየር</term> <!-- Newly learned term! -->
+  </workplace_glossary>
+  ```
+- From that moment forward, the model treats `ኤር ፍራየር` as an **established, first-class technical term** for that supervisor.
+
+#### Step 4: User Correction Adaptation (Self-Reinforcing Learning)
+What if the supervisor dislikes the AI's first phonetic spelling?
+- Suppose the AI wrote `ኤር ፍራየር`, but the supervisor prefers `ኤይር ፍራየር`.
+- The supervisor simply edits the word via the in-thread `[Edit]` button or the `/reports/:reportId/edit` page.
+- Once saved, `ኤይር ፍራየር` is saved in the latest report document.
+- Because the harvester always samples the most recent reports (`sort({ reportDate: -1 })`), the system **instantly and automatically adopts the supervisor's preferred spelling** on the next harvest cycle!
+
+---
+
+### Summary of Invariants for Section 8
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Zero Database Glossary Tables** | Dynamic few-shot harvesting from last 4 approved reports directly into system prompt. |
+| **Zero Raw Latin Script in Reports** | Pre-save regex linter (`/[a-zA-Z]/`) with automated phonetic fallback. |
+| **Zero Literal Translations** | System prompt directive prohibiting artificial translations (e.g. `ጥልቅ መጥበሻ`). |
+| **Standardized Ge'ez Orthography** | Canonical mapping matrix for all restaurant, kitchen, IT, and maintenance hardware. |
+| **Homophone Search Resilience** | Canonical normalization (`ሀ, ሰ, አ, ጸ`) for all search indexes and query filters. |
+| **Novel Word Learning Loop** | 4-step organic cycle: syllabic phonetics $\rightarrow$ report persistence $\rightarrow$ harvest loop $\rightarrow$ user correction. |
+| **English UI / Amharic Content** | UI controls in 100% English; message/report text in Amharic with 17px default font size. |
+
+---
+
 
 
