@@ -19,7 +19,7 @@
 8. [Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance](#section-8-workplace-transliteration-engine--in-context-phonetic-guidance)
 9. [Section 9: Conversational Agent UI & MUI X Chat Integration](#section-9-conversational-agent-ui--mui-x-chat-integration)
 10. [Section 10: Frontend Routing, Shell Layout & Component Matrix](#section-10-frontend-routing-shell-layout--component-matrix)
-11. *Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes (Pending)*
+11. [Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes](#section-11-rest-api-endpoint-inventory-validation-chains--response-envelopes)
 12. *Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks (Pending)*
 13. *Section 13: Verification Protocols, Quality Gates & Zero-Error Checklists (Pending)*
 14. *Section 14: Deployment, Environment Variables, Locked Dependencies & Execution Roadmap (Pending)*
@@ -328,7 +328,7 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
   - `firstName` and `lastName` are never collected on the registration form.
   - Upon registration, the system extracts the local-part of the email prior to the `@` symbol.
   - Both `firstName` and `lastName` are initialized to this local-part string (e.g., `beza@gmail.com` $\rightarrow$ `firstName: "beza"`, `lastName: "beza"`).
-  - The supervisor may subsequently customize their first and last names via the Profile tab in `/settings`.
+  - The supervisor may subsequently customize their first and last names via the `/profile` page.
 - **Mongoose Virtual `fullName`**:
   ```javascript
   userSchema.virtual('fullName').get(function () {
@@ -664,8 +664,8 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 - **Multi-Device Support**: Only the active device's session row is revoked. Other devices belonging to the user maintain distinct token families and remain logged in.
 - Returns HTTP 200 `OK` (`{ success: true, message: "Logged out successfully", data: null }`).
 
-#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue (`client/src/redux/features/apiSlice.js`)
-- Implemented inside `client/src/redux/features/apiSlice.js` using a custom RTK Query base query wrapper:
+#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue (`client/src/features/api/apiSlice.js`)
+- Implemented inside `client/src/features/api/apiSlice.js` using a custom RTK Query base query wrapper:
   ```javascript
   import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
   import { Mutex } from 'async-mutex';
@@ -742,11 +742,11 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 ---
 
-### 2.5 Security, Endpoints & Settings Account Management
+### 2.5 Security, Endpoints & Profile Account Management
 
 #### 2.5.1 Profile Information Update (`PATCH /api/v1/auth/profile`)
 - **Route**: `PATCH /api/v1/auth/profile` (Protected, requires active auth cookie).
-- **Location**: Accessed via the **Profile** tab in `/settings`.
+- **Location**: Accessed via the **Profile Information** card on the dedicated `/profile` page.
 - **UI Form Controls**:
   - Built with `react-hook-form` (`mode: 'onBlur'`).
   - Inputs use `size="small"` with dedicated start adornments:
@@ -798,7 +798,7 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 #### 2.5.2 Password Change (`PATCH /api/v1/auth/password`)
 - **Route**: `PATCH /api/v1/auth/password` (Protected).
-- **Location**: Accessed via the Security tab in `/settings`.
+- **Location**: Accessed via the **Security & Credentials** section on the `/profile` page.
 - **Validation**:
   - `body('currentPassword').notEmpty()`
   - `body('newPassword').isLength({ min: 8 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)`
@@ -826,7 +826,7 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 #### 2.5.4 User Account Self-Service Deletion Protocol (`DELETE /api/v1/users/me`)
 - **Route**: `DELETE /api/v1/users/me` (Protected).
-- **Location**: Triggered from the "Delete Account" tab in `/settings`, requiring confirmation of the user's password and a confirmation dialog (`MuiConfirmDialog`).
+- **Location**: Triggered from the **Danger Zone** on the `/profile` page, requiring confirmation of the user's password and a confirmation dialog (`MuiConfirmDialog`).
 - **Atomic 7-Collection Cascade Transaction**:
   - The deletion of an account must permanently purge all associated resources across the entire database without leaving orphaned records.
   - The operation executes within `session.withTransaction(...)`:
@@ -2255,7 +2255,7 @@ The application provides persistent entry points and layout rules ensuring super
 #### 5.4.1 Permanent Sidebar "New Chat" Button & Mini-Rail Adaptation
 - **Expanded Drawer State**: A full-width, high-visibility button (`[ + New Chat ]`) rendered with Material-UI `Button` (variant `contained`, startIcon `AddIcon`).
 - **Collapsed Mini-Rail State (64px width)**: When the sidebar collapses to the compact icon rail on desktop, the button automatically transforms into an icon-only button wrapped in a Material-UI `Tooltip` (`title="New Chat"`, `placement="right"`).
-- **Universal Availability**: The button remains anchored at the top of the sidebar across all views (`/reports`, `/branches`, `/settings`, `/chat/:chatId`), giving the supervisor instant 1-click access to a new conversation without navigating through intermediate screens.
+- **Universal Availability**: The button remains anchored at the top of the sidebar across all views (`/reports`, `/branches`, `/profile`, `/chat/:chatId`), giving the supervisor instant 1-click access to a new conversation without navigating through intermediate screens.
 
 #### 5.4.2 Chat View Outlet Architecture & Zero Inner Chat Header
 - **Single Header Invariant**: The Chat View rendered via React Router `<Outlet />` inside `AppShell` deliberately possesses **zero inner chat header**.
@@ -4464,7 +4464,7 @@ The interaction architecture follows a clean, direct **Request/Response Model**:
 The chat interface mounts directly into the `AppShell` main content outlet (`<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>`):
 - **Single Global App Bar**: The top sticky `MuiAppbar` of the `AppShell` serves as the sole, authoritative header for the application.
 - **Zero Duplicate Header**: The `<ChatBox>` component is explicitly configured with `features={{ conversationHeader: false }}`, completely removing the inner chat header, subtitle, and action toolbar. Stacked double-headers are strictly prohibited.
-- **Top App Bar Controls**: The global `AppShell` header houses the **Preset Selector** (`[Preset: Operations Assistant ▾]`), font size scaling controls (`[ A- A+ ]`), and the User Avatar/Profile menu.
+- **Top App Bar Controls**: The global `AppShell` header houses strictly 3 controls on the right: the Global Search icon (`[ 🔍 ]`), Theme Toggle (`[ 🌓 ]`), and the User Avatar/Profile menu. The sidebar collapse/toggle is located on the Sidebar header itself. The Model Selector and Preset Selector live inside the Chat Composer and Chat View toolbar.
 
 #### 9.1.5 General Chat vs Report Chat Symmetrical Layout
 The application maintains two specialized conversational modes that share the exact same single-column `<ChatBox>` foundation:
@@ -4485,9 +4485,9 @@ The application maintains two specialized conversational modes that share the ex
 ##### Wireframe 1: General Chat (`type: 'general'`)
 ```
 +-------------------------------------------------------------------------------------------------------------------+
-| [☰] Report Builder   [Preset: Operations Assistant ▾]                    [ A- A+ ]   [ 🔔 ]   [ User Avatar ▾ ]   |  <-- AppShell AppBar
+| Report Builder                                                    [ 🔍 ]   [ 🌓 ]   [ User Avatar ▾ ]             |  <-- AppShell AppBar (Clean 3 controls, toggle is on sidebar)
 +--------------+----------------------------------------------------------------------------------------------------+
-| [ + New Rpt ]|                                                                                                    |
+| [ < Collapse]|                                                                                                    |
 | [ + New Chat]|  [ 🤖 AI Operations Assistant ]                                                                     |
 |              |  +-----------------------------------------------------------------------------------------------+  |
 | DASHBOARD    |  | ሰላም ግርማ! በዛሬው ዕለት በሁሉም ብራንቾች የተመዘገቡ ዋና ዋና የአሰራር ጉዳዮችን እና የሽያጭ ሁኔታዎችን መመልከት ትችላለህ።     |  |  <-- Agent on LEFT
@@ -4507,9 +4507,9 @@ The application maintains two specialized conversational modes that share the ex
 | • Sarbet     |  | [ Branch Comparison Matrix ]                                                                  |  |
 | • CMC        |  | +-------------+----------------------+--------------------+--------------------+            |  |
 |              |  | | Branch      | Equipment Issue      | Severity           | Action Taken       |            |  |
-| SETTINGS     |  | +-------------+----------------------+--------------------+--------------------+            |  |
+| PROFILE      |  | +-------------+----------------------+--------------------+--------------------+            |  |
 | • Profile    |  | | Bole        | ቺለር የሙቀት መጨመር  | High (አፋጣኝ)       | ቴክኒሻን ተጠርቷል    |            |  |
-| • Presets    |  | | Sarbet      | ፒኦኤስ ማሽን መቆራረጥ  | Medium             | በሞባይል ዳታ ተተክቷል |            |  |
+|              |  | | Sarbet      | ፒኦኤስ ማሽን መቆራረጥ  | Medium             | በሞባይል ዳታ ተተክቷል |            |  |
 |              |  | +-------------+----------------------+--------------------+--------------------+            |  |
 |              |  |                                                                                               |  |
 |              |  | [ 📄 View Bole Report ]   [ 📄 View Sarbet Report ]   [ 📊 Export to Google Sheets ]            |  |  <-- Action Cards
@@ -4528,9 +4528,9 @@ The application maintains two specialized conversational modes that share the ex
 ##### Wireframe 2: Report Chat (`type: 'report'`)
 ```
 +-------------------------------------------------------------------------------------------------------------------+
-| [☰] Report Builder   [ Report Co-Pilot: Bole Branch (19-01-2016 ዓ.ም) ]          [ A- A+ ]   [ 🔔 ]   [ User Avatar ▾ ]   |  <-- AppShell AppBar
+| Report Builder                                                    [ 🔍 ]   [ 🌓 ]   [ User Avatar ▾ ]             |  <-- AppShell AppBar (Clean 3 controls, toggle is on sidebar)
 +--------------+----------------------------------------------------------------------------------------------------+
-| [ + New Rpt ]|                                                                                                    |
+| [ < Collapse]|                                                                                                    |
 | [ + New Chat]|  [ 🤖 AI Report Co-Pilot ]                                                                         |
 |              |  +-----------------------------------------------------------------------------------------------+  |
 | DASHBOARD    |  | የቦሌ ብራንች የ 19-01-2016 ዓ.ም የቁጥጥር ሪፖርት ረቂቅ ተዘጋጅቷል። 4 ስራዎች እና 1 ችግር ተመዝግቧል።           |  |  <-- Agent on LEFT
@@ -4632,7 +4632,7 @@ Rendering Ethiopic Fidel characters requires careful typographic tuning to elimi
 
 #### 9.2.3 Dynamic Font-Size Scaling Subsystem
 To ensure maximum comfort for field personnel working in varying lighting conditions, the UI includes a global font-size scaling mechanism:
-- **Header Controls**: Located in the top `AppShell` `AppBar` as `[ A- A+ ]` buttons.
+- **Configuration Controls**: Located inside the User Preferences tab of the `/profile` route (`MuiSelect` font size dropdown: Small 15px, Normal 17px [default], Large 19px, Extra Large 21px). The top `MuiAppbar` remains ultra-clean and contains zero font stepper buttons.
 - **State Definition**: Managed in Redux `themeSlice.fontSizeDelta` with values `-2`, `0` (default), `+2`, `+4`:
   - `fontSizeDelta: -2` $\rightarrow$ Base size **15px** (`lineHeight: 1.65`).
   - `fontSizeDelta: 0` $\rightarrow$ Base size **17px** (`lineHeight: 1.75`) — **Default**.
@@ -5102,18 +5102,19 @@ PRESET DIALOG - STATE 2: REACT-HOOK-FORM CREATION
 ---
 
 
-### 9.7 The 10-Row Symmetrical Report Initiation Form (`/reports/new`)
+### 9.7 The In-Canvas 10-Row Symmetrical Report Initiation Form
 
-#### 9.7.1 Form Architecture & Two-Column Split Layout
-While chat is single-column, the **Report Initiation Form** at `/reports/new` is a dedicated, high-productivity structured entry page utilizing a **Two-Column Split Layout**:
+#### 9.7.1 Form Architecture & Two-Column In-Canvas Canvas Layout
+Report creation is hosted strictly **in-canvas within `/chat`** (zero `/reports/new` standalone page). When the supervisor clicks `[ + New Report ]`, the centered composer temporarily hides and the **In-Canvas 10-Row Report Initiation Form** mounts directly in the conversational outlet:
 - **Left Column (60% width)**: The 10-row structured input form with pickers, autocomplete, audio ingestion, and task tables.
 - **Right Column (40% width)**: Sticky, real-time live preview of the assembled **Plain-Text Amharic Report**. As the supervisor selects branches, times, or issues, the locked Amharic text updates deterministically before their eyes.
+- **Lifecycle & Dismissal**: Clicking `[ Cancel ]` prompts an `MuiConfirmDialog` (if dirty) and restores the normal composer; clicking `[ Submit ]` validates fields, dismisses the form, restores the composer in streaming state, and initiates the SSE agent turn.
 
 #### 9.7.2 Row-by-Row Field Specification
 
 ```
 +--------------------------------------------------------------------------------------------------------------------+
-| The 10-Row Symmetrical Report Initiation Surface (/reports/new)                                                    |
+| The In-Canvas 10-Row Symmetrical Report Initiation Surface (Mounted in /chat)                                      |
 +--------------------------------------------------------------------------------------------------------------------+
 | Row 1: Ethiopian Date Picker                                                                                       |
 |   [ 📅 19-01-2016 ዓ.ም ]  (Bidirectionally synced with Gregorian: 29-09-2024 UTC)                                   |
@@ -5556,7 +5557,7 @@ Complete catalog of the 13 standardized UI component wrappers:
 | **`LoadingSpinner`** | `reusable/LoadingSpinner.jsx` | Standardized centered loading spinner for async transitions and lazy-loaded routes. |
 | **`MuiDialog`** | `reusable/MuiDialog.jsx` | Accessible modal wrapper with standardized header (title + close button), scrollable `DialogContent`, and standardized `DialogActions` buttons with loading/disabled states. |
 | **`MuiSelect`** | `reusable/MuiSelect.jsx` | Dropdown select component with Start icon adornment, dropdown chevron, and inline `helperText`. |
-| **`MuiAutoComplete`** | `reusable/MuiAutoComplete.jsx` | Free-solo autocomplete with Start contextual icon, clear End adornment, and async search loading. |
+| **`MuiAutocomplete`** | `reusable/MuiAutocomplete.jsx` | Free-solo autocomplete with Start contextual icon, clear End adornment, and async search loading. |
 | **`Logo`** | `reusable/Logo.jsx` | Application brand component combining vector icon and "Report Builder" typography. |
 
 ---
@@ -5609,10 +5610,1172 @@ client/src/
 | **Global Search Dialog Positioning** | Absolute fullscreen on `xs` and `sm-landscape`; centered modal on `sm+`. Dialog container never scrolls; only `DialogContent` scrolls. |
 | **Clean App Bar Right Controls** | AppShell AppBar right side strictly limited to Global Search, Theme Toggle, and User Avatar (zero bell notifications, zero font steppers). |
 | **Universal `xs` Control Iconification** | All text-labeled buttons and compound controls collapse into compact icon-only buttons with tooltips on `xs` (<600px). |
-| **Universal Start & End Adornments** | All input wrappers (`MuiTextField`, `MuiSelect`, `MuiAutoComplete`) feature contextual Start icons and functional End clear/toggle icons. |
+| **Universal Start & End Adornments** | All input wrappers (`MuiTextField`, `MuiSelect`, `MuiAutocomplete`) feature contextual Start icons and functional End clear/toggle icons. |
 | **Standardized Dialog Actions** | `MuiDialog` provides standardized action buttons (`[ Cancel ]` and `[ Confirm/Save ]`) with loading and disabled states. |
 | **Domain-Based Architecture** | Features segregated into `features/auth`, `features/dashboard`, `features/reports`, `features/branches`, `features/chats`, and `features/theme`. |
 
 ---
 
+# Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes
 
+### 11.1 Architectural Principles & Envelope Specifications
+
+The Report Builder backend exposes a strictly contract-driven, RESTful HTTP API mounted universally under the `/api/v1` namespace. Every communication exchange between the React frontend and the Express backend adheres to an immutable envelope protocol, deterministic status code mappings, and strict schema validation boundaries.
+
+#### 11.1.1 The Standard Response Envelope
+All non-streaming HTTP responses (both successful operations and recoverable errors) are wrapped in the standard three-key JSON envelope:
+
+```json
+{
+  "success": true,
+  "message": "Operation completed successfully",
+  "data": {}
+}
+```
+
+- **`success`** (`boolean`): Universal discriminant flag. `true` for 2xx status codes; `false` for 4xx and 5xx status codes.
+- **`message`** (`string`): Human-readable operational description in 100% English. Sourced from centralized response message constants (`constants/messages.js`).
+- **`data`** (`object | array | null`): Operational payload. Contains the created/retrieved DTO, or `null` for deletions, logouts, or errors without payloads.
+
+#### 11.1.2 The Paginated List Response Envelope
+All collection listing endpoints (Branches, Reports, Chats, Presets) utilize `mongoose-paginate-v2` to enforce bounded data retrieval. The paginated payload is standardized inside `data`:
+
+```json
+{
+  "success": true,
+  "message": "Reports retrieved successfully",
+  "data": {
+    "docs": [
+      {
+        "_id": "651f1b2c4f1a2b3c4d5e6f7a",
+        "date": "19-01-2016",
+        "primaryBranch": {
+          "_id": "651f1b2c4f1a2b3c4d5e6f10",
+          "name": "Bole Branch"
+        },
+        "status": "draft",
+        "createdAt": "2024-09-29T08:30:00.000Z",
+        "updatedAt": "2024-09-29T09:15:00.000Z"
+      }
+    ],
+    "totalDocs": 42,
+    "limit": 10,
+    "page": 1,
+    "totalPages": 5,
+    "pagingCounter": 1,
+    "hasPrevPage": false,
+    "hasNextPage": true,
+    "prevPage": null,
+    "nextPage": 2
+  }
+}
+```
+
+- **Pagination Defaults**: `page = 1`, `limit = 10`.
+- **Upper Bound**: `limit` is strictly clamped to a maximum of `100` via `express-validator`. Any request specifying `limit > 100` fails validation with HTTP 422.
+- **Sorting Default**: Unspecified sort parameters default to `-createdAt` (or `-date` for Reports).
+
+#### 11.1.3 Server-Sent Events (SSE) Stream Envelope
+Interactive conversational turns (`POST /api/v1/chats/:chatId/messages`) bypass standard JSON serialization and establish a long-lived HTTP connection using `Content-Type: text/event-stream`. SSE messages are formatted as typed event blocks:
+
+```text
+event: text_delta
+data: {"content": "የቦሌ "}
+
+event: text_delta
+data: {"content": "ብራንች "}
+
+event: tool_call
+data: {"tool": "synthesize_report", "input": {"branchId": "651f1b2c4f1a2b3c4d5e6f10"}}
+
+event: report_card
+data: {"reportId": "651f1b2c4f1a2b3c4d5e6f7a", "title": "Bole Branch Daily Report", "summary": "4 tasks completed, 1 issue recorded"}
+
+event: done
+data: {"messageId": "651f1b2c4f1a2b3c4d5e6f88", "totalTokens": 384, "latencyMs": 1420}
+```
+
+- **Event Types**:
+  - `text_delta`: Incremental plain-text token emitted by the active LLM runtime.
+  - `tool_call`: Live notification of agent tool invocation.
+  - `report_card`: Synthesis completion event payload containing the structured report summary.
+  - `done`: Final stream lifecycle terminator with metadata and token usage.
+  - `error`: Stream-aborted error packet with recoverable context.
+
+---
+
+### 11.2 Error Pipeline, Format & Status Codes
+
+#### 11.2.1 Centralized Error Handling Pipeline
+The backend enforces a strict **Zero-Direct-Error-Response Law**:
+1. **Controller Layer**: Controllers and middlewares never serialize error responses directly via `res.status(...).json(...)`.
+2. **Error Forwarding**: All exceptions, validation failures, and database errors are forwarded downstream via `next(error)`.
+3. **Async Error Catching**: Route handlers are wrapped in `asyncHandler` or utilize native Express 5 promise rejection forwarding to guarantee zero unhandled promise rejections.
+4. **Centralized Middleware (`middlewares/errorHandler.js`)**: Serves as the sole exit point for application errors. It logs the full stack trace via Winston (at `error` or `warn` level), sanitizes internal server details in production, and formats the standardized error envelope.
+
+#### 11.2.2 Canonical HTTP Status Codes (`config/httpStatus.js`)
+Numeric HTTP status literals (e.g. `200`, `404`, `500`) are **strictly prohibited** in controller and service code. All status codes are imported from the immutable `HTTP_STATUS` dictionary:
+
+```javascript
+/**
+ * @module config/httpStatus
+ * @description Centralized immutable HTTP status code dictionary.
+ */
+export const HTTP_STATUS = Object.freeze({
+  OK: 200,
+  CREATED: 201,
+  ACCEPTED: 202,
+  NO_CONTENT: 204,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE_ENTITY: 422,
+  TOO_MANY_REQUESTS: 429,
+  INTERNAL_SERVER_ERROR: 500,
+  BAD_GATEWAY: 502,
+  SERVICE_UNAVAILABLE: 503,
+});
+```
+
+#### 11.2.3 Error Envelope & 422 Validation Details
+When a request fails business validation or `express-validator` schema rules, the centralized error handler returns HTTP 422 (`HTTP_STATUS.UNPROCESSABLE_ENTITY`) containing an explicit `details` array:
+
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "data": null,
+  "details": [
+    {
+      "field": "clockOut",
+      "message": "Clock-out time must be after clock-in time"
+    },
+    {
+      "field": "primaryBranch",
+      "message": "Primary branch must be a valid Mongo ObjectId"
+    }
+  ]
+}
+```
+
+For unexpected runtime exceptions (HTTP 500):
+- In `production`: Returns `{ success: false, message: "Internal server error occurred", data: null }`.
+- In `development`: Appends `stack: error.stack` to aid rapid debugging.
+
+---
+
+### 11.3 Rate Limiting Matrix & Enforcers
+
+API rate limiting is configured via `express-rate-limit` using distinct memory stores and sliding window algorithms to protect server resources and third-party AI quotas.
+
+| Limiter Tier | Target Endpoints | Window | Max Requests | Key Generator | Rejection Response |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Health Tier** | `/health`, `/api/v1/health` | — | **Exempt** (Unlimited) | N/A | Never rate-limited. |
+| **Auth Tier** | `/api/v1/auth/login`<br>`/api/v1/auth/register`<br>`/api/v1/auth/refresh` | 15 minutes | **10 requests** | Client IP (`req.ip`) | HTTP 429 with bilingual message. |
+| **CRUD Tier** | `/api/v1/branches/*`<br>`/api/v1/reports/*`<br>`/api/v1/users/*`<br>`/api/v1/presets/*` | 15 minutes | **300 requests** | User ID (`req.user._id.toString()`) | HTTP 429 with bilingual message. |
+| **AI Stream Tier** | `/api/v1/chats/:chatId/messages` | 1 minute | **10 requests** (Burst) | User ID (`req.user._id.toString()`) | HTTP 429 with bilingual message. |
+| **Audio Ephemeral** | `/api/v1/audio/transcribe` | 15 minutes | **20 requests** | User ID (`req.user._id.toString()`) | HTTP 429 with bilingual message. |
+
+#### 11.3.1 Standardized 429 Bilingual Envelope
+When a client exceeds their designated rate threshold, the rate limiter emits HTTP 429 (`HTTP_STATUS.TOO_MANY_REQUESTS`):
+
+```json
+{
+  "success": false,
+  "message": "Rate limit exceeded. እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።",
+  "data": null
+}
+```
+
+---
+
+### 11.4 Full REST API Endpoint Inventory & Validation Chains
+
+Every endpoint defined below is cataloged with its exact HTTP method, path, authentication requirement, rate limiter tier, validation schema, execution logic, and response schema.
+
+```
+====================================================================================================
+1. SYSTEM & HEALTH
+====================================================================================================
+```
+
+#### 11.4.1 Health Check (`GET /health`)
+- **Path**: `GET /health` (also mounted at `GET /api/v1/health`)
+- **Auth Guard**: Public (Zero authentication required).
+- **Rate Limit Tier**: Health Tier (Exempt).
+- **Validation**: None.
+- **Handler Logic**: Checks MongoDB connection state (`mongoose.connection.readyState === 1`) and Node.js process uptime.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Server is healthy",
+    "data": {
+      "status": "up",
+      "timestamp": "2024-09-29T10:00:00.000Z",
+      "uptimeSeconds": 14285.4,
+      "database": "connected"
+    }
+  }
+  ```
+
+```
+====================================================================================================
+2. AUTHENTICATION & SESSION LIFECYCLE (/api/v1/auth)
+====================================================================================================
+```
+
+#### 11.4.2 User Registration (`POST /api/v1/auth/register`)
+- **Path**: `POST /api/v1/auth/register`
+- **Auth Guard**: Public.
+- **Rate Limit Tier**: Auth Tier (10 req / 15 min / IP).
+- **Validation Chain (`express-validator`)**:
+  - `body('email')`: `.trim().isEmail().normalizeEmail().withMessage('Valid email address is required')`
+  - `body('password')`: `.isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')`
+  - `body('confirmPassword')`: `.custom((value, { req }) => value === req.body.password).withMessage('Passwords do not match')`
+  - `body('fullName')`: `.optional().trim().isLength({ min: 2, max: 100 }).withMessage('Full name must be between 2 and 100 characters')`
+- **Handler Logic**:
+  1. Checks if user email already exists. If found, throws `ConflictError` (HTTP 409).
+  2. Hashes password via bcrypt (salt rounds: 12).
+  3. Creates user record in database.
+  4. Deliberately does NOT log the user in or set auth cookies.
+- **Success Status**: `HTTP_STATUS.CREATED` (201).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Registration successful. Please log in with your credentials.",
+    "data": {
+      "_id": "651f1b2c4f1a2b3c4d5e6f01",
+      "email": "supervisor@enjoyburger.com",
+      "fullName": "Girma Tesfaye"
+    }
+  }
+  ```
+
+#### 11.4.3 Email/Password Login (`POST /api/v1/auth/login`)
+- **Path**: `POST /api/v1/auth/login`
+- **Auth Guard**: Public.
+- **Rate Limit Tier**: Auth Tier (10 req / 15 min / IP).
+- **Validation Chain (`express-validator`)**:
+  - `body('email')`: `.trim().isEmail().normalizeEmail().withMessage('Valid email is required')`
+  - `body('password')`: `.notEmpty().withMessage('Password is required')`
+- **Handler Logic**:
+  1. Finds user by email with `passwordHash` selected (`.select('+passwordHash')`).
+  2. Compares password via bcrypt. If invalid, throws `UnauthorizedError` (HTTP 401).
+  3. Generates 15-minute `accessToken` and 7-day `refreshToken`.
+  4. Hashes `refreshToken` with SHA-256 and persists a new active session row in `RefreshToken` collection.
+  5. Sets `accessToken` httpOnly cookie (`path: '/'`, `maxAge: 15m`).
+  6. Sets `refreshToken` httpOnly cookie (`path: '/api/v1/auth'`, `maxAge: 7d`).
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Logged in successfully",
+    "data": {
+      "user": {
+        "_id": "651f1b2c4f1a2b3c4d5e6f01",
+        "email": "supervisor@enjoyburger.com",
+        "fullName": "Girma Tesfaye",
+        "position": "Area Supervisor",
+        "avatarUrl": "/api/v1/auth/avatar"
+      }
+    }
+  }
+  ```
+
+#### 11.4.4 Token Family Refresh (`POST /api/v1/auth/refresh`)
+- **Path**: `POST /api/v1/auth/refresh`
+- **Auth Guard**: Public (Reads `refreshToken` cookie from request).
+- **Rate Limit Tier**: Auth Tier (10 req / 15 min / IP).
+- **Validation**:
+  - Validates presence of `req.cookies.refreshToken`. If missing, throws `UnauthorizedError` (HTTP 401).
+- **Handler Logic**:
+  1. Verifies JWT signature using `JWT_REFRESH_SECRET`.
+  2. Computes SHA-256 hash of incoming token.
+  3. Queries `RefreshToken` collection.
+  4. If record is marked `isRevoked: true` (Reuse Detection Triggered): Invalidate entire token family for that user and clear all auth cookies. Throw HTTP 401.
+  5. Rotates session: Marks old token revoked, generates fresh token pair, persists new token hash.
+  6. Updates both httpOnly cookies.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Tokens refreshed successfully",
+    "data": {
+      "user": {
+        "_id": "651f1b2c4f1a2b3c4d5e6f01",
+        "email": "supervisor@enjoyburger.com",
+        "fullName": "Girma Tesfaye"
+      }
+    }
+  }
+  ```
+
+#### 11.4.5 Logout (`POST /api/v1/auth/logout`)
+- **Path**: `POST /api/v1/auth/logout`
+- **Auth Guard**: Public / Cookie-based.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation**: None.
+- **Handler Logic**:
+  1. Reads `req.cookies.refreshToken`.
+  2. If present, hashes token and marks `isRevoked: true` on that active device's session.
+  3. Clears `accessToken` cookie (`path: '/'`).
+  4. Clears `refreshToken` cookie (`path: '/api/v1/auth'`).
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Logged out successfully",
+    "data": null
+  }
+  ```
+
+#### 11.4.6 Google OAuth Authorization URL (`GET /api/v1/auth/google/url`)
+- **Path**: `GET /api/v1/auth/google/url`
+- **Auth Guard**: Public.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation**: None.
+- **Handler Logic**: Generates Google OAuth 2.0 authorization URL with cryptographically secure random `state` and PKCE `code_challenge`, requesting `openid`, `email`, `profile`, and `https://www.googleapis.com/auth/drive.file` scopes.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Google authorization URL generated",
+    "data": {
+      "url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&response_type=code&scope=...&state=...&code_challenge=..."
+    }
+  }
+  ```
+
+#### 11.4.7 Google OAuth Callback Exchange (`POST /api/v1/auth/google/callback`)
+- **Path**: `POST /api/v1/auth/google/callback`
+- **Auth Guard**: Public.
+- **Rate Limit Tier**: Auth Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('code')`: `.notEmpty().withMessage('Authorization code is required')`
+  - `body('state')`: `.notEmpty().withMessage('State parameter is required')`
+  - `body('codeVerifier')`: `.notEmpty().withMessage('PKCE code verifier is required')`
+- **Handler Logic**:
+  1. Verifies state against session/cookie.
+  2. Exchanges authorization code + `codeVerifier` for Google access and refresh tokens.
+  3. Fetches user profile from Google UserInfo endpoint.
+  4. Upserts user in database (associating Google ID and storing encrypted Google OAuth refresh token for Drive exports).
+  5. Generates application JWT token pair, sets httpOnly cookies.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Authenticated successfully with Google",
+    "data": {
+      "user": {
+        "_id": "651f1b2c4f1a2b3c4d5e6f01",
+        "email": "supervisor@enjoyburger.com",
+        "fullName": "Girma Tesfaye",
+        "avatarUrl": "/api/v1/auth/avatar"
+      }
+    }
+  }
+  ```
+
+#### 11.4.8 Authenticated User Avatar Stream (`GET /api/v1/auth/avatar`)
+- **Path**: `GET /api/v1/auth/avatar`
+- **Auth Guard**: Authenticated (`authenticate` middleware).
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation**: None.
+- **Handler Logic**:
+  1. Reads user's stored avatar path from database.
+  2. Streams image directly from secure local storage (`uploads/avatars/`).
+  3. If no custom avatar exists, returns HTTP 204 or a standardized SVG placeholder with user initials.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response**: Binary image stream (`image/jpeg`, `image/png`, `image/webp`).
+
+```
+====================================================================================================
+3. USER SELF-SERVICE & PROFILE (/api/v1/users)
+====================================================================================================
+```
+
+#### 11.4.9 Get Current User Profile (`GET /api/v1/users/me`)
+- **Path**: `GET /api/v1/users/me`
+- **Auth Guard**: Authenticated (`authenticate` middleware).
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation**: None.
+- **Handler Logic**: Queries User collection by `req.user._id.toString()`. Excludes sensitive fields (`passwordHash`, `googleRefreshToken`).
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "User profile retrieved successfully",
+    "data": {
+      "_id": "651f1b2c4f1a2b3c4d5e6f01",
+      "email": "supervisor@enjoyburger.com",
+      "fullName": "Girma Tesfaye",
+      "phone": "+251911223344",
+      "position": "Area Supervisor",
+      "avatarUrl": "/api/v1/auth/avatar",
+      "preferences": {
+        "theme": "dark",
+        "fontSizeDelta": 0,
+        "defaultPreset": "651f1b2c4f1a2b3c4d5e6f99"
+      },
+      "createdAt": "2024-09-01T08:00:00.000Z"
+    }
+  }
+  ```
+
+#### 11.4.10 Update Current User Profile (`PATCH /api/v1/users/me`)
+- **Path**: `PATCH /api/v1/users/me`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('fullName')`: `.optional().trim().isLength({ min: 2, max: 100 }).withMessage('Full name must be 2-100 characters')`
+  - `body('phone')`: `.optional().trim().matches(/^\+251[0-9]{9}$/).withMessage('Phone must be a valid Ethiopian phone number (+251...)')`
+  - `body('position')`: `.optional().trim().isLength({ max: 100 }).withMessage('Position cannot exceed 100 characters')`
+  - `body('preferences')`: `.optional().isObject().withMessage('Preferences must be an object')`
+  - `body('preferences.theme')`: `.optional().isIn(['light', 'dark']).withMessage('Theme must be light or dark')`
+  - `body('preferences.fontSizeDelta')`: `.optional().isIn([-2, 0, 2, 4]).withMessage('Invalid font size delta')`
+- **Handler Logic**: Updates allowed profile fields. Email is immutable and rejected if included in body.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Profile updated successfully",
+    "data": {
+      "_id": "651f1b2c4f1a2b3c4d5e6f01",
+      "fullName": "Girma Tesfaye",
+      "phone": "+251911223344",
+      "position": "Senior Area Supervisor",
+      "preferences": {
+        "theme": "dark",
+        "fontSizeDelta": 2
+      }
+    }
+  }
+  ```
+
+#### 11.4.11 Upload Profile Avatar (`POST /api/v1/users/me/avatar`)
+- **Path**: `POST /api/v1/users/me/avatar`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Multer Middleware**: `uploadAvatar.single('avatar')` (Limits: max `15MB`, MIME types: `image/jpeg`, `image/png`, `image/webp`).
+- **Validation Chain (`express-validator`)**:
+  - Validates that `req.file` exists.
+- **Handler Logic**:
+  1. Converts uploaded image to standardized 400x400 WebP square avatar via Sharp.
+  2. Saves optimized file to `uploads/avatars/${userId}.webp`.
+  3. Updates user document `avatarUrl = '/api/v1/auth/avatar'`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Avatar uploaded successfully",
+    "data": {
+      "avatarUrl": "/api/v1/auth/avatar"
+    }
+  }
+  ```
+
+#### 11.4.12 Change Password (`PUT /api/v1/users/me/password`)
+- **Path**: `PUT /api/v1/users/me/password`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: Auth Tier (10 req / 15 min).
+- **Validation Chain (`express-validator`)**:
+  - `body('currentPassword')`: `.notEmpty().withMessage('Current password is required')`
+  - `body('newPassword')`: `.isLength({ min: 8 }).withMessage('New password must be at least 8 characters long')`
+  - `body('confirmPassword')`: `.custom((val, { req }) => val === req.body.newPassword).withMessage('Passwords do not match')`
+- **Handler Logic**:
+  1. Retrieves user with password hash.
+  2. Verifies `currentPassword` against stored hash. If mismatch, throws `BadRequestError` (HTTP 400).
+  3. Hashes `newPassword` and persists.
+  4. Revokes all other existing sessions in `RefreshToken` collection, maintaining security.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Password changed successfully",
+    "data": null
+  }
+  ```
+
+#### 11.4.13 Self-Service Account Deletion (`DELETE /api/v1/users/me`)
+- **Path**: `DELETE /api/v1/users/me`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('confirmation')`: `.equals('DELETE').withMessage('Explicit confirmation string "DELETE" is required')`
+- **Handler Logic**:
+  1. Opens a dedicated MongoDB Client Session and Transaction (`session.withTransaction`).
+  2. Cascades hard deletion across all 7 collections scoped to `req.user._id`:
+     - `User.deleteOne({ _id: userId }, { session })`
+     - `Branch.deleteMany({ user: userId }, { session })`
+     - `Report.deleteMany({ user: userId }, { session })`
+     - `AudioClip.deleteMany({ user: userId }, { session })`
+     - `Chat.deleteMany({ user: userId }, { session })`
+     - `Message.deleteMany({ user: userId }, { session })`
+     - `Preset.deleteMany({ user: userId }, { session })`
+     - `RefreshToken.deleteMany({ user: userId }, { session })`
+  3. Commits transaction.
+  4. Queues background cleanup of all user audio files and avatar from local disk.
+  5. Clears all auth cookies.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Account and all associated operational data permanently deleted",
+    "data": null
+  }
+  ```
+
+```
+====================================================================================================
+4. DASHBOARD ANALYTICS (/api/v1/dashboard)
+====================================================================================================
+```
+
+#### 11.4.14 Get Dashboard Analytics & KPI Summary (`GET /api/v1/dashboard`)
+- **Path**: `GET /api/v1/dashboard`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation**: None.
+- **Handler Logic**:
+  Executes high-performance MongoDB aggregation pipelines scoped to `user: req.user._id`:
+  1. KPI Metrics: Total reports count, current month reports count, total open issues (`status: 'reported' | 'in_progress'`), distinct visited branches count.
+  2. Time Series Chart Data: Daily report counts over the last 30 days.
+  3. Issue Distribution Chart Data: Counts grouped by issue status (`reported`, `in_progress`, `completed`, `no_issue`).
+  4. Issues per Branch Chart Data: Top 5 branches by unresolved issue volume.
+  5. Recent Reports Ledger: Last 5 generated reports with branch names and dates.
+  6. Needs Attention Panel: Critical issues marked `reported` requiring immediate supervisor follow-up.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Dashboard analytics aggregated successfully",
+    "data": {
+      "kpis": {
+        "totalReports": 128,
+        "monthlyReports": 24,
+        "openIssues": 7,
+        "branchesVisited": 14
+      },
+      "charts": {
+        "reportsOverTime": [
+          { "date": "2024-09-01", "count": 2 },
+          { "date": "2024-09-02", "count": 1 }
+        ],
+        "issuesByStatus": [
+          { "status": "reported", "count": 4 },
+          { "status": "in_progress", "count": 3 },
+          { "status": "completed", "count": 18 },
+          { "status": "no_issue", "count": 32 }
+        ],
+        "issuesPerBranch": [
+          { "branchName": "Bole Branch", "count": 3 },
+          { "branchName": "Sarbet Branch", "count": 2 }
+        ]
+      },
+      "recentReports": [
+        {
+          "_id": "651f1b2c4f1a2b3c4d5e6f7a",
+          "date": "19-01-2016",
+          "primaryBranchName": "Bole Branch",
+          "status": "completed",
+          "createdAt": "2024-09-29T08:30:00.000Z"
+        }
+      ],
+      "needsAttention": [
+        {
+          "_id": "651f1b2c4f1a2b3c4d5e6a11",
+          "reportId": "651f1b2c4f1a2b3c4d5e6f7a",
+          "branchName": "Bole Branch",
+          "issueDescription": "ቺለር የሙቀት መጨመር (High Severity)",
+          "reportedDate": "19-01-2016"
+        }
+      ]
+    }
+  }
+  ```
+
+```
+====================================================================================================
+5. BRANCH MANAGEMENT (/api/v1/branches)
+====================================================================================================
+```
+
+#### 11.4.15 List Branches (`GET /api/v1/branches`)
+- **Path**: `GET /api/v1/branches`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `query('page')`: `.optional().isInt({ min: 1 }).toInt()`
+  - `query('limit')`: `.optional().isInt({ min: 1, max: 100 }).toInt()`
+  - `query('search')`: `.optional().trim().isString()`
+  - `query('isArchived')`: `.optional().isBoolean().toBoolean()`
+  - `query('sort')`: `.optional().isIn(['name', '-name', 'createdAt', '-createdAt'])`
+- **Handler Logic**: Scoped to `user: req.user._id`. If `search` provided, performs case-insensitive regex on `name` and `location`. Filters by `isArchived` (defaults to `false`). Returns paginated envelope.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Paginated envelope of Branch DTOs.
+
+#### 11.4.16 Create Branch (`POST /api/v1/branches`)
+- **Path**: `POST /api/v1/branches`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('name')`: `.trim().notEmpty().withMessage('Branch name is required').isLength({ max: 100 })`
+  - `body('location')`: `.trim().notEmpty().withMessage('Branch location is required').isLength({ max: 150 })`
+  - `body('phone')`: `.optional().trim().matches(/^\+251[0-9]{9}$/).withMessage('Invalid Ethiopian phone number')`
+  - `body('address')`: `.optional().trim().isLength({ max: 250 })`
+- **Handler Logic**: Checks for duplicate branch name under same user. Saves new Branch document.
+- **Success Status**: `HTTP_STATUS.CREATED` (201).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Branch created successfully",
+    "data": {
+      "_id": "651f1b2c4f1a2b3c4d5e6f10",
+      "name": "Bole Branch",
+      "location": "Bole Medhanialem",
+      "phone": "+251911001122",
+      "isArchived": false,
+      "createdAt": "2024-09-29T10:00:00.000Z"
+    }
+  }
+  ```
+
+#### 11.4.17 Get Branch Details (`GET /api/v1/branches/:branchId`)
+- **Path**: `GET /api/v1/branches/:branchId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('branchId')`: `.isMongoId().withMessage('Valid branchId parameter is required')`
+- **Handler Logic**: Finds branch by `_id: branchId` and `user: req.user._id`. Computes aggregated visit count and open issues count for this branch.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with branch DTO + computed stats.
+
+#### 11.4.18 Update Branch (`PUT /api/v1/branches/:branchId`)
+- **Path**: `PUT /api/v1/branches/:branchId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('branchId')`: `.isMongoId().withMessage('Valid branchId parameter is required')`
+  - `body('name')`: `.trim().notEmpty().withMessage('Branch name is required')`
+  - `body('location')`: `.trim().notEmpty().withMessage('Branch location is required')`
+  - `body('phone')`: `.optional().trim()`
+  - `body('address')`: `.optional().trim()`
+- **Handler Logic**: Updates branch document.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with updated Branch DTO.
+
+#### 11.4.19 Archive Branch (`DELETE /api/v1/branches/:branchId`)
+- **Path**: `DELETE /api/v1/branches/:branchId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('branchId')`: `.isMongoId().withMessage('Valid branchId parameter is required')`
+- **Handler Logic**: Soft-delete archive operation. Sets `isArchived: true` and `archivedAt: new Date()`. Hard deletion of branches is strictly prohibited via API; archived branches are purged automatically by `node-cron` after 30 days.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Branch archived successfully",
+    "data": null
+  }
+  ```
+
+#### 11.4.20 Restore Archived Branch (`PATCH /api/v1/branches/:branchId/restore`)
+- **Path**: `PATCH /api/v1/branches/:branchId/restore`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('branchId')`: `.isMongoId().withMessage('Valid branchId parameter is required')`
+- **Handler Logic**: Sets `isArchived: false` and `archivedAt: null`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with restored Branch DTO.
+
+```
+====================================================================================================
+6. REPORTS & NESTED AUDIO CLIPS (/api/v1/reports)
+====================================================================================================
+```
+
+#### 11.4.21 List Reports (`GET /api/v1/reports`)
+- **Path**: `GET /api/v1/reports`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `query('page')`: `.optional().isInt({ min: 1 }).toInt()`
+  - `query('limit')`: `.optional().isInt({ min: 1, max: 100 }).toInt()`
+  - `query('search')`: `.optional().trim().isString()`
+  - `query('branchId')`: `.optional().isMongoId()`
+  - `query('status')`: `.optional().isIn(['draft', 'completed'])`
+  - `query('startDate')`: `.optional().matches(/^\d{2}-\d{2}-\d{4}$/)`
+  - `query('endDate')`: `.optional().matches(/^\d{2}-\d{2}-\d{4}$/)`
+  - `query('isArchived')`: `.optional().isBoolean().toBoolean()`
+  - `query('sort')`: `.optional().isIn(['date', '-date', 'createdAt', '-createdAt'])`
+- **Handler Logic**: Populates `primaryBranch` with `_id name location`. Filters by user. Returns paginated envelope.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Paginated envelope of Report DTOs.
+
+#### 11.4.22 Create Structured Report (`POST /api/v1/reports`)
+- **Path**: `POST /api/v1/reports`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('date')`: `.matches(/^\d{2}-\d{2}-\d{4}$/).withMessage('Ethiopian date in DD-MM-YYYY format is required')`
+  - `body('clockIn')`: `.matches(/^([01]\d|2[0-3]):[0-5]\d$/).withMessage('24h clockIn time required (HH:mm)')`
+  - `body('clockOut')`: `.matches(/^([01]\d|2[0-3]):[0-5]\d$/).withMessage('24h clockOut time required (HH:mm)')`
+  - `body('primaryBranch')`: `.isMongoId().withMessage('Valid primaryBranch ObjectId is required')`
+  - `body('visitedBranches')`: `.optional().isArray()`
+  - `body('visitedBranches.*.branch')`: `.isMongoId()`
+  - `body('visitedBranches.*.clockIn')`: `.matches(/^([01]\d|2[0-3]):[0-5]\d$/)`
+  - `body('visitedBranches.*.clockOut')`: `.matches(/^([01]\d|2[0-3]):[0-5]\d$/)`
+  - `body('activities')`: `.isArray().withMessage('Activities array is required')`
+  - `body('activities.*.description')`: `.trim().notEmpty().withMessage('Activity description required')`
+  - `body('activities.*.status')`: `.isIn(['completed', 'in_progress'])`
+  - `body('issues')`: `.isArray().withMessage('Issues array is required')`
+  - `body('issues.*.description')`: `.trim().notEmpty().withMessage('Issue description required')`
+  - `body('issues.*.status')`: `.isIn(['reported', 'in_progress', 'completed', 'no_issue'])`
+  - `body('comments')`: `.optional().trim()`
+  - `body('clipIds')`: `.optional().isArray()`
+- **Handler Logic**:
+  1. Validates that clockOut is chronologically after clockIn.
+  2. Compiles the immutable plain-text Amharic report using the deterministic formatter engine (`services/reportFormatter.js`).
+  3. Saves Report document with `rawText` containing the synthesized Amharic report.
+  4. Links associated audio clips to this report.
+- **Success Status**: `HTTP_STATUS.CREATED` (201).
+- **Response Payload**: Standard envelope with created Report document and compiled `rawText`.
+
+#### 11.4.23 Get Report Details (`GET /api/v1/reports/:reportId`)
+- **Path**: `GET /api/v1/reports/:reportId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId().withMessage('Valid reportId parameter is required')`
+- **Handler Logic**: Retrieves report by ID and user. Populates `primaryBranch`, `visitedBranches.branch`, and associated `audioClips`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with detailed Report DTO.
+
+#### 11.4.24 Update Report (`PUT /api/v1/reports/:reportId`)
+- **Path**: `PUT /api/v1/reports/:reportId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId().withMessage('Valid reportId parameter is required')`
+  - Re-evaluates creation validation rules on updated payload fields.
+- **Handler Logic**: Updates structured fields, recompiles plain-text Amharic `rawText`, increments `version`, and updates `updatedAt`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with updated Report DTO.
+
+#### 11.4.25 Archive or Delete Report (`DELETE /api/v1/reports/:reportId`)
+- **Path**: `DELETE /api/v1/reports/:reportId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId().withMessage('Valid reportId parameter is required')`
+- **Handler Logic**:
+  - **First Call**: If report has `isArchived: false`, marks `isArchived: true` and `archivedAt: new Date()`.
+  - **Second Call (Targeting Archived Report)**: If report already has `isArchived: true`, executes hard delete in transaction: deletes report document, deletes associated `AudioClip` rows, and unlinks audio files from disk.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Report archived successfully",
+    "data": null
+  }
+  ```
+
+#### 11.4.26 Restore Archived Report (`PATCH /api/v1/reports/:reportId/restore`)
+- **Path**: `PATCH /api/v1/reports/:reportId/restore`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId().withMessage('Valid reportId parameter is required')`
+- **Handler Logic**: Sets `isArchived: false` and `archivedAt: null`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with restored Report DTO.
+
+#### 11.4.27 Export Report to Google Docs (`POST /api/v1/reports/:reportId/export/gdocs`)
+- **Path**: `POST /api/v1/reports/:reportId/export/gdocs`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId().withMessage('Valid reportId parameter is required')`
+- **Handler Logic**:
+  1. Checks if user has authorized Google OAuth with Drive scope. If not, returns HTTP 403 (`GOOGLE_AUTH_REQUIRED`).
+  2. Uses user's refresh token to acquire a fresh Google access token.
+  3. Creates a Google Doc titled `[Report Builder] ${report.date} - ${report.primaryBranch.name}` using Google Drive API (`drive.file` scope).
+  4. Inserts the compiled plain-text Amharic report into the document body.
+  5. Returns direct web link to the created Google Doc.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Report successfully exported to Google Docs",
+    "data": {
+      "documentId": "1a2b3c4d5e6f7g8h9i0j",
+      "documentUrl": "https://docs.google.com/document/d/1a2b3c4d5e6f7g8h9i0j/edit"
+    }
+  }
+  ```
+
+#### 11.4.28 Upload Audio Clip to Report (`POST /api/v1/reports/:reportId/clips`)
+- **Path**: `POST /api/v1/reports/:reportId/clips`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Multer Middleware**: `uploadAudio.single('audio')` (Max `25MB`, MIME: `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav`).
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId().withMessage('Valid reportId parameter is required')`
+  - Validates `req.file` presence.
+- **Handler Logic**:
+  1. Executes FFmpeg preprocessing: converts audio to mono 16-bit 16kHz PCM WAV.
+  2. Saves preprocessed file to `uploads/audio/${reportId}/${clipId}.wav`.
+  3. Creates `AudioClip` document referencing `report: reportId` and `user: req.user._id`.
+- **Success Status**: `HTTP_STATUS.CREATED` (201).
+- **Response Payload**: Standard envelope with `AudioClip` metadata (`_id`, `durationSeconds`, `fileSizeBytes`, `mimeType`).
+
+#### 11.4.29 Stream Report Audio Clip (`GET /api/v1/reports/:reportId/clips/:clipId`)
+- **Path**: `GET /api/v1/reports/:reportId/clips/:clipId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId()`
+  - `param('clipId')`: `.isMongoId()`
+- **Handler Logic**: Verifies clip belongs to report and user. Streams binary audio content with `Content-Type: audio/wav` and `Accept-Ranges: bytes`.
+- **Success Status**: `HTTP_STATUS.OK` (200) or `HTTP_STATUS.PARTIAL_CONTENT` (206).
+- **Response**: Binary audio stream.
+
+#### 11.4.30 Delete Report Audio Clip (`DELETE /api/v1/reports/:reportId/clips/:clipId`)
+- **Path**: `DELETE /api/v1/reports/:reportId/clips/:clipId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('reportId')`: `.isMongoId()`
+  - `param('clipId')`: `.isMongoId()`
+- **Handler Logic**: Removes `AudioClip` document and unlinks the audio file from local disk.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with `data: null`.
+
+```
+====================================================================================================
+7. CHATS & CONVERSATION NODES (/api/v1/chats)
+====================================================================================================
+```
+
+#### 11.4.31 List Chat Threads (`GET /api/v1/chats`)
+- **Path**: `GET /api/v1/chats`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `query('page')`: `.optional().isInt({ min: 1 }).toInt()`
+  - `query('limit')`: `.optional().isInt({ min: 1, max: 50 }).toInt()`
+  - `query('type')`: `.optional().isIn(['general', 'report'])`
+  - `query('isPinned')`: `.optional().isBoolean().toBoolean()`
+- **Handler Logic**: Scoped to user. Returns pinned threads first, followed by threads ordered by `-lastMessageAt`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Paginated envelope of Chat DTOs.
+
+#### 11.4.32 Create Chat Thread (`POST /api/v1/chats`)
+- **Path**: `POST /api/v1/chats`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('title')`: `.optional().trim().isLength({ max: 150 })`
+  - `body('type')`: `.isIn(['general', 'report']).withMessage('Chat type must be general or report')`
+  - `body('reportId')`: `.optional().isMongoId()`
+  - `body('presetId')`: `.optional().isMongoId()`
+- **Handler Logic**: Creates new Chat thread document. If `type === 'report'` and `reportId` provided, links report.
+- **Success Status**: `HTTP_STATUS.CREATED` (201).
+- **Response Payload**: Standard envelope with created Chat DTO.
+
+#### 11.4.33 Get Chat Thread Metadata (`GET /api/v1/chats/:chatId`)
+- **Path**: `GET /api/v1/chats/:chatId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('chatId')`: `.isMongoId().withMessage('Valid chatId required')`
+- **Handler Logic**: Retrieves chat thread details and verifies ownership.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with Chat DTO.
+
+#### 11.4.34 Update Chat Thread (`PATCH /api/v1/chats/:chatId`)
+- **Path**: `PATCH /api/v1/chats/:chatId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('chatId')`: `.isMongoId().withMessage('Valid chatId required')`
+  - `body('title')`: `.optional().trim().isLength({ min: 1, max: 150 })`
+  - `body('isPinned')`: `.optional().isBoolean()`
+- **Handler Logic**: Updates chat title or pinned state.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with updated Chat DTO.
+
+#### 11.4.35 Delete Chat Thread (`DELETE /api/v1/chats/:chatId`)
+- **Path**: `DELETE /api/v1/chats/:chatId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('chatId')`: `.isMongoId().withMessage('Valid chatId required')`
+- **Handler Logic**: Executes in a transaction: deletes Chat document and cascades deletion of all associated Message documents.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with `data: null`.
+
+#### 11.4.36 Get Chat Message History (`GET /api/v1/chats/:chatId/messages`)
+- **Path**: `GET /api/v1/chats/:chatId/messages`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('chatId')`: `.isMongoId()`
+  - `query('page')`: `.optional().isInt({ min: 1 }).toInt()`
+  - `query('limit')`: `.optional().isInt({ min: 1, max: 100 }).toInt()`
+  - `query('before')`: `.optional().isISO8601()`
+- **Handler Logic**: Retrieves chronological messages for the chat thread with pagination.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Paginated envelope of Message DTOs.
+
+#### 11.4.37 Send Message & Execute Conversational Turn (`POST /api/v1/chats/:chatId/messages`)
+- **Path**: `POST /api/v1/chats/:chatId/messages`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: AI Stream Tier (10 req / min burst).
+- **Validation Chain (`express-validator`)**:
+  - `param('chatId')`: `.isMongoId().withMessage('Valid chatId required')`
+  - `body('content')`: `.optional().trim().isString()`
+  - `body('audioClipId')`: `.optional().isMongoId()`
+  - `body('modelConfig')`: `.optional().isObject()`
+  - `body('modelConfig.provider')`: `.optional().isIn(['Google', 'Addis AI', 'NVIDIA'])`
+  - `body('modelConfig.model')`: `.optional().isString()`
+  - `body('modelConfig.language')`: `.optional().isIn(['Amharic', 'English'])`
+  - `body('modelConfig.reasoning')`: `.optional().isIn(['low', 'medium', 'high', 'max'])`
+  - Validates that either `content` or `audioClipId` is provided.
+- **Handler Logic**:
+  1. Verifies ownership and locks chat thread (`isStreaming: true`).
+  2. If `audioClipId` present, transcribes audio via Addis AI STT.
+  3. Appends user message to Message collection.
+  4. Flushes SSE headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`).
+  5. Executes agent reasoning loop with multi-tier LLM fallback (Addis $ightarrow$ Gemini $ightarrow$ Nvidia).
+  6. Emits `text_delta`, `tool_call`, and `report_card` SSE events.
+  7. Persists assistant message node in database and emits `done` event.
+  8. Unlocks chat thread (`isStreaming: false`).
+- **Success Status**: `HTTP_STATUS.OK` (200) via SSE Stream (`text/event-stream`).
+
+#### 11.4.38 Abort Ongoing SSE Stream (`POST /api/v1/chats/:chatId/abort`)
+- **Path**: `POST /api/v1/chats/:chatId/abort`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('chatId')`: `.isMongoId().withMessage('Valid chatId required')`
+- **Handler Logic**:
+  1. Triggers `AbortController.abort()` on the active LLM request.
+  2. Releases stream lock (`isStreaming: false`).
+  3. Marks in-progress message as `interrupted: true`.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Stream aborted successfully",
+    "data": null
+  }
+  ```
+
+```
+====================================================================================================
+8. MODE 3 EPHEMERAL AUDIO INGESTION (/api/v1/audio)
+====================================================================================================
+```
+
+#### 11.4.39 Ephemeral Voice Dictation Transcription (`POST /api/v1/audio/transcribe`)
+- **Path**: `POST /api/v1/audio/transcribe`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: Audio Ephemeral Tier (20 req / 15 min).
+- **Multer Middleware**: `uploadMemoryAudio.single('audio')` (Stored strictly in memory buffer `req.file.buffer`, max `10MB`, MIME: `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/wav`).
+- **Validation**:
+  - Validates `req.file` presence.
+- **Handler Logic**:
+  1. Streams memory buffer directly into FFmpeg pipeline to generate 16kHz mono PCM stream.
+  2. Forwards PCM audio stream directly to Addis AI STT (`addisai` SDK).
+  3. Applies Amharic workplace transliteration engine post-processing (`services/transliterationEngine.js`).
+  4. Returns transcribed Amharic text directly to client.
+  5. **Zero Disk Storage Mandate**: Exactly 0 bytes are written to persistent server storage. Memory buffer is garbage collected immediately upon response completion.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Audio transcribed successfully",
+    "data": {
+      "text": "በቦሌ ብራንች የቺለር ሙቀት መጨመር ችግር አጋጥሟል",
+      "durationSeconds": 6.8
+    }
+  }
+  ```
+
+```
+====================================================================================================
+9. PRESETS & PERSONAS (/api/v1/presets)
+====================================================================================================
+```
+
+#### 11.4.40 List Presets (`GET /api/v1/presets`)
+- **Path**: `GET /api/v1/presets`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation**: None.
+- **Handler Logic**: Returns combined list of system default presets (`isSystem: true`) and custom user presets (`user: req.user._id`).
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope containing array of Preset DTOs.
+
+#### 11.4.41 Create Preset (`POST /api/v1/presets`)
+- **Path**: `POST /api/v1/presets`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `body('name')`: `.trim().notEmpty().withMessage('Preset name is required').isLength({ max: 50 })`
+  - `body('personaPrompt')`: `.trim().notEmpty().withMessage('Persona prompt is required')`
+  - `body('systemPrompt')`: `.trim().notEmpty().withMessage('System prompt is required')`
+  - `body('providerConfig')`: `.isObject().withMessage('Provider config is required')`
+  - `body('providerConfig.provider')`: `.isIn(['Google', 'Addis AI', 'NVIDIA'])`
+  - `body('providerConfig.model')`: `.isString().notEmpty()`
+  - `body('providerConfig.language')`: `.isIn(['Amharic', 'English'])`
+  - `body('providerConfig.reasoning')`: `.optional().isIn(['low', 'medium', 'high', 'max'])`
+- **Handler Logic**: Saves custom preset associated with `user: req.user._id` and `isSystem: false`.
+- **Success Status**: `HTTP_STATUS.CREATED` (201).
+- **Response Payload**: Standard envelope with created Preset DTO.
+
+#### 11.4.42 Get Preset Details (`GET /api/v1/presets/:presetId`)
+- **Path**: `GET /api/v1/presets/:presetId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('presetId')`: `.isMongoId().withMessage('Valid presetId required')`
+- **Handler Logic**: Retrieves preset verifying that it is either system-owned or owned by requesting user.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with Preset DTO.
+
+#### 11.4.43 Update Preset (`PUT /api/v1/presets/:presetId`)
+- **Path**: `PUT /api/v1/presets/:presetId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('presetId')`: `.isMongoId().withMessage('Valid presetId required')`
+  - Re-evaluates creation validation rules on updated payload fields.
+- **Handler Logic**: Verifies that preset is NOT a system preset (`isSystem: false`) and is owned by requesting user. Updates preset.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with updated Preset DTO.
+
+#### 11.4.44 Delete Preset (`DELETE /api/v1/presets/:presetId`)
+- **Path**: `DELETE /api/v1/presets/:presetId`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `param('presetId')`: `.isMongoId().withMessage('Valid presetId required')`
+- **Handler Logic**: Prevents deletion of system presets. Deletes custom user preset.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**: Standard envelope with `data: null`.
+
+```
+====================================================================================================
+10. UNIFIED GLOBAL SEARCH (/api/v1/search)
+====================================================================================================
+```
+
+#### 11.4.45 Multi-Entity Global Search (`GET /api/v1/search`)
+- **Path**: `GET /api/v1/search`
+- **Auth Guard**: Authenticated.
+- **Rate Limit Tier**: CRUD Tier.
+- **Validation Chain (`express-validator`)**:
+  - `query('q')`: `.trim().notEmpty().withMessage('Search query string is required').isLength({ min: 2, max: 100 })`
+  - `query('limit')`: `.optional().isInt({ min: 1, max: 20 }).toInt()`
+- **Handler Logic**:
+  Executes concurrent queries scoped to `user: req.user._id`:
+  1. Reports: Searches `rawText`, date, and branch name.
+  2. Branches: Searches branch `name`, `location`, and `address`.
+  3. Chat Nodes: Searches message content within user's chat threads.
+  Aggregates results into a structured multi-entity payload for accordion rendering.
+- **Success Status**: `HTTP_STATUS.OK` (200).
+- **Response Payload**:
+  ```json
+  {
+    "success": true,
+    "message": "Global search completed successfully",
+    "data": {
+      "reports": [
+        {
+          "_id": "651f1b2c4f1a2b3c4d5e6f7a",
+          "title": "Bole Branch Report",
+          "date": "19-01-2016",
+          "snippet": "...የቺለር ሙቀት መጨመር ችግር..."
+        }
+      ],
+      "branches": [
+        {
+          "_id": "651f1b2c4f1a2b3c4d5e6f10",
+          "name": "Bole Branch",
+          "location": "Bole Medhanialem"
+        }
+      ],
+      "chats": [
+        {
+          "_id": "651f1b2c4f1a2b3c4d5e6f33",
+          "title": "Operations Chat",
+          "snippet": "...ስለ ቦሌ ብራንች የሪፖርት ማጠቃለያ..."
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 11.5 Forbidden Endpoints Registry
+
+To prevent architectural creep, insecure administrative bypasses, and unauthorized surface expansion, the following endpoints are **explicitly forbidden** from ever being implemented:
+
+| Forbidden Route | Prohibited Pattern / Purpose | Architectural Rationale & Enforcement |
+| :--- | :--- | :--- |
+| `GET /api/v1/auth/me` | Redundant auth verification endpoint | Authentication state is confirmed via `GET /api/v1/users/me`. A separate `/auth/me` creates duplicate session endpoints. |
+| `GET /api/v1/users` | Global user list / Directory enumeration | Report Builder operates on a strict single-user self-service model. Multi-user directory listing is prohibited. |
+| `DELETE /api/v1/users/:userId` | Administrative third-party user deletion | Only the authenticated supervisor can delete their own account via `DELETE /api/v1/users/me`. No admin user-management routes. |
+| `GET /api/v1/auth/sessions` | Multi-session inspection interface | Active sessions are managed transparently via cryptographic token families and DB rotation; no dedicated session management UI. |
+| `POST /api/v1/auth/sessions/revoke` | Arbitrary remote session invalidation | Individual device revocation is handled automatically upon token refresh reuse detection and logout. |
+| `POST /api/v1/reports/:id/email` | Automated email report distribution | Symmetrical manual delivery invariant: report distribution to management is strictly manual via copy/download/print. |
+| `POST /api/v1/reports/:id/telegram` | Automated messaging bot distribution | Distribution is strictly supervisor-controlled. Automated third-party bot delivery is prohibited. |
+| `POST /api/v1/translate` | Automated machine translation endpoint | Linguistic separation law: zero automated Amharic-to-English or English-to-Amharic translation tools. |
+| `POST /api/v1/tts` | Text-to-speech synthesis endpoint | Amharic TTS is strictly prohibited; application consumes audio and produces text. |
+
+---
+
+### 11.6 Section 11 Invariants & Non-Negotiable Rules Table
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Standard Three-Key Response Envelope** | All non-streaming responses strictly wrapped in `{ success, message, data }`. |
+| **Paginated Response Structure** | Paginated collections return `{ success, message, data: { docs, totalDocs, limit, page, totalPages, ... } }`. Default page: 1, default limit: 10, max limit: 100. |
+| **Zero Raw Numeric Status Codes** | HTTP status codes imported strictly from `config/httpStatus.js`. Numeric literals strictly forbidden in code. |
+| **Centralized Error Pipeline** | All controllers and middlewares forward errors via `next(error)`. No controller responds directly with an error. |
+| **Bilingual 429 Rate Limit Response** | Rate-limited requests return HTTP 429 with English and Amharic message: `Rate limit exceeded. እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።`. |
+| **Strict User Scoping Law** | Authenticated user ID read strictly from `req.user._id.toString()`. Every collection except User carries a required `user` field. |
+| **Single MongoDB Transaction for Multi-Doc Writes** | All multi-collection operations (account deletion, chat deletion with messages, report hard deletion) run inside `session.withTransaction()`. |
+| **Single Endpoint for Audio Transcription** | Ephemeral voice dictation runs strictly through `POST /api/v1/audio/transcribe` with in-memory buffer and zero disk storage. |
+| **Zero Soft Deletion Flags** | Collections use `isArchived` and `archivedAt`. No `deletedAt` field anywhere in the application. |
+| **Single TTL Index in Entire Database** | Exactly one TTL index exists on `RefreshToken` collection (`createdAt`). Soft-deleted records are pruned via `node-cron`. |
+| **Direct Canonical Routes** | Route parameters use `<resource>Id` exclusively (e.g. `:reportId`, `:branchId`, `:chatId`). Never bare `:id`. |
+
+---

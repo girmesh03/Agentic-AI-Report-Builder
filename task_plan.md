@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Plan Mode review and specification of Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes.
+Switch to Plan Mode for Section 12 (Backend Infrastructure, Winston Logging & Sweeper Tasks) upon user confirmation.
 
 ## Current Phase
 
-Phase 11: Section 11 - REST API Endpoint Inventory, Validation Chains & Response Envelopes
+Phase 12: Section 12 - Backend Infrastructure, Winston Logging & Sweeper Tasks
 
 ## Phases
 
@@ -156,13 +156,14 @@ Phase 11: Section 11 - REST API Endpoint Inventory, Validation Chains & Response
 - **Status:** complete
 
 ### Phase 11: Section 11 - REST API Endpoint Inventory, Validation Chains & Envelopes
-- [ ] Detail all `/api/v1/*` route definitions, HTTP methods, controllers, and services
-- [ ] Detail `express-validator` rule chains and 422 `{ details: [{ field, message }] }` responses
-- [ ] Detail `{ success, message, data }` and paginated envelopes
-- [ ] Detail centralized error handling and `httpStatus.js` usage
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail all `/api/v1/*` route definitions, HTTP methods, controllers, and services
+- [x] Detail `express-validator` rule chains and 422 `{ details: [{ field, message }] }` responses
+- [x] Detail `{ success, message, data }` and paginated envelopes
+- [x] Detail centralized error handling and `httpStatus.js` usage
+- [x] Harmonize Section 1–10 spec invariants (no `/reports/new`, clean AppBar 3 controls, `/profile`, `MuiAutocomplete.jsx`)
+- [x] Review in Plan Mode with user
+- [x] Output Section 11 specification content to `docs/specifications/master_specification.md` in Build Mode (pending user commit instruction)
+- **Status:** complete
 
 ### Phase 12: Section 12 - Backend Infrastructure, Winston Logging & Sweeper Tasks
 - [ ] Detail fixed middleware order in `app.js` (helmet -> cors -> compression -> cookie-parser -> express.json -> express-mongo-sanitize -> rate-limit)

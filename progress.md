@@ -245,7 +245,7 @@ Use this file as the chronological record of work performed, files created, git 
   - Symmetrized direct routes: `/reports/:reportId/details`, `/reports/:reportId/edit`, and `/branches/:branchId/details` link directly without redirect hops.
   - Specified `BranchDialog.jsx` (`MuiDialog`) as a reusable `react-hook-form` modal for both Create and Edit modes, eliminating `/branches/new` and `/branches/:branchId/edit`.
   - Detailed Global Search Dialog (`GlobalSearchDialog.jsx`): absolute edge-to-edge on `xs` and `sm-landscape`; centered modal on `sm+`; strict scroll isolation (only `DialogContent` scrolls); left arrow close button and clear end adornment.
-  - Cataloged all 13 reusable UI components under `client/src/components/reusable/*` (`MuiAudioPlayer`, `MuiFileInput`, `MuiButton`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiPagination`, `MuiTextField`, `MuiDataGrid`, `MuiRecorder`, `LoadingSpinner`, `MuiDialog` with standardized action buttons, `MuiSelect`, `MuiAutoComplete`, plus `Logo`).
+  - Cataloged all 13 reusable UI components under `client/src/components/reusable/*` (`MuiAudioPlayer`, `MuiFileInput`, `MuiButton`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiPagination`, `MuiTextField`, `MuiDataGrid`, `MuiRecorder`, `LoadingSpinner`, `MuiDialog` with standardized action buttons, `MuiSelect`, `MuiAutocomplete`, plus `Logo`).
   - Specified dedicated column schemas under `client/src/components/columns/*` (`branch.jsx`, `report.jsx`) with flex sizing and styled actions.
   - Formulated domain-based Redux architecture including `dashboardSlice` & `dashboardApi` in `client/src/features/*`.
   - Documented the Unstated Requirement Law: downstream agents must never assume or implement unstated requirements without explicit user confirmation.
@@ -258,12 +258,39 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+### Phase 11: Section 11 - REST API Endpoint Inventory, Validation Chains & Response Envelopes
+- **Status:** complete
+- **Started:** 2026-09-20T20:13:00+03:00
+- **Completed:** 2026-09-20T20:25:00+03:00
+- Actions taken:
+  - Harmonized specification invariants across Sections 1–10:
+    - Removed `/reports/new` route references, standardizing on in-canvas 10-Row Form mounting inside `/chat`.
+    - Removed bell notification and font stepper buttons `[ A- A+ ]` from `MuiAppbar` (toggle moved to sidebar header; font scaling moved to User Preferences in `/profile`).
+    - Standardized `MuiAutocomplete.jsx` with lowercase 'c' per user decision.
+    - Updated RTK Query path to `client/src/features/api/apiSlice.js`.
+    - Activated Section 11 link in Master Specification Table of Contents.
+  - Formulated, authored, and appended complete Section 11 (REST API Endpoint Inventory, Validation Chains & Response Envelopes) to `docs/specifications/master_specification.md` (6,782 total lines):
+    - Specified standard three-key JSON envelope (`{ success, message, data }`), paginated list envelope (`mongoose-paginate-v2` with default page: 1, limit: 10, max: 100), and SSE streaming event envelopes (`text_delta`, `tool_call`, `report_card`, `done`, `error`).
+    - Detailed centralized error pipeline (`next(error)` only; zero direct error responses) and immutable HTTP status code dictionary (`config/httpStatus.js`, zero numeric literals).
+    - Specified rate limiting tiers (Health exempt, Auth 10 req/15min/IP, CRUD 300 req/15min/user, AI Stream burst 10 req/min, Ephemeral Audio 20 req/15min) and bilingual HTTP 429 response message.
+    - Cataloged complete inventory of all 45 API endpoints across System, Auth, User Self-Service, Dashboard, Branches, Reports & Audio Clips, Chats & Messages, Mode 3 Audio, Presets, and Global Search.
+    - Documented Forbidden Endpoints Registry prohibiting redundant auth checks, administrative user lists, external session inspectors, automated email/bot distribution, and translation/TTS endpoints.
+    - Formulated Section 11 Invariants & Non-Negotiable Rules Table.
+  - Updated `task_plan.md`, `findings.md`, and `progress.md`.
+  - **STRICTLY PRESERVED UNCOMMITTED WORKING DIRECTORY** per user explicit command ("don't commit").
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 10 (Frontend Routing, Shell Layout & Component Matrix) authored and appended to `master_specification.md` in Build Mode. Changes staged/unstaged, uncommitted per user instruction ("don't commit"). |
-| Where am I going? | Switch to Plan Mode for Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes upon user confirmation. |
-| What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | In-canvas report creation inside `/chat` eliminates route hopping; explicit 13-reusable-component matrix with `MuiDialog` action buttons guarantees frontend consistency; domain-based Redux with `dashboardSlice` provides cohesive state management. |
-| What have I done? | Detailed and appended Section 10 to `master_specification.md` (lines 5262–5619); updated `task_plan.md`, `findings.md`, and `progress.md`; preserved working tree without committing. |
+| Where am I? | Section 11 (REST API Endpoint Inventory, Validation Chains & Response Envelopes) completed and appended to `master_specification.md` in Build Mode. All changes left in working tree uncommitted per explicit user command ("don't commit"). |
+| Where am I going? | Awaiting user review of Section 11 and instruction to switch to Plan Mode for Section 12 (Backend Infrastructure, Winston Logging & Sweeper Tasks). |
+| What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder on branch `phase-0-specification`. |
+| What have I learned? | Strict adherence to `{ success, message, data }` and `mongoose-paginate-v2` with `httpStatus.js` imports guarantees contract uniformity across all 45 endpoints; in-memory audio dictation via `POST /api/v1/audio/transcribe` ensures zero server disk storage; explicit forbidden endpoint registry blocks architectural creep. |
+| What have I done? | Harmonized legacy mismatches in Sections 1–10; authored Section 11 in `master_specification.md` (lines 5619–6782); updated `task_plan.md`, `findings.md`, and `progress.md`; kept changes uncommitted. |
+

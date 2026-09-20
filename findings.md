@@ -130,11 +130,18 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | In-Canvas Report Creation Flow | Report creation is hosted strictly inside `/chat`; zero `/reports/new` route. Initiation form replaces composer; cancel restores composer, submit launches SSE stream. |
 | Direct Symmetrical Routes | Direct links to `/reports/:reportId/details`, `/reports/:reportId/edit`, and `/branches/:branchId/details` without redirect hops. |
 | Global Search Dialog (`MuiDialog`) | Fullscreen absolute on `xs` and `sm-landscape`, centered on `sm+`; strict scroll isolation (only `DialogContent` scrolls); left arrow close and end clear adornment. |
-| 13 Reusable UI Components (`client/src/components/reusable/*`) | Explicit catalog: `MuiAudioPlayer`, `MuiFileInput`, `MuiButton`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiPagination`, `MuiTextField`, `MuiDataGrid`, `MuiRecorder`, `LoadingSpinner`, `MuiDialog` (with action buttons), `MuiSelect`, `MuiAutoComplete`, plus `Logo`. |
+| 13 Reusable UI Components (`client/src/components/reusable/*`) | Explicit catalog: `MuiAudioPlayer`, `MuiFileInput`, `MuiButton`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiPagination`, `MuiTextField`, `MuiDataGrid`, `MuiRecorder`, `LoadingSpinner`, `MuiDialog` (with action buttons), `MuiSelect`, `MuiAutocomplete`, plus `Logo`. |
 | Dedicated Columns Directory | `client/src/components/columns/*` contains DataGrid column definitions (`branch.jsx`, `report.jsx`) with flex sizing and styled actions. |
 | Domain-Based Redux Architecture | Segregated domain feature slices including `dashboardSlice` & `dashboardApi` under `client/src/features/*`. |
 | Option A Product Landing Page | Clean public landing page at `/` with Hero, 3 feature highlight cards, CTAs to `/register` and `/login`, and footer. |
 | The Unstated Requirement Law | Any ambiguous or unstated requirement must never be proactively assumed or implemented; created strictly upon explicit user confirmation. |
+| Standard Response Envelope | All non-streaming API responses strictly formatted as `{ success, message, data }`. |
+| Paginated Envelope Standard | Paginated collections use `mongoose-paginate-v2` (`docs`, `totalDocs`, `limit`, `page`, `totalPages`); default page: 1, default limit: 10, max limit: 100. |
+| Zero Numeric Status Literals | HTTP status codes imported strictly from `config/httpStatus.js`. Numeric literals strictly prohibited in code. |
+| Centralized Error Pipeline | All controllers and middlewares forward errors via `next(error)`. No controller responds directly with an error. |
+| Bilingual 429 Rate Limiter | Rate limit threshold breaches emit HTTP 429 with English and Amharic message: `Rate limit exceeded. እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።`. |
+| Ephemeral Audio Transcribe Endpoint | Live voice dictation runs via `POST /api/v1/audio/transcribe` with memory buffer and 0 disk files saved. |
+| Forbidden Endpoints Enforcement | Explicit prohibition of `GET /auth/me`, `GET /users`, `DELETE /users/:userId`, session management lists, automated email/telegram endpoints, and translation/TTS endpoints. |
 
 
 ## Locked Package Manifest
