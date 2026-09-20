@@ -5255,8 +5255,364 @@ When a supervisor encounters or dictates a novel English workplace term (e.g. `a
 | **Sub-5ms Typing Latency** | `React.memo` composer isolation, uncontrolled input state, zero Redux dispatch on keystroke. |
 | **Mode 3 Audio Dictation** | Ephemeral voice recording via Audio Orb transcribes to Amharic text at cursor; 0 disk files saved. |
 | **Interactive Action Triggers** | Every report response renders `[ View Full Report ]`, `[ Edit in Form ]`, and `[ Copy Report Text ]`. |
-| **The 10-Row Initiation Form** | 2-column split at `/reports/new`: structured form on left, sticky live Amharic plain-text preview on right. |
+| **In-Canvas Report Creation** | Report creation is hosted strictly inside `/chat`; zero `/reports/new` route. Initiation form replaces composer until submitted or cancelled. |
 | **Method 1 In-Memory Audio Playback** | Row 8 audio players stream directly from client memory Blob URLs; zero server re-download. |
 
 ---
+
+# Section 10: Frontend Routing, Shell Layout & Component Matrix
+
+### 10.1 Application Root, Routing & Route Guard Architecture (`main.jsx` & `App.jsx`)
+
+#### 10.1.1 Flat Router Map (`createBrowserRouter`)
+The application defines a strict, flat route map using lazy dynamic component loading (`lazy: async () => ({ Component: (await import(...)).default })`), guaranteeing optimal code-splitting and bundle isolation across all views:
+
+```jsx
+const router = createBrowserRouter([
+  {
+    path: "/",
+    Component: App,
+    ErrorBoundary: NotFoundPage,
+    children: [
+      // 1. PUBLIC ROUTES (Guarded by PublicRoute)
+      {
+        Component: PublicRoute, // Redirects authenticated users to /dashboard (replace: true)
+        children: [
+          {
+            Component: PublicLayout,
+            children: [
+              { index: true, lazy: async () => ({ Component: (await import("./pages/Landing/Landing")).default }) },
+              { path: "login", lazy: async () => ({ Component: (await import("./pages/Auth/Login")).default }) },
+              { path: "register", lazy: async () => ({ Component: (await import("./pages/Auth/Register")).default }) },
+            ],
+          },
+        ],
+      },
+      // 2. PROTECTED ROUTES (Guarded by ProtectedRoute)
+      {
+        Component: ProtectedRoute, // Redirects unauthenticated users to /login (replace: true)
+        children: [
+          {
+            Component: AppShell,
+            children: [
+              { path: "dashboard", lazy: async () => ({ Component: (await import("./pages/Dashboard/Dashboard")).default }) },
+              { path: "chat", lazy: async () => ({ Component: (await import("./pages/Chat/Chat")).default }) },
+              { path: "chat/:chatId", lazy: async () => ({ Component: (await import("./pages/Chat/Chat")).default }) },
+              { path: "reports", lazy: async () => ({ Component: (await import("./pages/Reports/ReportsList")).default }) },
+              { path: "reports/:reportId/details", lazy: async () => ({ Component: (await import("./pages/Reports/ReportDetails")).default }) },
+              { path: "reports/:reportId/edit", lazy: async () => ({ Component: (await import("./pages/Reports/ReportEdit")).default }) },
+              { path: "branches", lazy: async () => ({ Component: (await import("./pages/Branches/BranchesList")).default }) },
+              { path: "branches/:branchId/details", lazy: async () => ({ Component: (await import("./pages/Branches/BranchDetails")).default }) },
+              { path: "profile", lazy: async () => ({ Component: (await import("./pages/Profile/Profile")).default }) },
+            ],
+          },
+        ],
+      },
+      // 3. WILDCARD CATCH-ALL
+      { path: "*", Component: NotFoundPage },
+    ],
+  },
+]);
+```
+
+#### 10.1.2 Route Guards & Boundary Laws
+1. **`PublicRoute` Guard Invariant**: Authenticated supervisors are strictly barred from accessing public routes (`/`, `/login`, `/register`). When an authenticated session is detected, `PublicRoute` immediately and unconditionally redirects the user to `/dashboard` with `{ replace: true }`.
+2. **`ProtectedRoute` Guard Invariant**: Unauthenticated visitors attempting to access any route under `AppShell` are immediately redirected to `/login` with `{ replace: true }`. The intended target URL is saved into navigation state (`state: { from: location }`) so that post-login redirection resumes at the originally requested resource.
+3. **Direct Symmetrical Routing (Zero Redirect Hopping)**:
+   - Reports Detail is directly accessed at `/reports/:reportId/details`.
+   - Reports Edit is directly accessed at `/reports/:reportId/edit`.
+   - Branches Detail is directly accessed at `/branches/:branchId/details`.
+   - All internal links across the application (Sidebar, Reports Cards, Reports DataGrid rows, Branches Cards, Branches DataGrid rows) link directly to `/details`, eliminating unnecessary redirect hops.
+4. **App Provider Hierarchy (`App.jsx`)**:
+   ```jsx
+   <AppTheme>
+     <CssBaseline />
+     <AppErrorBoundary>
+       <AppToastContainer />
+       <Outlet />
+     </AppErrorBoundary>
+   </AppTheme>
+   ```
+
+---
+
+### 10.2 Public Shell Layout & Landing Page Specification (`PublicLayout.jsx` & `Landing.jsx`)
+
+#### 10.2.1 `PublicLayout` Architecture
+- **Fixed `MuiAppbar`**: Content-padding driven height (zero hardcoded height strings).
+  - **Left Section**: `Logo.jsx` (clickable vector icon + brand title, navigates to `/`).
+  - **Right Section**:
+    1. Theme Toggle button `[ 🌓 ]` (toggles light/dark theme in `themeSlice`).
+    2. `[ Login ]` button (`MuiButton`, `size="small"`, `variant="outlined"`, navigates to `/login`).
+    3. `[ Sign Up ]` button (`MuiButton`, `size="small"`, `variant="contained"`, navigates to `/register`).
+- **Sibling Container**: `<Outlet />` renders full-width beneath the AppBar with smooth route transitions.
+
+#### 10.2.2 Option A Product Landing Page Specification (`Landing.jsx`)
+Organized into three dedicated, highly professional marketing sections:
+1. **Hero Section**:
+   - **Headline**: *"Standardized Daily Amharic Reporting for Multi-Branch Operations"*.
+   - **Subheadline**: *"Speak naturally in Amharic during branch audits. Automatically compile locked, company-ready daily reports with zero mechanical typing fatigue."*
+   - **Primary Action CTAs**:
+     - `[ Get Started Free ]` (`MuiButton`, `size="medium"`, `variant="contained"`, navigates to `/register`).
+     - `[ Sign In ]` (`MuiButton`, `size="medium"`, `variant="outlined"`, navigates to `/login`).
+2. **Feature Highlights (3 Cards)**:
+   - **Card 1: Spoken Amharic Narration**: Real-time acoustic capture powered by Addis AI speech recognition; spoken workplace technical terms naturally transliterated to Ge'ez (`ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`).
+   - **Card 2: Locked Corporate Report Engine**: Immutable Ethiopian dates (`DD-MM-YY`), 24-hour shift times, first-person active voice, and guaranteed clean plain-text delivery.
+   - **Card 3: Universal Multi-Branch Oversight**: Chronological visit itineraries, cross-branch issue matrices, and Google Docs/Sheets automated exports.
+3. **Footer**: Clean copyright notice, system version tag (`v1.0.0`), and privacy/terms statement.
+
+---
+
+### 10.3 Authenticated App Shell Architecture (`AppShell.jsx`)
+
+#### 10.3.1 Shell Viewport Container
+- **Layout Wrap**: `height: 100vh; overflow: hidden; display: flex`. Body/HTML scrolling is strictly forbidden.
+- Composed of: **Responsive Sidebar** + **Right Flex Column** (Sticky `MuiAppbar` + Scrollable Content Outlet).
+
+#### 10.3.2 Responsive Navigation Sidebar (`Sidebar.jsx`)
+- **Breakpoints**:
+  - **Mobile (`xs`, `sm`)**: Temporary overlay drawer (`MuiDrawer` with `variant="temporary"`), toggled via AppBar hamburger button.
+  - **Desktop (`md+`)**: Persistent toggleable drawer:
+    - **Mini-Rail Mode**: Collapsed width **64px**; text labels hidden; buttons transform to centered icon buttons with `MuiTooltip`.
+    - **Expanded Mode**: Full width **240px**; displays complete brand logo, label text, and chevron collapse button `<`.
+- **Header**:
+  - Mini mode: Centered brand icon.
+  - Expanded mode: Full `Logo.jsx` + collapse toggle button `<`. Clicking the logo navigates to `/dashboard`.
+- **Top Permanent Action**:
+  - `[ + New Chat ]` button anchored at the very top of the navigation list.
+  - In 64px mini-rail mode, transforms into a compact centered `[ + ]` icon button wrapped in `MuiTooltip`. Navigates to `/chat`.
+- **Navigation Links**:
+  - Dashboard (`/dashboard`), Branches (`/branches`), Reports (`/reports`).
+  - Active route indicated with theme primary accent background and left border highlight.
+- **Recent Chats Drawer**:
+  - Divider with centered "Recent" header (visible **only** when previous chat nodes exist in state).
+  - Virtualized, scrollable chat list with pagination on scroll.
+  - Hover action menu per chat node: **Pin/Unpin**, **Inline Rename** (`MuiTextField`), and **Delete** (confirmed via `MuiConfirmDialog`).
+- **Footer User Section**:
+  - Summary card displaying user Avatar, `fullName`, and organizational role.
+  - Clicking anywhere on the user summary card navigates directly to `/profile`.
+  - Includes compact Logout icon button.
+
+#### 10.3.3 Sticky Top `MuiAppbar` (Strictly 3 Right-Side Controls)
+- **Position**: Sticky top bar in the right flex column.
+- **Left Section**: Sidebar hamburger toggle button `[ ☰ ]`.
+- **Right Section (Strictly 3 Controls)**:
+  1. **Global Search Button `[ 🔍 ]`**: Opens the Global Search Dialog.
+  2. **Theme Toggle Button `[ 🌓 ]`**: Switches between Light and Dark themes.
+  3. **User Avatar `[ 👤 ]`**: Displays avatar / initials; clicking opens dropdown menu with direct links to `Profile` and `Logout`.
+  - *(Zero notification bell icon, zero font scaling stepper buttons).*
+
+#### 10.3.4 Outlet Container
+- Houses `MuiPageHeader` (breadcrumbs, view title, and responsive action toolbar with `xs` iconification) and the scrollable content view.
+
+---
+
+### 10.4 Global Search Dialog Specification (`GlobalSearchDialog.jsx`)
+
+#### 10.4.1 Viewport Responsiveness & Layout
+- **Extra-Small Screens (`xs` and `sm-landscape`)**:
+  - Positioned `absolute; top: 0; bottom: 0; left: 0; right: 0; width: 100%; height: 100%; max-width: 100%; margin: 0; border-radius: 0`. Fullscreen edge-to-edge overlay.
+- **Small Screens and Above (`sm+`)**:
+  - Centered modal dialog with `maxWidth="sm"` (640px) and standard rounded Paper container.
+
+#### 10.4.2 Pinned Header & Lag-Free Input
+- **Left Control**: Left arrow icon button (`ArrowBackIcon`) that immediately closes the dialog.
+- **Search Field (`MuiTextField`)**:
+  - Start Adornment: Search icon (`SearchIcon`).
+  - End Adornment: Clear icon button `[ ✕ ]` that resets the search text when populated.
+  - Sub-5ms typing performance guarantee: Uncontrolled internal input state debouncing search queries (zero main-thread blocking).
+- **Strict Scroll Boundary Invariant**:
+  - The dialog outer container **never scrolls**.
+  - Scrolling is strictly confined to **`<DialogContent sx={{ overflowY: 'auto', p: 0 }}>`**, keeping the search bar pinned at the top at all times.
+
+#### 10.4.3 Categorized Accordion Results
+- Content renders 3 expandable accordions:
+  1. **Reports**: Matches by Ethiopian date, primary branch name, issues summary, or report status.
+  2. **Branches**: Matches by `name`, `normalizedName`, `location`, or phone.
+  3. **Chat Nodes**: Matches by chat title or message transcription snippets.
+- Each accordion header features a count badge (e.g., `Reports (4)`).
+- Clicking any result item navigates directly to the canonical detail page (`/reports/:reportId/details`, `/branches/:branchId/details`, or `/chat/:chatId`) and closes the dialog.
+- If zero results match, renders an **`MuiEmptyState`** with a *"No results found"* illustration.
+
+---
+
+### 10.5 In-Canvas Report Creation & Chat Lifecycle (`/chat`, `/chat/:chatId`)
+
+#### 10.5.1 Dual-Role Chat Canvas
+The Chat Canvas (`ChatPage.jsx`) serves two operational modes:
+1. **General Operations Assistant & Analyst**: Supervisor can engage in free conversational chat, query multi-branch trends, request Google Sheets exports, or draft escalation memos without creating a report.
+2. **In-Canvas Report Creation**: Structured workflow for initiating, editing, and compiling daily shift reports.
+
+#### 10.5.2 The 10-Row Initiation Form Lifecycle
+```
+[ Chat Composer View ]
+       │
+       ▼ (Supervisor clicks "+ New Report")
+[ 10-Row Initiation Form Appears in Canvas ] ──► (Composer temporarily hides)
+       │
+       ├─────────────────────────────────────────┐
+       ▼ [ User Clicks Cancel ]                  ▼ [ User Clicks Submit ]
+[ MuiConfirmDialog Confirmation ]        [ Form Validation Passes ]
+       │                                         │
+       ▼                                         ▼
+[ Form Disappears ]                      [ Form Disappears ]
+[ Composer Restored ]                    [ Composer Reappears in Disabled State ]
+[ Normal Chat Continues ]                [ Agent Turn Launches via SSE Stream ]
+                                                 │
+                                                 ▼
+                                         [ Streaming Completes ]
+                                         [ Report Card + Action Triggers in Thread ]
+```
+- **Initiation**: Clicking "+ New Report" hides the centered composer and opens the structured 10-Row Form in the canvas.
+- **Cancel Flow**: Clicking `[ Cancel ]` opens an `MuiConfirmDialog` (if inputs are dirty). Upon confirmation, the form is dismissed, the composer is restored, and normal chat proceeds.
+- **Submit & Stream Flow**:
+  - Submitting executes `react-hook-form` validation.
+  - On success, the form immediately disappears, the composer reappears in streaming/disabled state, and the agent SSE stream begins.
+  - Upon completion, the compiled plain-text Amharic report and interactive **Report Reference Card** (`[ View Full Report ]`, `[ Edit in Form ]`, `[ Copy Text ]`) are inserted into the message list.
+
+---
+
+### 10.6 Core Operations Pages Matrix
+
+#### 10.6.1 Dashboard Page (`/dashboard`)
+- Connected to `dashboardSlice` and `dashboardApi`.
+- **4 KPI Cards**: Total Reports, Monthly Reports, Open Issues, Branches Visited.
+- **4 Charts (`@mui/x-charts`)**:
+  1. Reports Trend (Line chart of reports submitted over the last 30 days).
+  2. Issues by Status (Donut chart including `no_issue`, `reported`, `in_progress`, `completed`).
+  3. Issues per Branch (Bar chart highlighting operational trouble spots).
+  4. Visit Frequency (Bar chart tracking audits per branch).
+- **Recent Reports Ledger**: Compact table with direct links to `/reports/:reportId/details`.
+- **Needs-Attention Panel**: Alerts for open high-severity issues requiring supervisor action.
+
+#### 10.6.2 Branches Directory (`/branches`) & Detail (`/branches/:branchId/details`)
+- **`/branches`**:
+  - `MuiPageHeader` with view toggle (Card list on `xs`; `MuiDataGrid` on `sm+`).
+  - Action button: `[ + Add Branch ]` (collapses to `[ + ]` icon on `xs`) $\rightarrow$ opens `BranchDialog` in Create Mode.
+  - Filter drawer: Search input, location filter, active/archived toggle.
+  - DataGrid utilizes columns from `client/src/components/columns/branch.jsx`.
+- **`/branches/:branchId/details`**:
+  - Header: Branch title, location chip, contact phone, and `[ ✏️ Edit Branch ]` button (opens `BranchDialog` in Edit Mode).
+  - KPI summary, visit timeline, associated reports table, and open branch issues list.
+
+#### 10.6.3 Reusable Branch Management Modal (`BranchDialog.jsx`)
+- Reusable `MuiDialog` for Create (`isEdit=false`) and Edit (`isEdit=true`).
+- Powered by `react-hook-form` with `mode: 'onBlur'`:
+  - `name`: Required string (`MuiTextField`).
+  - `location`: Required string (`MuiTextField`).
+  - `phone`: Optional phone string (`MuiTextField`).
+  - `address`: Optional address string (`MuiTextField`).
+- All inputs have Start contextual icons, End clear icons, and inline red `helperText` on error.
+- Standard action buttons: `[ Cancel ]` and `[ Save Branch ]` (with loading spinner during async mutation).
+
+#### 10.6.4 Reports Directory (`/reports`), Detail & Edit
+- **`/reports`**:
+  - `MuiPageHeader` with view toggle (Card list on `xs`; `MuiDataGrid` on `sm+`).
+  - Action button: `[ + New Report ]` $\rightarrow$ navigates to `/chat` with report initiation triggered.
+  - Filter drawer: Date range picker (Ethiopian dates), branch selector, issue status filter, archived toggle.
+  - DataGrid utilizes columns from `client/src/components/columns/report.jsx`.
+- **`/reports/:reportId/details`**:
+  - Formatted Plain-Text Amharic report card.
+  - Action bar: `[ 📋 Copy Text ]`, `[ 📥 Download .txt ]`, `[ 🖨️ Print PDF ]`, `[ 📄 Export Google Docs ]`, and `[ ✏️ Edit Report ]` (navigates to `/reports/:reportId/edit`).
+  - Protected audio playback: `MuiAudioPlayer` streaming narration clips via client-built Blob URLs.
+- **`/reports/:reportId/edit`**:
+  - 2-Column Symmetrical Edit Surface: left column contains structured inputs for visits, activities, and issues; right column provides sticky live plain-text Amharic preview.
+
+#### 10.6.5 Consolidated Profile & Settings Page (`/profile`)
+- Replaces standalone `/settings`, accessed via AppBar user avatar menu or Sidebar footer.
+- **Section 1: Profile Information**: Avatar preview with upload (`MuiFileInput` / `uploads/avatars/`, max 15MB, jpeg/jpg/png/webp), Full Name, Email (read-only), Phone, Position.
+- **Section 2: Security & Credentials**: Change Password (`currentPassword`, `newPassword`, `confirmPassword`) with visibility toggle adornments and `onBlur` helper text.
+- **Section 3: Preferences**: Theme mode (Light/Dark/System), default shift hours (`clockIn`/`clockOut`), default primary branch.
+- **Section 4: Danger Zone**: Permanent self-service account deletion (`DELETE /api/v1/users/me`) with `MuiConfirmDialog` and 7-collection atomic transaction cascade.
+
+---
+
+### 10.7 DataGrid Columns Architecture (`client/src/components/columns/*`)
+
+Dedicated directory defining column configurations for `@mui/x-data-grid`:
+- **`branch.jsx`**:
+  - Columns: `name` (flex: 1.5), `location` (flex: 1), `phone` (flex: 1), `totalReports` (flex: 0.8), `openIssues` (flex: 0.8), `actions` (flex: 0.8, action menu with Edit and View Details).
+- **`report.jsx`**:
+  - Columns: `ethiopianDate` (flex: 1), `primaryBranch` (flex: 1.2), `shiftHours` (`clockIn` - `clockOut`, flex: 1), `issuesSummary` (flex: 1.5), `status` (flex: 0.8), `actions` (flex: 0.8, action menu with View Details, Edit, and Copy Text).
+- **Column Rules**: All columns strictly use `flex` properties (zero hardcoded pixel widths); action icons styled via `sx`; row-click auto-navigation is disabled (navigation occurs strictly via action buttons).
+
+---
+
+### 10.8 Reusable Component Matrix (`client/src/components/reusable/*`)
+
+Complete catalog of the 13 standardized UI component wrappers:
+
+| Component Name | File Path | Functional Specification & Invariants |
+|---|---|---|
+| **`MuiAudioPlayer`** | `reusable/MuiAudioPlayer.jsx` | Method 1 in-memory Blob audio player with waveform/progress bar, play/pause, seek, duration, and volume controls. Zero HTTP-range streaming. |
+| **`MuiFileInput`** | `reusable/MuiFileInput.jsx` | Drag-and-drop & file browser input with MIME allowlist (`audio/*`, `image/*`), size validation, and file preview chips. |
+| **`MuiButton`** | `reusable/MuiButton.jsx` | Standardized button (`size="small"`, `flexShrink: 0`, loading state, and responsive `xs` text suppression). |
+| **`MuiPageHeader`** | `reusable/MuiPageHeader.jsx` | View header with breadcrumbs, title, subtitle, and action toolbar with universal `xs` iconification. |
+| **`MuiConfirmDialog`** | `reusable/MuiConfirmDialog.jsx` | Generic confirmation dialog for deletions and cancellations with title, message, and standardized action buttons (`[ Cancel ]` and `[ Confirm ]`). |
+| **`MuiPagination`** | `reusable/MuiPagination.jsx` | Wrapped pagination component for card lists and DataGrid integration. |
+| **`MuiTextField`** | `reusable/MuiTextField.jsx` | Input wrapper with mandatory Start contextual icon and End clear icon `[ ✕ ]` / password visibility toggle `[ 👁️ ]`, plus inline red `helperText`. |
+| **`MuiDataGrid`** | `reusable/MuiDataGrid.jsx` | Wrapped `@mui/x-data-grid` configured with flex columns, empty state fallbacks, and row action menus. |
+| **`MuiRecorder`** | `reusable/MuiRecorder.jsx` | Web Audio API live recording orb with 120s timer countdown, frequency visualizer, and stop/cancel actions. |
+| **`LoadingSpinner`** | `reusable/LoadingSpinner.jsx` | Standardized centered loading spinner for async transitions and lazy-loaded routes. |
+| **`MuiDialog`** | `reusable/MuiDialog.jsx` | Accessible modal wrapper with standardized header (title + close button), scrollable `DialogContent`, and standardized `DialogActions` buttons with loading/disabled states. |
+| **`MuiSelect`** | `reusable/MuiSelect.jsx` | Dropdown select component with Start icon adornment, dropdown chevron, and inline `helperText`. |
+| **`MuiAutoComplete`** | `reusable/MuiAutoComplete.jsx` | Free-solo autocomplete with Start contextual icon, clear End adornment, and async search loading. |
+| **`Logo`** | `reusable/Logo.jsx` | Application brand component combining vector icon and "Report Builder" typography. |
+
+---
+
+### 10.9 Domain-Based Redux Architecture (`client/src/features/*`)
+
+State management follows a clean feature-based architecture powered by `@reduxjs/toolkit` and RTK Query:
+
+```
+client/src/
+├── app/
+│   ├── store.js                   # Configures Redux store with root reducer & redux-persist
+│   └── rootReducer.js             # Combines all domain feature slices
+└── features/
+    ├── api/
+    │   └── apiSlice.js            # Base RTK Query slice with baseQueryWithReauth & async-mutex
+    ├── auth/
+    │   ├── authSlice.js           # User state, token status
+    │   └── authApi.js             # Login, register, logout, profile endpoints
+    ├── dashboard/
+    │   ├── dashboardSlice.js      # Dashboard filter dates, active metric views
+    │   └── dashboardApi.js        # KPI cards and 4 @mui/x-charts metrics endpoints
+    ├── reports/
+    │   ├── reportsSlice.js        # Filter parameters, active report draft
+    │   └── reportsApi.js          # Report CRUD, compilation, PDF print, Google Docs export
+    ├── branches/
+    │   ├── branchesSlice.js       # View mode (grid/card), active branch filters
+    │   └── branchesApi.js         # Branch CRUD endpoints
+    ├── chats/
+    │   ├── chatsSlice.js          # Active thread ID, SSE stream status, abort controller
+    │   └── chatsApi.js            # Chat threads, messages, stream connection, abort
+    └── theme/
+        └── themeSlice.js          # Theme mode (light/dark)
+```
+
+---
+
+### 10.10 Summary of Invariants & Unstated Requirement Law
+
+> [!IMPORTANT]
+> **The Unstated Requirement Law**:
+> Any ambiguous, unstated, or unspecified behavior must never be proactively assumed or implemented by downstream builder agents. It must strictly be clarified and created **only upon explicit user confirmation**.
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Flat Lazy Route Hierarchy** | Implemented via `createBrowserRouter` using lazy `Component` definitions. |
+| **Strict Route Isolation** | `PublicRoute` locks out authenticated users (redirecting to `/dashboard`); `ProtectedRoute` locks out unauthenticated users (redirecting to `/login`). |
+| **Direct Symmetrical Routing** | `/reports/:reportId/details`, `/reports/:reportId/edit`, and `/branches/:branchId/details` link directly without redirect hops. |
+| **In-Canvas Report Creation** | Report creation is hosted strictly inside `/chat`; zero `/reports/new` route. |
+| **Global Search Dialog Positioning** | Absolute fullscreen on `xs` and `sm-landscape`; centered modal on `sm+`. Dialog container never scrolls; only `DialogContent` scrolls. |
+| **Clean App Bar Right Controls** | AppShell AppBar right side strictly limited to Global Search, Theme Toggle, and User Avatar (zero bell notifications, zero font steppers). |
+| **Universal `xs` Control Iconification** | All text-labeled buttons and compound controls collapse into compact icon-only buttons with tooltips on `xs` (<600px). |
+| **Universal Start & End Adornments** | All input wrappers (`MuiTextField`, `MuiSelect`, `MuiAutoComplete`) feature contextual Start icons and functional End clear/toggle icons. |
+| **Standardized Dialog Actions** | `MuiDialog` provides standardized action buttons (`[ Cancel ]` and `[ Confirm/Save ]`) with loading and disabled states. |
+| **Domain-Based Architecture** | Features segregated into `features/auth`, `features/dashboard`, `features/reports`, `features/branches`, `features/chats`, and `features/theme`. |
+
+---
+
 

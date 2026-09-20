@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-User review and confirmation of Section 9: Conversational Agent UI & MUI X Chat Integration.
+Plan Mode review and specification of Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes.
 
 ## Current Phase
 
-Phase 9: Section 9 - Conversational Agent UI & MUI X Chat Integration
+Phase 11: Section 11 - REST API Endpoint Inventory, Validation Chains & Response Envelopes
 
 ## Phases
 
@@ -131,24 +131,29 @@ Phase 9: Section 9 - Conversational Agent UI & MUI X Chat Integration
 - [x] Detail Universal Responsive Control Iconification mandate (`xs` screen protection with `MuiTooltip`)
 - [x] Detail Universal Reusable Input Components & Mandatory Start/End Adornments Law
 - [x] User review and confirmation of Section 9 and active review amendments
-- [ ] Commit Section 9 specification amendments to `phase-0-specification`
-- **Status:** in_progress
+- [x] Commit Section 9 specification amendments to `phase-0-specification` (`858614e`)
+- **Status:** complete
 
 ### Phase 10: Section 10 - Frontend Routing, Shell Layout & Component Matrix
-- [ ] Detail `main.jsx` route configuration with `PublicRoute` (authenticated lockout to `/dashboard`), `ProtectedRoute`, and lazy `Component` loading
-- [ ] Detail `App.jsx`, `AppTheme`, `AppErrorBoundary`, `AppToastContainer`
-- [ ] Detail `MuiAppbar` in PublicLayout (Theme, Login, Register) and AppShell (Search, Theme, Avatar only; zero bell, zero font stepper)
-- [ ] Detail responsive `AppShell` (mini/temporary sidebar, Recent chats, User menu, Global Search Dialog)
-- [ ] Detail consolidated `/profile` route replacing `/settings` (Profile info, Security, Preferences, Account Deletion) with dual entry from AppBar and Sidebar
-- [ ] Detail unified `BranchDialog` (Create/Edit modes) eliminating dedicated `/branches/new` and `/branches/:branchId/edit` routes
-- [ ] Detail universal `react-hook-form` with `mode: 'onBlur'` and inline `helperText` error rendering
-- [ ] Detail universal start and end adornments on all `client/src/components/reusable/*` input components
-- [ ] Detail Dashboard KPI cards and 4 charts (`@mui/x-charts`)
-- [ ] Detail Branches and Reports pages (`MuiDataGrid`, filter drawer, pagination)
-- [ ] Detail BranchDetail, ReportDetail (text copy, .txt download, print-PDF, Google Docs export)
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail `main.jsx` route configuration with `PublicRoute` (authenticated lockout to `/dashboard`), `ProtectedRoute`, and lazy `Component` loading
+- [x] Detail `App.jsx`, `AppTheme`, `AppErrorBoundary`, `AppToastContainer`
+- [x] Detail `MuiAppbar` in PublicLayout (Theme, Login, Register) and AppShell (Search, Theme, Avatar only; zero bell, zero font stepper)
+- [x] Detail responsive `AppShell` (mini/temporary sidebar, Recent chats, User menu, Global Search Dialog)
+- [x] Detail consolidated `/profile` route replacing `/settings` (Profile info, Security, Preferences, Account Deletion) with dual entry from AppBar and Sidebar
+- [x] Detail unified `BranchDialog` (Create/Edit modes) eliminating dedicated `/branches/new` and `/branches/:branchId/edit` routes
+- [x] Detail universal `react-hook-form` with `mode: 'onBlur'` and inline `helperText` error rendering
+- [x] Detail universal start and end adornments on all `client/src/components/reusable/*` input components
+- [x] Detail complete 13-component catalog in `client/src/components/reusable/*` and `MuiDialog` with standardized action buttons
+- [x] Detail `client/src/components/columns/*` directory for `MuiDataGrid` column schemas (`branch.jsx`, `report.jsx`)
+- [x] Detail domain-based Redux architecture including `dashboardSlice` & `dashboardApi` in `client/src/features/*`
+- [x] Detail Dashboard KPI cards and 4 charts (`@mui/x-charts`)
+- [x] Detail Branches and Reports pages (`MuiDataGrid`, filter drawer, pagination)
+- [x] Detail BranchDetail, ReportDetail (text copy, .txt download, print-PDF, Google Docs export)
+- [x] Detail in-canvas report creation flow in `/chat` with 10-Row Form lifecycle (Cancel/Submit)
+- [x] Detail Unstated Requirement Law (zero assumptions without explicit user confirmation)
+- [x] Review in Plan Mode with user
+- [x] Output Section 10 specification content to `docs/specifications/master_specification.md` in Build Mode
+- **Status:** complete
 
 ### Phase 11: Section 11 - REST API Endpoint Inventory, Validation Chains & Envelopes
 - [ ] Detail all `/api/v1/*` route definitions, HTTP methods, controllers, and services

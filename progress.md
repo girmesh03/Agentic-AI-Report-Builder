@@ -234,12 +234,36 @@ Use this file as the chronological record of work performed, files created, git 
   - `progress.md`
   - `docs/specifications/master_specification.md`
 
+### Phase 10: Section 10 - Frontend Routing, Shell Layout & Component Matrix
+- **Status:** complete
+- **Started:** 2026-09-20T18:57:00+03:00
+- **Completed:** 2026-09-20T19:47:00+03:00
+- Actions taken:
+  - Formulated complete Section 10 specification in Plan Mode with user.
+  - Aligned on Option A Product Landing Page (`Landing.jsx`) with Hero section, 3 feature highlight cards, CTAs to `/register` and `/login`, and clean footer.
+  - Formalized in-canvas report creation lifecycle: zero `/reports/new` page route; clicking "+ New Report" hides composer and renders 10-Row Form in `/chat` canvas; Cancel restores composer, Submit launches SSE streaming and renders report reference card in thread.
+  - Symmetrized direct routes: `/reports/:reportId/details`, `/reports/:reportId/edit`, and `/branches/:branchId/details` link directly without redirect hops.
+  - Specified `BranchDialog.jsx` (`MuiDialog`) as a reusable `react-hook-form` modal for both Create and Edit modes, eliminating `/branches/new` and `/branches/:branchId/edit`.
+  - Detailed Global Search Dialog (`GlobalSearchDialog.jsx`): absolute edge-to-edge on `xs` and `sm-landscape`; centered modal on `sm+`; strict scroll isolation (only `DialogContent` scrolls); left arrow close button and clear end adornment.
+  - Cataloged all 13 reusable UI components under `client/src/components/reusable/*` (`MuiAudioPlayer`, `MuiFileInput`, `MuiButton`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiPagination`, `MuiTextField`, `MuiDataGrid`, `MuiRecorder`, `LoadingSpinner`, `MuiDialog` with standardized action buttons, `MuiSelect`, `MuiAutoComplete`, plus `Logo`).
+  - Specified dedicated column schemas under `client/src/components/columns/*` (`branch.jsx`, `report.jsx`) with flex sizing and styled actions.
+  - Formulated domain-based Redux architecture including `dashboardSlice` & `dashboardApi` in `client/src/features/*`.
+  - Documented the Unstated Requirement Law: downstream agents must never assume or implement unstated requirements without explicit user confirmation.
+  - Switched to Build Mode on explicit user instruction ("proceed -> don't commit").
+  - Authored and appended complete Section 10 to `docs/specifications/master_specification.md` (now 5,619 lines).
+  - Updated `task_plan.md`, `findings.md`, and `progress.md`.
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Build Mode active; 10 architectural amendments integrated into `implementation_plan.md`, `findings.md`, and `task_plan.md`. Updating Section 9 and Section 10 in `master_specification.md`. |
-| Where am I going? | Complete specification integration in `master_specification.md` -> Commit on `phase-0-specification` -> Proceed to Section 10. |
+| Where am I? | Section 10 (Frontend Routing, Shell Layout & Component Matrix) authored and appended to `master_specification.md` in Build Mode. Changes staged/unstaged, uncommitted per user instruction ("don't commit"). |
+| Where am I going? | Switch to Plan Mode for Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes upon user confirmation. |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Clear separation between runtime Model Selector and persistent Preset Dialog prevents confusion; universal `xs` iconification protects mobile layouts; consolidated `/profile` streamlines user settings without route fragmentation. |
-| What have I done? | Formulated 10 architectural mandates with user in Plan Mode; switched to Build Mode on user confirmation; updated `implementation_plan.md`, `findings.md`, `task_plan.md`, and `progress.md`. |
+| What have I learned? | In-canvas report creation inside `/chat` eliminates route hopping; explicit 13-reusable-component matrix with `MuiDialog` action buttons guarantees frontend consistency; domain-based Redux with `dashboardSlice` provides cohesive state management. |
+| What have I done? | Detailed and appended Section 10 to `master_specification.md` (lines 5262–5619); updated `task_plan.md`, `findings.md`, and `progress.md`; preserved working tree without committing. |

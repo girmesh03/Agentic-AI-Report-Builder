@@ -127,7 +127,15 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Consolidated `/profile` Route | Replaces standalone `/settings`; houses profile info, security/password, preferences, and account deletion with dual entry from AppBar and Sidebar. |
 | Universal Reusable Inputs & Adornment Law | `MuiTextField`, `MuiSelect`, `MuiAutocomplete` etc. must feature both Start Adornment (context icon) and End Adornment (clear icon/visibility/caret). |
 | Self-Service Account Deletion Protocol | `DELETE /api/v1/users/me` on `/profile` runs atomic 7-collection transaction cascade and cookie clearance; admin user deletion remains forbidden. |
-| 10-Row Initiation Form (`/reports/new`) | 2-column split (form left, sticky plain-text Amharic preview right); Rows 1–10 with Tri-Modal Audio Ingestion and Method 1 in-memory Blob players. |
+| In-Canvas Report Creation Flow | Report creation is hosted strictly inside `/chat`; zero `/reports/new` route. Initiation form replaces composer; cancel restores composer, submit launches SSE stream. |
+| Direct Symmetrical Routes | Direct links to `/reports/:reportId/details`, `/reports/:reportId/edit`, and `/branches/:branchId/details` without redirect hops. |
+| Global Search Dialog (`MuiDialog`) | Fullscreen absolute on `xs` and `sm-landscape`, centered on `sm+`; strict scroll isolation (only `DialogContent` scrolls); left arrow close and end clear adornment. |
+| 13 Reusable UI Components (`client/src/components/reusable/*`) | Explicit catalog: `MuiAudioPlayer`, `MuiFileInput`, `MuiButton`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiPagination`, `MuiTextField`, `MuiDataGrid`, `MuiRecorder`, `LoadingSpinner`, `MuiDialog` (with action buttons), `MuiSelect`, `MuiAutoComplete`, plus `Logo`. |
+| Dedicated Columns Directory | `client/src/components/columns/*` contains DataGrid column definitions (`branch.jsx`, `report.jsx`) with flex sizing and styled actions. |
+| Domain-Based Redux Architecture | Segregated domain feature slices including `dashboardSlice` & `dashboardApi` under `client/src/features/*`. |
+| Option A Product Landing Page | Clean public landing page at `/` with Hero, 3 feature highlight cards, CTAs to `/register` and `/login`, and footer. |
+| The Unstated Requirement Law | Any ambiguous or unstated requirement must never be proactively assumed or implemented; created strictly upon explicit user confirmation. |
+
 
 ## Locked Package Manifest
 
