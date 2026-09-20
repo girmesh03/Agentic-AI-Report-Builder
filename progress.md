@@ -164,6 +164,15 @@ Use this file as the chronological record of work performed, files created, git 
       - Standardized on Method 1 (Authenticated Binary Fetch -> `URL.createObjectURL(blob)`) for all audio playback routes (`/reports/:reportId/clips/:clipId` and `/chats/:chatId/messages/:messageId/audio`), eliminating HTTP 206 Range bugs and Safari cookie-dropping.
       - User reviewed and confirmed Section 6 specification.
       - Committed Section 6 to `phase-0-specification`.
+    - Section 7 (Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime) drafted and integrated into `master_specification.md`:
+      - Engineered Zero-DB-Table Dynamic Few-Shot Harvesting architecture: ingests supervisor's last 3–5 approved reports to dynamically extract workplace Ge'ez transliterations (`ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`, `ቺለር`, etc.) and solution phrasing, injecting them into LLM system prompt with zero database migrations or static dictionary tables.
+      - Defined complete Server Tool Execution Catalog across 11 tools (`query_operational_data`, `update_report_item`, `generate_operational_matrix`, `track_operational_trends`, `generate_executive_briefing`, `get_report_context` w/ multi-criteria lookup & disambiguation, `update_report`, `create_report` w/ atomic Report + 1:1 Chat creation, `list_branches`, `create_branch`, `export_report_to_google_docs`) with full JSON schemas, parameter types, Mongoose transaction wrappers, and operational workflows.
+      - Mandated Date Attribution Invariant: every activity, issue, or opinion returned in multi-branch queries and matrices carries both Ethiopian Calendar (`DD-MM-YYYY ዓ.ም`) and Gregorian dates.
+      - Formalized Bidirectional Chat Continuity Invariant (Universal Continuity Doctrine): Report Chat can query general multi-branch operational data without losing report context; General Chat can inspect, mutate, create, and export specific reports without leaving the conversation, rendering interactive deep-link Report Reference Cards.
+      - Detailed Deterministic 3-Tier Fallback Chain: Tier 1 (Google Gemini 2.5 Flash / Flash Lite) -> Tier 2 (Addis AI `addis-1-alef`) -> Tier 3 (Nvidia NIM `meta/llama-3.1-nemotron-70b-instruct`) with backoff retries (1s -> 2s -> 4s), circuit breaking, and transparent client SSE fallback notification.
+      - Standardized SSE Streaming Protocol with full event catalog (`text_delta`, `tool_call_start`, `tool_call_result`, `report_updated`, `provider_fallback`, `stream_end`, `error`) and 15s keep-alive heartbeat.
+      - Engineered stream concurrency lock (`activeChatStreams` in-memory Map) with HTTP 409 rejection and clean interruption endpoint (`POST /chats/:chatId/abort`) utilizing `AbortController`.
+      - Detailed context window pruning (sliding 10-message window + summary) and token budgeting for Gemini Free Tier rate limits (15 RPM / 1M TPM / 1500 RPD).
 - Files created/modified:
   - `docs/specifications/master_specification.md`
   - `findings.md`
@@ -174,8 +183,8 @@ Use this file as the chronological record of work performed, files created, git 
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 6 committed to `phase-0-specification`; preparing Section 7 (Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime). |
-| Where am I going? | Plan Mode formulation and review of Section 7 architecture. |
+| Where am I? | Section 7 drafted and appended to `master_specification.md`; ready for user review before committing. |
+| Where am I going? | User confirmation of Section 7 -> Commit -> Section 8 (Workplace Transliteration Engine & In-Context Phonetic Guidance). |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Method 1 in-memory Blob URL playback guarantees zero HTTP 206 Range errors and zero Safari cookie-dropping; FFmpeg silence-detect prevents mid-word Ge'ez speech truncation; Mode 3 ephemeral dictation guarantees zero disk persistence. |
-| What have I done? | Committed Section 6 (`phase-0-specification`); synchronized all planning files; prepared Section 7 blueprint for user review in Plan Mode. |
+| What have I learned? | Zero-DB-Table dynamic harvesting provides superior domain adaptation over static dictionaries; cross-chat query continuity ensures supervisors can ask multi-branch timeline questions mid-report; strict date attribution on all operational items gives complete chronological tracking. |
+| What have I done? | Drafted Section 7 (850+ lines) in `master_specification.md`; updated `findings.md`, `task_plan.md`, and `progress.md`; preparing user review summary. |

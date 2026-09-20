@@ -99,6 +99,12 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Mode 3 Ephemeral Dictation vs Mode 4 Attachment | Mode 3 ephemeral audio unlinks immediately in `finally` block and injects text into `ChatComposerTextArea` at cursor; Mode 4 attaches voice note files via chip above composer, persisting to `uploads/audio/` and MongoDB. |
 | FFmpeg Acoustic Standardization & Silence Chunking | Downmixes all audio to mono 16-bit 16kHz PCM WAV; files >120s or >25MB split along natural pauses via `silencedetect=noise=-30dB:d=0.5` to eliminate mid-word truncation. |
 | Addis AI STT Synchronous Ingestion | Synchronous SDK execution with `AI_TIMEOUT_MS` bounding and 1s -> 2s -> 4s exponential backoff retries on transient errors; sequential chronological concatenation into `rawNarrationText`. |
+| Zero-DB-Table Dynamic Few-Shot Engine | Samples supervisor's last 3–5 approved reports to dynamically harvest real-world equipment transliterations and formatting patterns; injects them into system prompt; 0 schema migrations, 0 admin dictionary maintenance. |
+| Server Tool Execution Catalog (11 Tools) | Complete declarative schemas: `query_operational_data`, `update_report_item`, `generate_operational_matrix`, `track_operational_trends`, `generate_executive_briefing`, `get_report_context` (w/ criteria & disambiguation), `update_report`, `create_report` (atomic Report + 1:1 Chat creation), `list_branches`, `create_branch`, `export_report_to_google_docs`. |
+| Date Attribution Invariant | All queries and matrix outputs attach specific Ethiopian Calendar (`DD-MM-YYYY ዓ.ም`) and Gregorian dates to every activity, issue, and status record returned to the supervisor. |
+| Bidirectional Chat Continuity Invariant | Report Chat can execute general multi-branch queries without losing report context; General Chat can inspect, mutate, create, and export specific reports without leaving the conversation, rendering interactive deep-link Report Reference Cards. |
+| Deterministic 3-Tier Fallback Chain | Tier 1 (Google Gemini 2.5 Flash / Flash Lite) -> Tier 2 (Addis AI `addis-1-alef`) -> Tier 3 (Nvidia NIM `meta/llama-3.1-nemotron-70b-instruct`) with backoff retries and transparent failover events. |
+| Concurrency Lock & Abort Protocol | Per-chat in-memory stream registry (`activeChatStreams`); HTTP 409 rejection on concurrent messages; `POST /chats/:chatId/abort` triggers `AbortController.abort()` to halt generation cleanly. |
 
 ## Locked Package Manifest
 

@@ -93,14 +93,18 @@ Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
 - **Status:** complete
 
 ### Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
-- [ ] Detail prompt architecture (System, Persona, zero-shot/few-shot in Amharic)
-- [ ] Detail server-executed tool contracts (`get_report_context`, `update_report`, `list_branches`, `create_branch`, `export_report_to_google_docs`, `export_to_google_sheet`)
-- [ ] Detail streaming token-by-token loop with per-chat concurrency lock
-- [ ] Detail fallback chain: addis -> gemini -> nvidia with exponential backoff and 502 exhaustion
-- [ ] Detail Presets model and per-user daily AI quota tracking
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail prompt architecture (System, Persona, Zero-DB-Table dynamic few-shot vocabulary harvesting)
+- [x] Detail server-executed tool contracts (11 tools: `query_operational_data`, `update_report_item`, `generate_operational_matrix`, `track_operational_trends`, `generate_executive_briefing`, `get_report_context` w/ criteria & disambiguation, `update_report`, `create_report` w/ atomic 1:1 chat creation, `list_branches`, `create_branch`, `export_report_to_google_docs`)
+- [x] Detail mandatory Date Attribution Invariant (all query/matrix records carry Ethiopian & Gregorian dates)
+- [x] Detail Bidirectional Chat Continuity Invariant (Report Chat can query multi-branch data; General Chat can inspect, mutate, create, and export specific reports with interactive deep-link cards)
+- [x] Detail streaming SSE protocol (`event: text_delta`, `tool_call_start`, `tool_call_result`, `report_updated`, etc.)
+- [x] Detail per-chat concurrency lock (`activeChatStreams` map, HTTP 409 rejection, `POST /chats/:chatId/abort`)
+- [x] Detail fallback chain: Tier 1 (Gemini) -> Tier 2 (Addis AI) -> Tier 3 (Nvidia NIM) with backoff and error isolation
+- [x] Detail context window pruning (sliding 10-message window + summary) and daily token quota tracking
+- [x] Write complete Section 7 to `docs/specifications/master_specification.md`
+- [ ] User review and confirmation of Section 7
+- [ ] Commit Section 7 to `phase-0-specification`
+- **Status:** in_progress
 
 ### Phase 8: Section 8 - Workplace Transliteration Engine & In-Context Phonetic Guidance
 - [ ] Detail dynamic few-shot learning from last 3–5 approved reports (zero static glossary tables)

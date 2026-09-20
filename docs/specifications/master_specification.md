@@ -15,7 +15,7 @@
 4. [Section 4: Domain Data Models, Schemas & Lifecycle Management](#section-4-domain-data-models-schemas--lifecycle-management)
 5. [Section 5: Chat, Message & Conversation Node Architecture](#section-5-chat-message--conversation-node-architecture)
 6. [Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine](#section-6-audio-pipeline-ffmpeg-preprocessing--addis-ai-stt-engine)
-7. *Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime (Pending)*
+7. [Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime](#section-7-agentic-reasoning-multi-tier-fallback--gemini-runtime)
 8. *Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance (Pending)*
 9. *Section 9: Conversational Agent UI & MUI X Chat Integration (Pending)*
 10. *Section 10: Frontend Routing, Shell Layout & Component Matrix (Pending)*
@@ -2969,4 +2969,1105 @@ for (const audio of report.audioFiles) {
 #### 6.8.3 Resilient Error Isolation
 - **The Golden Rule of File Deletion**: Database transactions must **never** be rolled back or disrupted because a physical file is missing from disk (e.g. if an administrator manually cleared a directory or if a container restarted).
 - All `fs.promises.unlink()` operations are strictly wrapped in `.catch(() => {})` with a Winston warning log, guaranteeing complete operational resilience and zero transaction rollback failures.
+
+---
+
+# Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
+
+### 7.1 LLM Architectural Vision & Orchestration Model
+
+The Report Builder conversational runtime is engineered as an autonomous agent capable of reasoning over complex operational data, manipulating report documents with transactional precision, and answering multi-branch analytical inquiries in formal, grammatically impeccable corporate Amharic.
+
+```mermaid
+flowchart TD
+    UserPrompt["Supervisor Message / Voice Transcription"] --> Orchestrator["Agent Orchestration Engine (services/agentService.js)"]
+    Orchestrator --> FewShot["Dynamic Few-Shot Harvesting (Zero-DB-Table Engine)"]
+    FewShot --> PromptBuilder["Context & Prompt Assembly"]
+    PromptBuilder --> TierRouter["Multi-Tier LLM Fallback Router"]
+    
+    TierRouter -->|"Tier 1 (Primary)"| Gemini["Google Gemini 2.5 Flash / Flash Lite"]
+    TierRouter -->|"Failover on 429/503"| AddisLLM["Addis AI (addis-1-alef)"]
+    TierRouter -->|"Failover on Timeout"| NvidiaNIM["Nvidia NIM (meta/llama-3.1-nemotron-70b-instruct)"]
+    
+    Gemini --> ToolDecision{"Requires Tool Call?"}
+    AddisLLM --> ToolDecision
+    NvidiaNIM --> ToolDecision
+    
+    ToolDecision -->|"Yes (Function Call)"| ToolExec["Server Tool Execution Engine (10 Tools)"]
+    ToolExec --> MongooseTX["session.withTransaction() Data Mutation / Query"]
+    MongooseTX --> CompileEngine["compileAmharicReport() Locked Assembler"]
+    CompileEngine --> SSEStream["SSE Stream Controller (text/event-stream)"]
+    ToolExec --> SSEStream
+    
+    ToolDecision -->|"No (Direct Response)"| TextDelta["Amharic Text Token Generator"]
+    TextDelta --> SSEStream
+    SSEStream --> ClientUI["React Chat UI (useSSEStream)"]
+```
+
+#### 7.1.1 Zero-DB-Table Dynamic Few-Shot Harvesting Architecture
+Traditional NLP architectures rely on static database tables or rigid dictionaries to enforce domain-specific technical terminology. In field operations across developing retail and hospitality ecosystems, this static approach fails catastrophically:
+1. Equipment makes and models vary wildly across branches (e.g., modern Italian espresso machines in Bole vs. legacy commercial fryers in Piassa).
+2. Supervisors coin colloquial workplace transliterations that evolve organically and cannot be anticipated by database administrators.
+3. Adding and maintaining glossary tables introduces unnecessary schema bloat, administrative overhead, and migration friction.
+
+To solve this permanently, the Report Builder implements a **Zero-DB-Table Dynamic Few-Shot Architecture**:
+- When a chat session initiates or processes a new message, the backend executes a lightweight query against historical approved reports:
+  ```javascript
+  // Extract real workplace vocabulary from the user's recent approved reports
+  const recentReports = await Report.find({
+    user: req.user._id,
+    isArchived: false,
+    'issues.0': { $exists: true }
+  })
+  .sort({ reportDate: -1 })
+  .limit(4)
+  .select('branchesVisited activities issues opinions plainTextReport')
+  .lean();
+  ```
+- The prompt compiler harvests real-world terminology, equipment names, and Ge'ez transliterations directly from these documents (e.g., `ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`, `ቺለር`, `ጀነሬተር`, `ማይክሮዌቭ`, `ኤስፕሬሶ ማሽን`) along with the supervisor's historical phrasing for resolutions (`የመፍትሄ አቅጣጫ`).
+- These harvested examples are dynamically formatted into the LLM system prompt as in-context few-shot demonstrations. The model instantly mirrors the user's specific company vocabulary and transliteration style with **zero database migrations and zero manual dictionary maintenance**.
+
+#### 7.1.2 Bidirectional Chat Awareness & The Universal Continuity Invariant
+The agent runtime operates across two distinct conversation contexts with seamless, bidirectional intelligence sharing:
+
+1. **Report Chat Mode (`type: 'report'`)**:
+   - Anchored directly to an active `reportId`.
+   - The agent possesses immediate, in-memory awareness of the report's current operational state: branches visited, shift, activities executed, identified issues, supervisory opinions, and compilation status.
+   - Any modification requested by the user triggers the `update_report` or `update_report_item` tool, atomically mutating the MongoDB document within an isolated `ClientSession` transaction and re-running the deterministic `compileAmharicReport()` engine.
+
+2. **General Chat Mode (`type: 'general'`)**:
+   - Unbound from any single report document.
+   - Functions as an executive operational partner and business intelligence analyst.
+   - Synthesizes trends across weeks or months, tracks unresolved maintenance bottlenecks across 14+ branches, generates multi-branch comparative matrices, drafts formal administrative memos, and handles ad-hoc report inquiries.
+
+3. **The Universal Continuity Doctrine (Bidirectional Cross-Chat Intelligence)**:
+   - **Crucial Architectural Law**: The supervisor must **never** be forced to switch screens, exit an ongoing conversation, or navigate between menu items to accomplish operational inquiries or mutations. Context switching introduces cognitive friction. The intelligence must adapt to the user's location, not vice-versa.
+
+   - **Direction 1: Inside Report Chat $\rightarrow$ Asking Multi-Branch / Cross-Branch Questions**:
+     - *Example Scenario*: While editing a draft report for the Bole branch inside a Report Chat, the supervisor asks:
+       > *"ባለፈው ሳምንት በጀሞ ብራንች የተከናወኑ ዋና ዋና ተግባራትና ያጋጠሙ ችግሮች ምን ምን ነበሩ? ከነቀናቸው ንገረኝ።"*
+       *(What were the main activities and issues at Jemo branch last week? Tell me with their dates.)*
+     - The agent immediately invokes `query_operational_data` with `{ branches: ['ጀሞ'], dateStart: '...', dataTypes: ['activities', 'issues'] }`, retrieves the items, and presents the response with exact dates attached without leaving the Report Chat or disrupting active report state.
+
+   - **Direction 2: Inside General Chat $\rightarrow$ Asking Report-Specific Questions, Mutations, or In-Chat Creation**:
+     - Supervisors frequently open General Chat to converse freely, and naturally make report-related inquiries or commands. The system handles all 4 major scenarios with logical determinism:
+       1. **Report Inspection & Retrieval** (*"የትናንቱን የቦሌ ሪፖርት አሳየኝ"* or *"የካቲት 15 ሪፖርቴ ላይ የተጠቀሱትን ችግሮች አውጣልኝ"*):
+          - In General Chat, the agent executes `get_report_context` with flexible search parameters (`{ date, branch, shift, mostRecent }`).
+          - If a single report matches, the agent extracts the requested information, displays the plain-text preview, and renders an **Interactive Report Reference Card** in the chat UI.
+          - If multiple reports match (e.g. day shift vs. night shift), the agent presents a polite conversational disambiguation list with dates, branches, and shifts, asking the supervisor which one they wish to inspect.
+       2. **In-Chat Report Mutation from General Chat** (*"የትናንቱ ቦሌ ሪፖርት ላይ የፍራየሩን ችግር ሁኔታ ወደ 'ተጠናቋል' ቀይርልኝ"*):
+          - The agent resolves the target report via `get_report_context`, obtains its `reportId` and `itemId`, and executes `update_report_item` inside an isolated Mongoose transaction (`session.withTransaction()`).
+          - Recompiles the plain text via `compileAmharicReport()` and renders the updated status directly in General Chat with a 1-click link to view or verify the full document.
+       3. **Ad-Hoc Report Creation from General Chat** (*"ዛሬ ጧት 3:00 ቦሌ ነበርኩ፤ ፍራየሩ ተበላሽቶ አየሁ... ሪፖርት አዘጋጅልኝ"*):
+          - If the supervisor narrates an entire workday or shift inside General Chat, the agent does **not** reject the request or demand that they visit the Create Report page.
+          - Instead, the agent invokes the `create_report` tool, creating both the `Report` document and its corresponding 1:1 `Chat` (`type: 'report'`) atomically within `session.withTransaction()`.
+          - It compiles the locked Amharic plain-text report and returns a **Created Report Action Card** inside General Chat containing direct deep-links:
+            - `[ሪፖርቱን ዝርዝር እይ (View Details)]` $\rightarrow$ `/reports/:reportId/details`
+            - `[ሪፖርቱን አርም (Edit in Dedicated Page)]` $\rightarrow$ `/reports/:reportId/edit`
+            - `[ወደ ሪፖርት ውይይት ሂድ (Continue in Dedicated Report Chat)]` $\rightarrow$ `/chat/:reportChatId`
+       4. **In-Chat Report Export from General Chat** (*"የትናንቱን ሪፖርት ወደ ጎግል ዶክስ ላክልኝ"*):
+          - Resolves the report and executes `export_report_to_google_docs`, returning the Google Drive document link directly in the chat stream.
+
+4. **The General Chat Report Reference Card UI Protocol**:
+   - When any report is retrieved, modified, or created inside General Chat, the server emits an SSE event `event: report_referenced` containing `{ reportId, reportChatId, title, ethiopianDate, primaryBranch, shift, status, plainTextReport }`.
+   - The React client renders an interactive MUI card inside the message stream featuring:
+     - Header with branch chip, shift badge, and Ethiopian date.
+     - Collapsible accordion allowing the user to read the full Amharic report inline.
+     - Action button cluster linking directly to the report's detail page, dedicated edit page, or dedicated report chat.
+
+#### 7.1.3 Linguistic Guardrails & System Persona
+The agent's system prompt strictly locks the LLM into a disciplined, respectful, and authoritative Amharic corporate persona:
+- **Strict Amharic Purity**: All conversational outputs and generated reports must be 100% pure Amharic text. English words, Latin script, or hybrid jargon (e.g., *"status completed ነው"*) are strictly forbidden. Transliterated loan words must use standard Ge'ez orthography (e.g., `ኮምፕሊትድ ሆኗል` or `ተጠናቋል`).
+- **Ethiopic Numerical Formatting**: All lists, tables, and sequence numbers must adhere to the Ethiopic numerical syntax (`፩, ፪, ፫` or standardized Arabic numerals with Ethiopic punctuation `1. `).
+- **Tone**: Respectful, objective, and executive-ready (`ክቡር ተቆጣጣሪ`, `ሪፖርቱ በተሳካ ሁኔታ ተሻሽሏል`, `የቀረበው የክትትል ማጠቃለያ`).
+
+---
+
+### 7.2 The 11 Server-Executed Tools Catalog & Complete JSON Schemas
+
+The agent runtime is equipped with 11 server-side tools. Each tool is declared via standard JSON Schema, validated against Mongoose models, executed strictly within transaction boundaries where writes occur, and logs comprehensive telemetry via Winston.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 SERVER-EXECUTED TOOLS CATALOG                             │
+├───────────────────────────────┬──────────────────────────────────────────────────────────┤
+│ Tool Identifier               │ Operational Scope & Purpose                              │
+├───────────────────────────────┼──────────────────────────────────────────────────────────┤
+│ 1. query_operational_data     │ Multi-branch query engine for activities/issues w/ DATES │
+│ 2. update_report_item         │ In-chat lifecycle modifier for historical/active items   │
+│ 3. generate_operational_matrix│ Multi-branch matrix compiler & Google Sheets exporter     │
+│ 4. track_operational_trends   │ Recurrent machinery breakdown & bottleneck tracker       │
+│ 5. generate_executive_briefing│ Formal Amharic administrative memo generator (ማስታወሻ)     │
+│ 6. get_report_context         │ Report inspection & multi-criteria lookup (date/branch)  │
+│ 7. update_report              │ Full report mutation & deterministic plain-text compiler │
+│ 8. create_report              │ In-chat atomic report + 1:1 chat creator with deep-links │
+│ 9. list_branches              │ User branch inventory and operational metadata           │
+│ 10. create_branch             │ Dynamic registration of unlisted field branches          │
+│ 11. export_report_to_google_docs Single report Google Doc generator via OAuth Drive API │
+└───────────────────────────────┴──────────────────────────────────────────────────────────┘
+```
+
+#### 7.2.1 Tool 1: `query_operational_data`
+- **Purpose**: Retrieves operational activities, issues, and supervisory opinions across one, several, or all branches belonging to the supervisor over any specified date range.
+- **Mandatory Output Invariant**: Every returned activity, issue, or opinion **must include its specific Date (both Ethiopian Calendar e.g. `12-07-2018 ዓ.ም` and Gregorian Calendar)** alongside the branch name and status so the supervisor can trace exact chronological timelines.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "query_operational_data",
+    "description": "Queries historical activities, issues, and supervisory opinions across one or more user branches over a specific date range. Every returned item includes its exact date, branch name, status, and solution direction.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "branches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of branch names to filter by (e.g. ['ቦሌ', 'ጀሞ']). If empty or omitted, queries across all branches belonging to the user."
+        },
+        "dateStart": {
+          "type": "string",
+          "description": "Start date in Ethiopian Calendar ('DD-MM-YYYY' or 'YYYY-MM-DD') or ISO Gregorian format."
+        },
+        "dateEnd": {
+          "type": "string",
+          "description": "End date in Ethiopian Calendar ('DD-MM-YYYY' or 'YYYY-MM-DD') or ISO Gregorian format."
+        },
+        "dataTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["activities", "issues", "opinions", "all"]
+          },
+          "description": "Categories of operational data to retrieve. Defaults to ['activities', 'issues']."
+        },
+        "statuses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["reported", "in_progress", "completed", "all"]
+          },
+          "description": "Filter by resolution status. Defaults to ['all']."
+        },
+        "searchKeyword": {
+          "type": "string",
+          "description": "Optional keyword to search within task descriptions, issue descriptions, or solution directions (e.g. 'ፍራየር', 'ጀነሬተር', 'ስልጠና')."
+        }
+      },
+      "required": []
+    }
+  }
+  ```
+- **Backend Implementation Logic**:
+  ```javascript
+  export const executeQueryOperationalData = async (args, user) => {
+    const { branches, dateStart, dateEnd, dataTypes = ['activities', 'issues'], statuses = ['all'], searchKeyword } = args;
+    
+    // Resolve date boundaries into UTC Gregorian timestamps
+    const filter = { user: user._id, isArchived: false };
+    if (dateStart || dateEnd) {
+      filter.reportDate = {};
+      if (dateStart) filter.reportDate.$gte = parseDateInputToUtc(dateStart, 'start');
+      if (dateEnd) filter.reportDate.$lte = parseDateInputToUtc(dateEnd, 'end');
+    }
+
+    if (branches && branches.length > 0) {
+      filter['branchesVisited.branch'] = { $in: branches.map(b => new RegExp(b.trim(), 'i')) };
+    }
+
+    const reports = await Report.find(filter).sort({ reportDate: -1 }).lean();
+    const results = [];
+
+    for (const rep of reports) {
+      const ethiopianDateStr = rep.ethiopianDate?.formatted || formatEthiopianDate(rep.reportDate);
+      const gregorianDateStr = rep.reportDate.toISOString().split('T')[0];
+
+      // Extract activities
+      if (dataTypes.includes('activities') || dataTypes.includes('all')) {
+        for (const act of rep.activities || []) {
+          if (branches && branches.length > 0 && !branches.some(b => b.toLowerCase() === act.branch.toLowerCase())) continue;
+          if (!statuses.includes('all') && !statuses.includes(act.status)) continue;
+          if (searchKeyword && !act.task.includes(searchKeyword)) continue;
+
+          results.push({
+            reportId: rep._id,
+            category: 'activity',
+            dateEthiopian: ethiopianDateStr,
+            dateGregorian: gregorianDateStr,
+            branch: act.branch,
+            content: act.task,
+            status: act.status,
+            order: act.order
+          });
+        }
+      }
+
+      // Extract issues
+      if (dataTypes.includes('issues') || dataTypes.includes('all')) {
+        for (const iss of rep.issues || []) {
+          if (branches && branches.length > 0 && !branches.some(b => b.toLowerCase() === iss.branch.toLowerCase())) continue;
+          if (!statuses.includes('all') && !statuses.includes(iss.status)) continue;
+          if (searchKeyword && !iss.description.includes(searchKeyword) && !iss.solutionDirection?.includes(searchKeyword)) continue;
+
+          results.push({
+            reportId: rep._id,
+            itemId: iss._id,
+            category: 'issue',
+            dateEthiopian: ethiopianDateStr,
+            dateGregorian: gregorianDateStr,
+            branch: iss.branch,
+            content: iss.description,
+            solutionDirection: iss.solutionDirection || 'ያልተገለጸ',
+            status: iss.status,
+            order: iss.order
+          });
+        }
+      }
+    }
+
+    return {
+      totalFound: results.length,
+      queriedBranches: branches && branches.length > 0 ? branches : 'ሁሉም ብራንቾች',
+      items: results
+    };
+  };
+  ```
+
+#### 7.2.2 Tool 2: `update_report_item`
+- **Purpose**: Allows the supervisor to update the resolution status, solution direction, or description of any specific issue or activity from any report directly within the chat conversation.
+- **Mongoose Transaction Invariant**: Executes inside `session.withTransaction()` using Retrieve $\rightarrow$ Mutate $\rightarrow$ `report.save({ session })` to trigger pre-save hooks and recompile the report's locked plain-text representation.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "update_report_item",
+    "description": "Updates an individual issue or activity within a report (e.g. marking an issue as completed, changing its status to in_progress, updating the solution direction, or modifying text).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reportId": {
+          "type": "string",
+          "description": "The MongoDB ObjectId of the report containing the item."
+        },
+        "itemType": {
+          "type": "string",
+          "enum": ["issue", "activity"],
+          "description": "Type of item being updated."
+        },
+        "itemId": {
+          "type": "string",
+          "description": "The MongoDB ObjectId of the specific issue or activity subdocument."
+        },
+        "updates": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["reported", "in_progress", "completed"],
+              "description": "New resolution status."
+            },
+            "solutionDirection": {
+              "type": "string",
+              "description": "Updated corrective action or management direction."
+            },
+            "content": {
+              "type": "string",
+              "description": "Updated description or task text."
+            }
+          },
+          "required": []
+        }
+      },
+      "required": ["reportId", "itemType", "itemId", "updates"]
+    }
+  }
+  ```
+- **Execution Method**:
+  ```javascript
+  export const executeUpdateReportItem = async (args, user) => {
+    const session = await mongoose.startSession();
+    try {
+      let updatedReport;
+      await session.withTransaction(async () => {
+        const report = await Report.findOne({ _id: args.reportId, user: user._id }).session(session);
+        if (!report) throw new Error('ሪፖርቱ አልተገኘም ወይም የማሻሻል ፈቃድ የለዎትም።');
+
+        if (args.itemType === 'issue') {
+          const item = report.issues.id(args.itemId);
+          if (!item) throw new Error('የተጠቀሰው ችግር በሪፖርቱ ውስጥ አልተገኘም።');
+          if (args.updates.status) item.status = args.updates.status;
+          if (args.updates.solutionDirection) item.solutionDirection = args.updates.solutionDirection;
+          if (args.updates.content) item.description = args.updates.content;
+        } else if (args.itemType === 'activity') {
+          const item = report.activities.id(args.itemId);
+          if (!item) throw new Error('የተጠቀሰው ተግባር በሪፖርቱ ውስጥ አልተገኘም።');
+          if (args.updates.status) item.status = args.updates.status;
+          if (args.updates.content) item.task = args.updates.content;
+        }
+
+        // Recompile plain-text report
+        report.plainTextReport = compileAmharicReport(report);
+        updatedReport = await report.save({ session });
+      });
+
+      return {
+        success: true,
+        message: 'የሪፖርት ዝርዝር መረጃው በተሳካ ሁኔታ ተሻሽሏል!',
+        reportId: updatedReport._id,
+        plainTextReport: updatedReport.plainTextReport
+      };
+    } finally {
+      await session.endSession();
+    }
+  };
+  ```
+
+#### 7.2.3 Tool 3: `generate_operational_matrix`
+- **Purpose**: Compiles a multi-branch tabular matrix summarizing activities, problems, solution directions, and current statuses across 14+ branches over any date range (inspired by the 13-branch supervisor review model). Can optionally export the generated matrix directly into a styled Google Sheet.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "generate_operational_matrix",
+    "description": "Compiles a standardized multi-branch tabular matrix summarizing activities, problems, solution directions, and statuses across branches over a date range. Supports dynamic columns, per-row dates, and optional Google Sheets export.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "branches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Branches to include in the matrix. If empty, includes all branches visited within the date window."
+        },
+        "dateStart": { "type": "string", "description": "Start date (EC or GC)." },
+        "dateEnd": { "type": "string", "description": "End date (EC or GC)." },
+        "includeColumns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["seq", "branch", "date", "issue_or_activity", "solution_direction", "status"]
+          },
+          "description": "Custom column sequence for the matrix. Defaults to all 6 columns."
+        },
+        "itemTypeFilter": {
+          "type": "string",
+          "enum": ["issues_only", "activities_only", "both"],
+          "description": "Data type to compile into the matrix. Defaults to 'issues_only'."
+        },
+        "exportToGoogleSheets": {
+          "type": "boolean",
+          "description": "If true, creates a new Google Spreadsheet in the user's Google Drive with color-coded status cells."
+        },
+        "spreadsheetTitle": {
+          "type": "string",
+          "description": "Optional title for the Google Spreadsheet."
+        }
+      },
+      "required": ["dateStart", "dateEnd"]
+    }
+  }
+  ```
+- **Google Sheets Export Protocol**:
+  When `exportToGoogleSheets: true` is provided, the backend utilizes the user's stored OAuth tokens via `googleapis`:
+  1. Calls `sheets.spreadsheets.create` with header formatting (Deep Navy Blue `#1A365D`, white bold text).
+  2. Applies conditional color formatting to the **ሁኔታ (Status)** column:
+     - `ተጠናቋል` (Completed): Soft Emerald Green background (`#D1FAE5`), dark green text (`#065F46`).
+     - `በሂደት ላይ` (In Progress): Soft Amber background (`#FEF3C7`), dark amber text (`#92400E`).
+     - `ሪፖርት የተደረገ` (Reported): Soft Rose background (`#FEE2E2`), dark red text (`#991B1B`).
+  3. Returns the direct Google Sheets URL to the user in the chat response.
+
+#### 7.2.4 Tool 4: `track_operational_trends`
+- **Purpose**: Analyzes operational reports across a rolling lookback window (e.g., 30 or 60 days) to detect recurring mechanical failures (e.g., deep fryers repeatedly failing across Bole and Piassa, generator cuts, POS communication drops) and alerts the supervisor to tasks stalled in `in_progress` status for more than 14 days.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "track_operational_trends",
+    "description": "Identifies recurring machinery/equipment breakdowns across branches and flags stalled in-progress issues exceeding 14 days.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "lookbackDays": {
+          "type": "integer",
+          "description": "Number of days in the past to analyze (default: 30)."
+        },
+        "branches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional list of branches to restrict analysis to."
+        },
+        "minOccurrences": {
+          "type": "integer",
+          "description": "Minimum breakdown occurrences to trigger a trend alert (default: 2)."
+        }
+      },
+      "required": []
+    }
+  }
+  ```
+- **Aggregation Pipeline Logic**:
+  The tool executes a pipeline matching non-archived reports within `now - lookbackDays`, unwinds `issues`, normalizes equipment keywords using regex stems (`/ፍራየር/`, `/ጀነሬተር/`, `/ቺለር/`, `/ማቀዝቀዣ/`, `/ፒኦኤስ/`), groups by keyword and branch, and counts occurrences. Items with `status === 'in_progress'` whose parent report is older than 14 days are tagged with `isStalled: true`.
+
+#### 7.2.5 Tool 5: `generate_executive_briefing`
+- **Purpose**: Compiles a formal Amharic administrative memorandum (`ማስታወሻ`) or maintenance requisition letter addressed to Head Office (`ለዋናው መ/ቤት`) or technical contractors.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "generate_executive_briefing",
+    "description": "Generates a formal Amharic administrative memorandum (ማስታወሻ) addressed to Head Office or maintenance departments summarizing multi-branch challenges and required executive interventions.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "recipient": {
+          "type": "string",
+          "description": "Addressee (e.g., 'ለዋናው መ/ቤት ሥራ አስኪያጅ', 'ለቴክኒክና ጥገና መምሪያ')."
+        },
+        "subject": {
+          "type": "string",
+          "description": "The formal memo subject (ጉዳዩ)."
+        },
+        "branches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of branches included in the briefing."
+        },
+        "dateStart": { "type": "string", "description": "Coverage start date." },
+        "dateEnd": { "type": "string", "description": "Coverage end date." },
+        "priority": {
+          "type": "string",
+          "enum": ["urgent", "normal", "confidential"],
+          "description": "Administrative priority level."
+        }
+      },
+      "required": ["recipient", "subject", "dateStart", "dateEnd"]
+    }
+  }
+  ```
+
+#### 7.2.6 Tool 6: `get_report_context`
+- **Purpose**: Fetches the complete JSON document and compiled Amharic plain-text representation of a specific operational report. In Report Chat, defaults automatically to the linked report. In General Chat, supports flexible lookup by criteria (date, branch, shift, or most recent) with automatic conversational disambiguation if multiple reports match.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "get_report_context",
+    "description": "Retrieves the full structured data and compiled Amharic plain-text of a specific operational report. In Report Chat, defaults to the linked report. In General Chat, resolves the report by reportId, date, branch, shift, or mostRecent flag, handling disambiguation if multiple reports match.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reportId": {
+          "type": "string",
+          "description": "The MongoDB ObjectId of the report. If provided, fetches this exact report."
+        },
+        "date": {
+          "type": "string",
+          "description": "Date in Ethiopian Calendar ('DD-MM-YYYY') or ISO Gregorian format ('YYYY-MM-DD')."
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch name to filter by (e.g. 'ቦሌ')."
+        },
+        "shift": {
+          "type": "string",
+          "enum": ["day", "night", "full_day"],
+          "description": "Work shift to filter by."
+        },
+        "mostRecent": {
+          "type": "boolean",
+          "description": "If true, resolves the supervisor's most recently created report."
+        }
+      },
+      "required": []
+    }
+  }
+  ```
+- **Execution & Disambiguation Logic**:
+  ```javascript
+  export const executeGetReportContext = async (args, user, currentChat) => {
+    // 1. Direct ID or active chat default
+    let targetReportId = args.reportId || (currentChat?.type === 'report' ? currentChat.report : null);
+
+    if (targetReportId) {
+      const report = await Report.findOne({ _id: targetReportId, user: user._id, isArchived: false }).lean();
+      if (!report) throw new Error('ሪፖርቱ አልተገኘም ወይም የማየት ፈቃድ የለዎትም።');
+      return { status: 'found', report, plainTextReport: report.plainTextReport };
+    }
+
+    // 2. Query in General Chat by criteria
+    const filter = { user: user._id, isArchived: false };
+    if (args.date) {
+      const parsedUtc = parseDateInputToUtc(args.date, 'start');
+      const nextDayUtc = new Date(parsedUtc.getTime() + 24 * 60 * 60 * 1000);
+      filter.reportDate = { $gte: parsedUtc, $lt: nextDayUtc };
+    }
+    if (args.branch) {
+      filter['branchesVisited.branch'] = new RegExp(args.branch.trim(), 'i');
+    }
+    if (args.shift) {
+      filter.shift = args.shift;
+    }
+
+    const matches = await Report.find(filter)
+      .sort({ reportDate: -1, createdAt: -1 })
+      .limit(args.mostRecent ? 1 : 5)
+      .lean();
+
+    if (matches.length === 0) {
+      return {
+        status: 'not_found',
+        message: 'በተጠቀሰው መስፈርት መሰረት የተገኘ ሪፖርት የለም።'
+      };
+    }
+
+    if (matches.length === 1 || args.mostRecent) {
+      const report = matches[0];
+      return {
+        status: 'found',
+        report,
+        plainTextReport: report.plainTextReport,
+        reportId: report._id
+      };
+    }
+
+    // 3. Multiple matches: return disambiguation summary
+    return {
+      status: 'multiple_matches',
+      count: matches.length,
+      message: 'በተጠቀሰው መስፈርት ከአንድ በላይ ሪፖርቶች ተገኝተዋል፤ እባክዎ አንዱን ይምረጡ።',
+      candidates: matches.map((m, idx) => ({
+        index: idx + 1,
+        reportId: m._id,
+        dateEthiopian: m.ethiopianDate?.formatted || formatEthiopianDate(m.reportDate),
+        shift: m.shift,
+        primaryBranch: m.primaryBranch || m.branchesVisited[0]?.branch,
+        branchesVisited: m.branchesVisited.map(b => b.branch)
+      }))
+    };
+  };
+  ```
+
+#### 7.2.7 Tool 7: `update_report`
+- **Purpose**: In-place mutation engine for active report fields (`branchesVisited`, `shift`, `activities`, `issues`, `opinions`, `followUpTasks`, `notes`).
+- **Transactional Determinism**: Runs inside an explicit Mongoose `ClientSession` transaction. Always re-executes `compileAmharicReport(report)` before saving to ensure the database document and plain-text output remain 100% synchronized.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "update_report",
+    "description": "Updates fields of an active operational report. Automatically re-compiles the Amharic plain-text document and broadcasts updates to the UI via SSE.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "description": "The MongoDB ObjectId of the report." },
+        "shift": { "type": "string", "enum": ["day", "night", "full_day"] },
+        "branchesVisited": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "arrivalTime": { "type": "string" },
+              "departureTime": { "type": "string" },
+              "visitOrder": { "type": "integer" }
+            },
+            "required": ["branch"]
+          }
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "task": { "type": "string" },
+              "status": { "type": "string", "enum": ["reported", "in_progress", "completed"] },
+              "order": { "type": "integer" }
+            },
+            "required": ["branch", "task"]
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "description": { "type": "string" },
+              "solutionDirection": { "type": "string" },
+              "status": { "type": "string", "enum": ["reported", "in_progress", "completed"] },
+              "order": { "type": "integer" }
+            },
+            "required": ["branch", "description"]
+          }
+        },
+        "opinions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "comment": { "type": "string" },
+              "order": { "type": "integer" }
+            },
+            "required": ["comment"]
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["reportId"]
+    }
+  }
+  ```
+
+#### 7.2.8 Tool 8: `create_report`
+- **Purpose**: Creates a new operational report and its corresponding 1:1 linked Report Chat document atomically within a Mongoose `ClientSession` transaction. Used when a supervisor dictates or types daily report details within General Chat or via voice transcription.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "create_report",
+    "description": "Creates a new operational report and its dedicated 1:1 Report Chat document atomically within a Mongoose transaction. Compiles the Amharic plain-text report and returns deep-links for immediate inspection and continuation.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reportDate": {
+          "type": "string",
+          "description": "Report date in Ethiopian Calendar ('DD-MM-YYYY') or ISO Gregorian format. Defaults to current date."
+        },
+        "shift": {
+          "type": "string",
+          "enum": ["day", "night", "full_day"],
+          "description": "Work shift."
+        },
+        "branchesVisited": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "arrivalTime": { "type": "string" },
+              "departureTime": { "type": "string" },
+              "visitOrder": { "type": "integer" }
+            },
+            "required": ["branch"]
+          },
+          "description": "Chronological list of branches visited."
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "task": { "type": "string" },
+              "status": { "type": "string", "enum": ["reported", "in_progress", "completed"] },
+              "order": { "type": "integer" }
+            },
+            "required": ["branch", "task"]
+          }
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "description": { "type": "string" },
+              "solutionDirection": { "type": "string" },
+              "status": { "type": "string", "enum": ["reported", "in_progress", "completed"] },
+              "order": { "type": "integer" }
+            },
+            "required": ["branch", "description"]
+          }
+        },
+        "opinions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "branch": { "type": "string" },
+              "comment": { "type": "string" },
+              "order": { "type": "integer" }
+            },
+            "required": ["comment"]
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["shift", "branchesVisited"]
+    }
+  }
+  ```
+- **Atomic Creation Implementation**:
+  ```javascript
+  export const executeCreateReport = async (args, user) => {
+    const session = await mongoose.startSession();
+    try {
+      let createdReport, createdChat;
+      await session.withTransaction(async () => {
+        const reportDate = args.reportDate ? parseDateInputToUtc(args.reportDate) : new Date();
+        const primaryBranch = args.branchesVisited[0]?.branch || 'ዋና';
+
+        const reportData = {
+          user: user._id,
+          reportDate,
+          shift: args.shift,
+          branchesVisited: args.branchesVisited.map((b, i) => ({
+            ...b,
+            visitOrder: b.visitOrder || i + 1
+          })),
+          activities: args.activities || [],
+          issues: args.issues || [],
+          opinions: args.opinions || [],
+          notes: args.notes || '',
+          status: 'draft',
+          source: 'chat'
+        };
+
+        // Deterministic Amharic compilation
+        reportData.plainTextReport = compileAmharicReport(reportData);
+
+        // Atomic create with array syntax
+        const reports = await Report.create([reportData], { session });
+        createdReport = reports[0];
+
+        // Create 1:1 linked Report Chat
+        const chats = await Chat.create([{
+          user: user._id,
+          type: 'report',
+          report: createdReport._id,
+          title: `${primaryBranch} - ${formatEthiopianDate(reportDate)}`
+        }], { session });
+        createdChat = chats[0];
+      });
+
+      return {
+        success: true,
+        message: 'አዲስ ሪፖርት በተሳካ ሁኔታ ተፈጥሯል!',
+        reportId: createdReport._id,
+        reportChatId: createdChat._id,
+        plainTextReport: createdReport.plainTextReport,
+        navigation: {
+          detailsUrl: `/reports/${createdReport._id}/details`,
+          editUrl: `/reports/${createdReport._id}/edit`,
+          chatUrl: `/chat/${createdChat._id}`
+        }
+      };
+    } finally {
+      await session.endSession();
+    }
+  };
+  ```
+
+#### 7.2.9 Tool 9: `list_branches`
+- **Purpose**: Returns the complete catalog of branches configured for the user, including branch names, addresses, active issue counts, and known phonetic aliases.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "list_branches",
+    "description": "Lists all branch locations managed by or assigned to the supervisor, along with operational metadata.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+  ```
+
+#### 7.2.10 Tool 10: `create_branch`
+- **Purpose**: Allows the agent to dynamically register a new branch location if the supervisor mentions an unlisted or newly opened branch during chat or voice narration.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "create_branch",
+    "description": "Registers a new branch location in the database under the supervisor's account.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Branch name in Amharic (e.g. 'ገርጂ', 'ሰሚት')." },
+        "location": { "type": "string", "description": "Physical address or landmark." },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Phonetic or alternative spellings (e.g. ['Gerji', 'ጊዮርጊስ']).'}"
+        }
+      },
+      "required": ["name"]
+    }
+  }
+  ```
+
+#### 7.2.11 Tool 11: `export_report_to_google_docs`
+- **Purpose**: Exports a compiled Amharic operational report directly into a beautifully formatted Google Document in the supervisor's Google Drive.
+- **JSON Schema**:
+  ```json
+  {
+    "name": "export_report_to_google_docs",
+    "description": "Exports a compiled Amharic operational report directly to a Google Document in the user's Google Drive.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "description": "The report to export." },
+        "documentTitle": { "type": "string", "description": "Optional title for the Google Doc." }
+      },
+      "required": ["reportId"]
+    }
+  }
+  ```
+
+---
+
+### 7.3 Multi-Tier Fallback Chain & Resilience Strategy
+
+In production environments in East Africa, external LLM APIs experience periodic network latency, regional packet loss, and rate limiting. The Report Builder implements a **Deterministic 3-Tier Fallback Chain** to guarantee zero downtime and uninterrupted supervisor interaction:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Tier1_Gemini
+    Tier1_Gemini --> Success: HTTP 200 / Token Stream OK
+    Tier1_Gemini --> BackoffRetry: HTTP 429 / 503
+    BackoffRetry --> Tier1_Gemini: Retry 1s, 2s, 4s (Max 3)
+    BackoffRetry --> Tier2_AddisAI: Retries Exhausted or Timeout > 60s
+    Tier1_Gemini --> Tier2_AddisAI: Hard API Outage
+    
+    Tier2_AddisAI --> Success: HTTP 200 Stream OK
+    Tier2_AddisAI --> Tier3_NvidiaNIM: HTTP 5xx or Addis Outage
+    
+    Tier3_NvidiaNIM --> Success: HTTP 200 Stream OK
+    Tier3_NvidiaNIM --> GracefulDegradation: All Providers Failed
+    
+    Success --> [*]
+    GracefulDegradation --> [*]: Emit SSE Error Event with Retry Token
+```
+
+#### 7.3.1 Provider Configuration Matrix
+```javascript
+// config/llmConfig.js
+export const LLM_TIERS = {
+  TIER_1: {
+    provider: 'google',
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    apiKey: process.env.GEMINI_API_KEY,
+    timeoutMs: 60000,
+    maxRetries: 3
+  },
+  TIER_2: {
+    provider: 'addis_ai',
+    model: 'addis-1-alef',
+    baseURL: process.env.ADDIS_AI_BASE_URL || 'https://api.addisassistant.com/v1',
+    apiKey: process.env.ADDIS_AI_API_KEY,
+    timeoutMs: 45000,
+    maxRetries: 2
+  },
+  TIER_3: {
+    provider: 'nvidia_nim',
+    model: 'meta/llama-3.1-nemotron-70b-instruct',
+    baseURL: 'https://integrate.api.nvidia.com/v1',
+    apiKey: process.env.NVIDIA_NIM_API_KEY,
+    timeoutMs: 60000,
+    maxRetries: 2
+  }
+};
+```
+
+#### 7.3.2 Deterministic Execution Engine (`services/llmFallbackService.js`)
+```javascript
+/**
+ * Executes an LLM generation or tool-calling loop across the 3-tier fallback matrix.
+ * Transparently transitions to lower tiers without closing client SSE connections.
+ */
+export const executeWithFallback = async ({ messages, tools, systemInstruction, onToken, onToolCall, sseRes }) => {
+  const tiers = [LLM_TIERS.TIER_1, LLM_TIERS.TIER_2, LLM_TIERS.TIER_3];
+
+  for (let i = 0; i < tiers.length; i++) {
+    const tier = tiers[i];
+    const tierIndex = i + 1;
+
+    try {
+      logger.info(`Attempting LLM execution on Tier ${tierIndex} (${tier.provider}: ${tier.model})`);
+      return await executeProviderStream({ tier, messages, tools, systemInstruction, onToken, onToolCall });
+    } catch (err) {
+      const isRateLimit = err.status === 429 || err.code === 'RESOURCE_EXHAUSTED';
+      const isServerDown = err.status >= 500 || err.code === 'ECONNRESET' || err.name === 'AbortError';
+
+      logger.warn(`Tier ${tierIndex} failed: ${err.message}. (RateLimit: ${isRateLimit}, ServerDown: ${isServerDown})`);
+
+      // Inform client UI of fallback event via SSE comment/event
+      if (sseRes && !sseRes.writableEnded) {
+        sseRes.write(`event: provider_fallback\ndata: ${JSON.stringify({
+          fromTier: tierIndex,
+          toTier: tierIndex + 1,
+          reason: isRateLimit ? 'RATE_LIMIT' : 'TIMEOUT_OR_ERROR'
+        })}\n\n`);
+      }
+
+      if (i === tiers.length - 1) {
+        // All tiers exhausted
+        logger.error('All 3 LLM fallback tiers exhausted. Throwing fatal error.');
+        throw new Error('ሁሉም የቋንቋ ሞዴል አገልጋዮች በጊዜያዊነት አይሰሩም። እባክዎ ከጥቂት ደቂቃዎች በኋላ እንደገና ይሞክሩ።');
+      }
+
+      // Small backoff before jumping to the next tier
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+};
+```
+
+---
+
+### 7.4 SSE Streaming Event Protocol & Lifecycle
+
+All agent responses are delivered via Server-Sent Events (SSE) over a standard HTTP connection. This guarantees immediate sub-second visual feedback as tokens generate and displays real-time execution cards when tools run.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as React Client (useSSEStream)
+    participant Server as Express Route (POST /chats/:chatId/messages)
+    participant Lock as Concurrency Registry (activeChatStreams)
+    participant LLM as Fallback LLM Engine
+    participant Tool as Server Tool Engine
+
+    Client->>Server: POST /api/v1/chats/:chatId/messages (prompt / audioId)
+    Server->>Lock: Check if activeChatStreams.has(chatId)
+    alt Stream Already Running
+        Server-->>Client: HTTP 409 Conflict ({ error: 'CHAT_STREAM_BUSY' })
+    else Lock Free
+        Server->>Lock: activeChatStreams.set(chatId, { controller, res })
+        Server-->>Client: HTTP 200 OK (Content-Type: text/event-stream)
+        Server->>LLM: Stream Request with Tools
+        
+        loop Token Generation
+            LLM-->>Server: text delta ("እንደምን ")
+            Server-->>Client: event: text_delta\ndata: {"delta":"እንደምን "}
+        end
+        
+        opt Agent Decides to Call Tool
+            LLM-->>Server: function_call (query_operational_data)
+            Server-->>Client: event: tool_call_start\ndata: {"tool":"query_operational_data"}
+            Server->>Tool: executeQueryOperationalData(args)
+            Tool-->>Server: Tool Result Matrix (JSON)
+            Server-->>Client: event: tool_call_result\ndata: {"tool":"query_operational_data","count":12}
+            Server->>LLM: Feed tool results back into context
+            LLM-->>Server: Final narrative summary tokens
+            Server-->>Client: event: text_delta\ndata: {"delta":"በዚህ ሳምንት..."}
+        end
+        
+        Server-->>Client: event: stream_end\ndata: {"messageId":"65f...","usage":{}}
+        Server->>Lock: activeChatStreams.delete(chatId)
+    end
+```
+
+#### 7.4.1 Complete SSE Event Catalog
+| Event Name | Payload Structure | Purpose |
+| :--- | :--- | :--- |
+| `event: text_delta` | `{"delta": "string"}` | Emits partial Amharic text tokens for smooth typewriter UI rendering. |
+| `event: tool_call_start` | `{"toolName": "string", "args": object}` | Displays an animated "የስርዓት ፍተሻ እየተከናወነ ነው..." (System processing) chip in the chat window. |
+| `event: tool_call_result`| `{"toolName": "string", "summary": "string", "data": any}` | Replaces the loader chip with a success card summarizing the tool's findings. |
+| `event: report_updated` | `{"reportId": "string", "plainText": "string", "updatedAt": "ISO"}` | Fired when `update_report` or `update_report_item` modifies a report. Triggers real-time report card re-rendering. |
+| `event: provider_fallback`| `{"fromTier": number, "toTier": number, "reason": "string"}` | Informative toast notifying user of an automated resilience switch. |
+| `event: stream_end` | `{"messageId": "string", "interrupted": boolean, "durationMs": number}` | Signals client to finalize message bubble and close the stream reader. |
+| `event: error` | `{"code": "string", "message": "string", "recoverable": boolean}` | Transmits server-side or LLM exceptions for inline banner rendering. |
+
+#### 7.4.2 SSE HTTP Headers & Keep-Alive Standard
+Express endpoints serving SSE must configure specific HTTP headers to disable reverse proxy buffering (e.g. Nginx, Cloudflare):
+```javascript
+res.setHeader('Content-Type', 'text/event-stream');
+res.setHeader('Cache-Control', 'no-cache, no-transform');
+res.setHeader('Connection', 'keep-alive');
+res.setHeader('X-Accel-Buffering', 'no'); // Essential for Nginx proxy streaming
+res.flushHeaders();
+
+// Send initial keep-alive comment to unblock client fetch streams
+res.write(': keep-alive\n\n');
+
+// 15-second heartbeat interval to prevent gateway socket timeouts
+const heartbeat = setInterval(() => {
+  if (!res.writableEnded) {
+    res.write(': keep-alive\n\n');
+  }
+}, 15000);
+
+req.on('close', () => {
+  clearInterval(heartbeat);
+});
+```
+
+---
+
+### 7.5 Concurrency Lock, Abort Mechanics & Race Prevention
+
+In mobile field environments, supervisors frequently tap buttons multiple times, double-submit voice messages, or attempt to send new instructions while the model is halfway through compiling a 1,000-word operational matrix. Without explicit concurrency controls, this creates catastrophic race conditions, corrupted report documents, and wasted API quotas.
+
+#### 7.5.1 In-Memory Stream Registry
+The Express server maintains a centralized, in-memory Map of all active streaming connections:
+```javascript
+// services/streamLockService.js
+/**
+ * Key: chatId (string)
+ * Value: { abortController: AbortController, res: Response, startedAt: number }
+ */
+export const activeChatStreams = new Map();
+
+export const acquireStreamLock = (chatId, res) => {
+  if (activeChatStreams.has(chatId)) {
+    return false; // Lock acquisition rejected
+  }
+  const abortController = new AbortController();
+  activeChatStreams.set(chatId, {
+    abortController,
+    res,
+    startedAt: Date.now()
+  });
+  return abortController;
+};
+
+export const releaseStreamLock = (chatId) => {
+  activeChatStreams.delete(chatId);
+};
+```
+
+#### 7.5.2 Concurrency Rejection (HTTP 409 Conflict)
+If a user or script posts a new message to a chat that is already generating a response, the controller rejects the request synchronously before touching the database or LLM:
+```javascript
+// controllers/chatController.js
+export const sendMessageStream = async (req, res) => {
+  const { chatId } = req.params;
+  
+  const abortController = acquireStreamLock(chatId, res);
+  if (!abortController) {
+    return res.status(409).json({
+      status: 'fail',
+      code: 'CHAT_STREAM_BUSY',
+      message: 'ቀዳሚው ምላሽ በመዘጋጀት ላይ ነው። እባክዎ ጥቂት ይጠብቁ ወይም «አቁም» የሚለውን ይጫኑ።'
+    });
+  }
+  // Proceed with stream...
+};
+```
+
+#### 7.5.3 Clean Client Interruption (`POST /api/v1/chats/:chatId/abort`)
+The supervisor has the ability to cancel generation mid-sentence by pressing the UI "Stop" (አቁም) button:
+1. Client issues `POST /api/v1/chats/:chatId/abort`.
+2. The endpoint looks up `activeChatStreams.get(chatId)`.
+3. Calls `streamData.abortController.abort()`.
+4. The active LLM stream catches the abort signal, halts token generation, persists whatever partial message was successfully generated to MongoDB, writes `event: stream_end` with `{ interrupted: true }`, and terminates the HTTP response cleanly.
+5. Releases the lock via `releaseStreamLock(chatId)`.
+
+---
+
+### 7.6 Rate Limiting, Free Tier Quotas & Cost Protection
+
+To ensure continuous operation on the **Google Gemini Free Tier** (15 RPM / 1,000,000 TPM / 1,500 RPD) without unexpected service denial:
+
+1. **Context Window Pruning (Sliding Window Engine)**:
+   - Chat histories can expand to hundreds of messages. Sending full history on every prompt rapidly exhausts token limits.
+   - The runtime passes only the **last 10 messages** verbatim to the LLM.
+   - Older messages (> 10) are condensed into a single dynamic system summary:
+     ```
+     [ያለፈው የውይይት ማጠቃለያ: ተቆጣጣሪው በቦሌና ፒኦኤስ ማሽን ችግር ዙሪያ ውይይት አድርገው ሪፖርቱን አሻሽለዋል።]
+     ```
+
+2. **Per-User Rate Limiter**:
+   - Standard users are bounded to 10 prompt submissions per minute via an in-memory token bucket middleware.
+   - Prevents automated spamming or accidental rapid loops.
+
+3. **Daily Quota Telemetry**:
+   - Winston logger records exact token usage reported by Gemini / Addis AI responses (`usageMetadata.totalTokenCount`).
+   - If daily consumption exceeds 80% of the 1,500 RPD limit, the system proactively routes new non-critical analytical requests to Tier 2 (Addis AI) to preserve Gemini quota for real-time voice report drafting.
+
+---
+
 
