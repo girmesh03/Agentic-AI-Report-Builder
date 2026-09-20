@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Switch mode to Plan Mode for Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine.
+Plan Mode review of Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime.
 
 ## Current Phase
 
-Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
+Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
 
 ## Phases
 
@@ -80,14 +80,17 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 - **Status:** complete
 
 ### Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
-- [ ] Detail MediaRecorder browser capture (WebM/Opus with MP4 fallback)
-- [ ] Detail Multer ingestion rules (25MB/file, max 10 files, MIME allowlist)
-- [ ] Detail FFmpeg normalization to mono 16-bit 16kHz PCM and chunking (>120s / >25MB)
-- [ ] Detail Addis AI STT SDK integration, synchronous execution, error handling, and retries
-- [ ] Detail ephemeral Mode 3 clip handling and Blob URL playback
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail MediaRecorder browser capture (WebM/Opus with MP4 fallback)
+- [x] Detail Multer ingestion rules (25MB/file, max 10 files, MIME allowlist)
+- [x] Detail FFmpeg normalization to mono 16-bit 16kHz PCM and chunking (>120s / >25MB)
+- [x] Detail Addis AI STT SDK integration, synchronous execution, error handling, and retries
+- [x] Detail ephemeral Mode 3 clip handling and Method 1 in-memory Blob URL playback
+- [x] Detail 3 ingestion modalities in Row 7 (Live mic, Paperclip browse, Drag-and-drop) with Row 8/9 queue deck
+- [x] Detail Chat Composer Mode 3 ephemeral dictation and Mode 4 audio attachment chips
+- [x] Write complete Section 6 to `docs/specifications/master_specification.md`
+- [x] User review and confirmation of Section 6
+- [x] Commit Section 6 to `phase-0-specification`
+- **Status:** complete
 
 ### Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
 - [ ] Detail prompt architecture (System, Persona, zero-shot/few-shot in Amharic)

@@ -94,6 +94,11 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Multi-Branch Visit Sorting & Invariants | `visits[]` sorted chronologically by `clockIn`; primary branch can be at any index $k$; shift boundaries sync automatically (`report.clockIn = visits[0].clockIn`, `report.clockOut = visits[n-1].clockOut`). |
 | Unified Schema Naming (`transcription`, `duration`, `system`) | Normalized `Message.transcription` (symmetrical with `Report`), `aiMetadata.duration` (in ms), and `Preset.system`. |
 | Mongoose ClientSession & Transaction Protocol | Multi-document writes wrapped in `session.withTransaction(async () => { ... })`; `Model.create([payload], { session })` array syntax; document middleware accesses session via `this.$session()` and attaches `.session(this.$session())` to DB queries; direct query updates (`updateOne`, `findOneAndUpdate`) prohibited for `Report` to protect `pre('save')` hooks. |
+| Method 1: In-Memory Client Blob Audio Playback | Protected audio served via `res.sendFile()` as standard HTTP 200 binary; client downloads Blob and plays via `URL.createObjectURL(blob)`; completely eliminates HTTP 206 Range errors, Safari cookie-dropping, and server pipe crashes. |
+| Tri-Modal Report Audio Ingestion | Row 7 supports Live Mic Recording (Audio Orb), Paperclip Browse, and Drag-and-Drop zone; all files stage into unified `audioQueue` with local Blob mini-players before single atomic multipart POST. |
+| Mode 3 Ephemeral Dictation vs Mode 4 Attachment | Mode 3 ephemeral audio unlinks immediately in `finally` block and injects text into `ChatComposerTextArea` at cursor; Mode 4 attaches voice note files via chip above composer, persisting to `uploads/audio/` and MongoDB. |
+| FFmpeg Acoustic Standardization & Silence Chunking | Downmixes all audio to mono 16-bit 16kHz PCM WAV; files >120s or >25MB split along natural pauses via `silencedetect=noise=-30dB:d=0.5` to eliminate mid-word truncation. |
+| Addis AI STT Synchronous Ingestion | Synchronous SDK execution with `AI_TIMEOUT_MS` bounding and 1s -> 2s -> 4s exponential backoff retries on transient errors; sequential chronological concatenation into `rawNarrationText`. |
 
 ## Locked Package Manifest
 

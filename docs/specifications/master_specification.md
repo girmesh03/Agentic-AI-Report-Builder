@@ -14,7 +14,7 @@
 3. [Section 3: Locked Plain-Text Amharic Report Engine & Formatting Rules](#section-3-locked-plain-text-amharic-report-engine--formatting-rules)
 4. [Section 4: Domain Data Models, Schemas & Lifecycle Management](#section-4-domain-data-models-schemas--lifecycle-management)
 5. [Section 5: Chat, Message & Conversation Node Architecture](#section-5-chat-message--conversation-node-architecture)
-6. *Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine (Pending)*
+6. [Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine](#section-6-audio-pipeline-ffmpeg-preprocessing--addis-ai-stt-engine)
 7. *Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime (Pending)*
 8. *Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance (Pending)*
 9. *Section 9: Conversational Agent UI & MUI X Chat Integration (Pending)*
@@ -2383,5 +2383,590 @@ To ensure effortless, zero-latency interaction during intensive operational repo
 3. **GPU-Accelerated CSS Animations**:
    - Audio Orb pulsing, wave visualizers, and streaming cursors run exclusively on GPU-composited CSS properties (`transform: scale(...)`, `opacity`).
    - Animations bypass the JavaScript thread entirely, preventing layout recalculation (`reflow`) and eliminating typing jank even in threads with 50+ messages.
+---
 
+# Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
+
+### 6.1 In-Browser Audio Capture & Multi-Modal Ingestion Architecture
+
+The application provides a seamless, fault-tolerant audio capture system engineered specifically for mobile and desktop field supervisors. Audio input operates across two major UI surfaces: the **10-Row Report Initiation Form** (`/chat`) and the **Multi-Turn Chat Composer** (`/chat/:chatId`).
+
+```mermaid
+flowchart TD
+    subgraph Capture_Modalities["Three Audio Capture Modalities (10-Row Form)"]
+        M1["1. Live Mic Capture (Audio Orb)"]
+        M2["2. File Attachment (Paperclip Button)"]
+        M3["3. Drag-and-Drop Zone (Drop Target)"]
+    end
+
+    Capture_Modalities --> Q["Unified Client Queue (audioQueue[])"]
+
+    subgraph Client_Validation["Client-Side Quality & Sizing Gate"]
+        Q --> V1["File Count Gate (max 10 files)"]
+        Q --> V2["File Size Gate (max 25MB/file)"]
+        Q --> V3["MIME Allowlist Gate (7 audio types)"]
+        Q --> V4["Acoustic RMS Energy Gate (detect silence/muted mic)"]
+    end
+
+    subgraph Row8_9_UI["Row 8 & 9: Verification & Local Playback (Method 1)"]
+        V4 --> U1["Row 8: Narrations Header Divider (Count & Total Duration)"]
+        U1 --> U2["Row 9: Audio Card Deck with Waveform & Local Blob Mini-Player"]
+        U2 --> U3["Delete Chip: URL.revokeObjectURL() & Queue Removal"]
+    end
+
+    subgraph Atomic_Submit["Row 10: Atomic Multipart Submission"]
+        U3 --> S1["Supervisor clicks Submit Report"]
+        S1 --> S2["FormData appends domain metadata + audio files"]
+        S2 --> S3["POST /api/v1/reports (multipart/form-data)"]
+        S3 --> S4["Axios/Fetch onUploadProgress Linear Bar (0% -> 100%)"]
+    end
+```
+
+#### 6.1.1 Browser MediaRecorder Configuration & Cross-Platform Codecs
+- **Primary Codec Selection**: Recording uses the browser `MediaRecorder` API targeting `audio/webm;codecs=opus` with audio constraints:
+  ```javascript
+  const constraints = {
+    audio: {
+      channelCount: 1,
+      sampleRate: 16000,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    }
+  };
+  ```
+- **iOS Safari Fallback**: If `MediaRecorder.isTypeSupported('audio/webm;codecs=opus')` returns false (e.g. iOS WebKit), the recorder automatically falls back to `audio/mp4` or `audio/aac`.
+- **Blob Conversion**: When the supervisor stops recording, the recorded chunks are assembled into a native `Blob` and wrapped in a standard `File` object:
+  ```javascript
+  const recordedBlob = new Blob(audioChunks, { type: supportedMimeType });
+  const audioFile = new File([recordedBlob], `narration-${Date.now()}.${extension}`, { type: supportedMimeType });
+  ```
+
+#### 6.1.2 Real-Time Acoustic Visualizer & Silent Recording Guardrail
+- **AudioContext & AnalyserNode**: While recording, the client instantiates a Web Audio API `AudioContext` and connects an `AnalyserNode` with `fftSize: 256` to sample real-time RMS power and frequency bins.
+- **Waveform UI**: The Audio Orb dynamically expands, rendering a smooth SVG or canvas-based waveform that pulses in direct synchrony with the supervisor's voice amplitude.
+- **Silence & Muted Mic Detection**: The visualizer calculates the average RMS power over the recording interval. If acoustic power remains below `0.01` throughout the recording:
+  - The client aborts upload.
+  - Displays an inline Material-UI toast: `"ምንም ድምፅ አልተገኘም። እባክዎ ማይክሮፎንዎን ያረጋግጡ (No audio detected. Please check your microphone)"`.
+  - Prevents burning Addis AI STT API quota on blank acoustic data.
+
+#### 6.1.3 Duration Hard-Cap Guardrail (120-Second Cap)
+- **Hard Cap**: Individual audio narrations are capped at **120 seconds** to optimize transcription accuracy and maintain bounded server processing times.
+- **Visual Warning**: An interactive countdown timer displays recorded time (`MM:SS`). At 100 seconds (20 seconds remaining), the timer transitions from neutral to warning amber (`warning.main`) with subtle pulsing.
+- **Automatic Finalization**: At 120 seconds, `MediaRecorder.stop()` triggers automatically, finalizing the clip cleanly without corrupting the audio buffer.
+
+#### 6.1.4 The Three Ingestion Modalities in the 10-Row Form (Row 7)
+1. **Live Mic Capture (Audio Orb)**: Centered pulsating button in Row 7. Tapping toggles between idle and active recording states.
+2. **File Attachment (Paperclip Button)**: A prominent Material-UI button `[ 📎 Attach Audio Files ]` opens a hidden `<input type="file" accept="audio/*" multiple />`, allowing the supervisor to attach pre-recorded voice memos from their phone or computer.
+3. **Interactive Drag-and-Drop Zone**: The entire Row 7 container functions as an HTML5 drag-and-drop target. Dragging audio files over the container activates a high-contrast dashed border and displays a bilingual drop overlay: `[ 🎙️ ፋይሎችን እዚህ ይልቀቁ / Drop audio recordings here ]`. Dropping extracts `e.dataTransfer.files`, filtering strictly for valid audio MIME types.
+
+#### 6.1.5 Unified Client-Side Audio Queue State (`audioQueue[]`)
+All three modalities push normalized items into a single unified client-side state:
+```javascript
+/**
+ * @typedef {Object} QueuedAudioItem
+ * @property {string} id - Client-side UUID (crypto.randomUUID())
+ * @property {File} file - Native browser File object for FormData ingestion
+ * @property {string} name - User-facing display name
+ * @property {number} size - File size in bytes
+ * @property {number} duration - Exact duration in seconds
+ * @property {string} localBlobUrl - In-memory object URL (URL.createObjectURL(file))
+ * @property {'recorded' | 'attached' | 'dropped'} source - Acquisition modality
+ */
+```
+
+#### 6.1.6 Row 8 & 9: Verification Cards & Mini-Player (Method 1)
+- **Row 8 (Divider Header)**: When `audioQueue.length > 0`, Row 8 renders a clean divider: `Narrations (k files, MM:SS total duration)`.
+- **Row 9 (Audio Card Deck)**: Each queued clip renders as a compact horizontal card featuring:
+  - Audio waveform icon and file name.
+  - File size chip and duration chip.
+  - **Inline Mini-Player**: Play/pause toggle playing directly from `item.localBlobUrl`. Playback is 100% in-memory with zero network latency.
+  - **Delete Chip**: Tapping `[ ✕ ]` invokes `URL.revokeObjectURL(item.localBlobUrl)` to prevent memory leaks and removes the file from `audioQueue`.
+
+#### 6.1.7 Row 10: Atomic Multipart Submission
+Submitting the form constructs a single `FormData` payload containing both domain metadata and the accumulated audio files:
+```javascript
+const formData = new FormData();
+formData.append('date', reportData.date);
+formData.append('branch', reportData.branch);
+formData.append('clockIn', reportData.clockIn);
+formData.append('clockOut', reportData.clockOut);
+if (reportData.visits && reportData.visits.length > 0) {
+  formData.append('visits', JSON.stringify(reportData.visits));
+}
+
+// Append all files under field name 'audio' matching Multer array expectation
+audioQueue.forEach((item) => {
+  formData.append('audio', item.file, item.name);
+});
+```
+
+---
+
+### 6.2 Multer Server-Side Ingestion & Security Hardening
+
+```mermaid
+flowchart TD
+    A["Incoming Multipart Request"] --> B["Multer Disk Storage Ingress"]
+    B --> C{"MIME Allowlist Validation"}
+    C -->|"Valid MIME"| D{"File Size <= 25MB?"}
+    C -->|"Invalid MIME"| E["HTTP 422 UNPROCESSABLE_ENTITY"]
+    D -->|"<= 25MB"| F{"File Count <= 10?"}
+    D -->|"> 25MB"| G["HTTP 413 PAYLOAD_TOO_LARGE"]
+    F -->|"<= 10"| H["Sanitize Filename & Save to uploads/audio/"]
+    F -->|"> 10"| I["HTTP 422 Limit Exceeded"]
+    H --> J["Forward to Controller via req.files[]"]
+```
+
+#### 6.2.1 Storage Directory & Initialization
+- **Physical Directory**: Uploaded audio is stored in `uploads/audio/` (strictly gitignored).
+- **Directory Bootstrapping**: On backend startup, `server.js` verifies directory existence via `node:fs` (`fs.mkdirSync('uploads/audio/', { recursive: true })`), ensuring that fresh deployments never fail on missing upload directories.
+
+#### 6.2.2 Strict MIME Allowlist
+Incoming files are validated at the stream boundary via Multer's `fileFilter`. Only the following 7 audio formats are permitted:
+- `audio/webm`
+- `audio/wav`
+- `audio/mp3`
+- `audio/mpeg`
+- `audio/m4a`
+- `audio/ogg`
+- `audio/aac`
+
+Any file outside this allowlist is rejected immediately with an HTTP 422 `UNPROCESSABLE_ENTITY` error:
+`{ "success": false, "message": "Invalid audio file format. Allowed formats: webm, wav, mp3, m4a, ogg, aac.", "data": null }`.
+
+#### 6.2.3 File Capacity & Size Envelopes
+- **Report Creation (`POST /api/v1/reports`)**: Handled by `upload.array('audio', 10)`. Max 25MB per file, maximum 10 audio files per submission.
+- **Ephemeral Dictation (`POST /api/v1/audio/transcribe-ephemeral`)**: Handled by `upload.single('audio')`. Max 25MB, exactly 1 file.
+- **Chat Message Attachment (`POST /api/v1/chats/:chatId/messages`)**: Handled by `upload.single('audio')`. Max 25MB, exactly 1 file.
+- **Payload Too Large (HTTP 413)**: Any file exceeding 25MB triggers Multer's `LIMIT_FILE_SIZE` error, returning HTTP 413 `PAYLOAD_TOO_LARGE`.
+
+#### 6.2.4 Cryptographic Filename Sanitization
+To prevent path traversal, filename collisions, and malicious script execution, all saved files are renamed upon ingress using cryptographically secure random tokens:
+```javascript
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/audio/');
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.webm';
+    const randomBytes = crypto.randomBytes(8).toString('hex');
+    const prefix = req.params.chatId ? `chat-${req.params.chatId}` : 'narration';
+    cb(null, `${prefix}-${Date.now()}-${randomBytes}${ext}`);
+  }
+});
+```
+
+---
+
+### 6.3 FFmpeg Audio Normalization & Acoustic Segmentation Engine
+
+To guarantee pristine transcription accuracy across Addis AI STT, all uploaded audio is normalized through system FFmpeg into a standardized acoustic profile.
+
+```mermaid
+flowchart TD
+    A["Raw Ingested Audio File (uploads/audio/*)"] --> B["ffprobe Metadata Extraction"]
+    B --> C["Extract: duration, sampleRate, channels, bitRate, codec"]
+    C --> D["fluent-ffmpeg Normalization: mono, 16-bit, 16kHz PCM WAV"]
+    D --> E{"Duration > 120s OR Size > 25MB?"}
+    E -->|"No"| F["Single Standardized Output WAV"]
+    E -->|"Yes"| G["FFmpeg silencedetect Filter (-30dB, 0.5s silence)"]
+    G --> H["Segment on Silence Gaps (Zero Word-Clipping)"]
+    H --> I["Sequence of Normalized WAV Chunks: chunk-001.wav, chunk-002.wav..."]
+    F --> J["Forward to Addis AI STT Engine"]
+    I --> J
+```
+
+#### 6.3.1 Dynamic Binary Path Resolution
+FFmpeg and FFprobe binary paths are loaded dynamically from `config/env.js`, falling back cleanly to the system `PATH`:
+```javascript
+import ffmpeg from 'fluent-ffmpeg';
+import { env } from '../config/env.js';
+
+if (env.FFMPEG_PATH) {
+  ffmpeg.setFfmpegPath(env.FFMPEG_PATH);
+}
+if (env.FFPROBE_PATH) {
+  ffmpeg.setFfprobePath(env.FFPROBE_PATH);
+}
+```
+
+#### 6.3.2 Metadata Probing (`ffprobe`)
+Before processing, `ffprobe` inspects the media stream to extract acoustic characteristics:
+```javascript
+/**
+ * @function probeAudioMetadata
+ * @param {string} filePath - Absolute path to uploaded file.
+ * @returns {Promise<{ duration: number, sampleRate: number, channels: number, codec: string }>}
+ */
+export const probeAudioMetadata = (filePath) => {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) return reject(err);
+      const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
+      resolve({
+        duration: parseFloat(metadata.format.duration || 0),
+        sampleRate: parseInt(audioStream?.sample_rate || 0, 10),
+        channels: parseInt(audioStream?.channels || 1, 10),
+        codec: audioStream?.codec_name || 'unknown'
+      });
+    });
+  });
+};
+```
+
+#### 6.3.3 Acoustic Standardization (Mono 16-bit 16kHz PCM WAV)
+Every incoming file is converted to mono 16-bit 16kHz PCM WAV format (`audio/wav`), the mathematically optimal acoustic configuration for Addis AI's Amharic acoustic models:
+- **Channels (`-ac 1`)**: Downmixed to mono, eliminating phase cancellation from dual-mic smartphone recordings.
+- **Sample Rate (`-ar 16000`)**: Resampled to 16,000 Hz.
+- **Codec (`-c:a pcm_s16le`)**: Uncompressed 16-bit little-endian linear PCM.
+```javascript
+export const normalizeToWav = (inputPath, outputPath) => {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .noVideo()
+      .audioChannels(1)
+      .audioFrequency(16000)
+      .audioCodec('pcm_s16le')
+      .format('wav')
+      .output(outputPath)
+      .on('end', () => resolve(outputPath))
+      .on('error', (err) => reject(err))
+      .run();
+  });
+};
+```
+
+#### 6.3.4 Silence-Based Segmentation Algorithm (Preventing Mid-Word Truncation)
+- If an uploaded recording exceeds **120 seconds** or **25MB**, naive fixed-duration slicing (e.g. cutting exactly at 60.0 seconds) risks severing Amharic words mid-syllable, corrupting Ge'ez phonetics.
+- **Silence Detection Filter**: The engine executes FFmpeg's `silencedetect` filter:
+  `-af silencedetect=noise=-30dB:d=0.5`
+- **Dynamic Cut Points**: The engine parses silence start/end timestamps from the FFmpeg stderr output and selects split points located precisely within natural acoustic pauses closest to the 90–110 second interval.
+- **Chunk Emission**: Generates sequential chunk files (`chunk-001.wav`, `chunk-002.wav`), guaranteeing that every spoken Amharic sentence remains linguistically intact.
+
+---
+
+### 6.4 Addis AI STT Engine & Synchronous Transcription Protocol
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Server as Express Backend
+    participant SDK as AddisAI SDK Client
+    participant API as Addis AI STT Cloud
+
+    Server->>SDK: transcribe({ file: ReadStream, language: "am", model: "default" })
+    SDK->>API: Synchronous POST /v1/speech-to-text
+    alt Success within AI_TIMEOUT_MS
+        API-->>SDK: HTTP 200 { text: "በዕለቱ በቦሌ ብራንች የተደረገ..." }
+        SDK-->>Server: Returns Amharic transcript string
+    else Transient 429 / 5xx / Network Timeout
+        API-->>SDK: HTTP 429 / 502 / Timeout
+        Note over Server, API: Exponential Backoff (1s -> 2s -> 4s, max 3 attempts)
+        Server->>SDK: Retry transcribe()
+        SDK->>API: Synchronous POST (Attempt 2)
+        API-->>SDK: HTTP 200 { text: "..." }
+        SDK-->>Server: Returns Amharic transcript string
+    else All Retries Exhausted
+        API-->>SDK: Terminal Failure
+        Server-->>Server: Fallback to Acoustic Guardrail (Gentle Clarification)
+    end
+```
+
+#### 6.4.1 Official SDK Client Initialization
+The Addis AI client is instantiated strictly in `config/env.js` as an immutable singleton:
+```javascript
+import { AddisAI } from 'addisai';
+import { env } from './env.js';
+
+export const addisai = new AddisAI({
+  apiKey: env.ADDIS_AI_API_KEY
+});
+```
+
+#### 6.4.2 Synchronous Execution Protocol
+Addis AI STT operates synchronously (not via WebSockets or streaming). Files and normalized chunks are dispatched directly via Node.js read streams:
+```javascript
+/**
+ * @function transcribeAudioChunk
+ * @param {string} wavPath - Path to normalized 16kHz PCM WAV file.
+ * @returns {Promise<string>} Transcribed Amharic text.
+ */
+export const transcribeAudioChunk = async (wavPath) => {
+  const fileStream = fs.createReadStream(wavPath);
+  const response = await addisai.speechToText.transcribe({
+    file: fileStream,
+    language: 'am',
+    model: 'default'
+  });
+  return response.text ? response.text.trim() : '';
+};
+```
+
+#### 6.4.3 Timeout Bounding & Exponential Backoff Retry Matrix
+- **Timeout Bound**: Every Addis AI request is wrapped in an `AbortSignal.timeout(env.AI_TIMEOUT_MS)` bounded strictly by `AI_TIMEOUT_MS` (default: 60,000ms).
+- **Exponential Backoff Matrix**: If Addis AI returns HTTP 429 (Rate Limit), 500, 502, 503, or a network timeout, the engine executes up to 3 retries with deterministic delays:
+  $$\text{Delay}_k = 2^{k-1} \times 1000\,\text{ms} \quad (k \in \{1, 2, 3\}) \implies 1\text{s} \rightarrow 2\text{s} \rightarrow 4\text{s}$$
+- **Terminal Exhaustion**: If all 3 retries fail, the error is logged via Winston (`logger.error()`) and forwarded to the central error pipeline.
+
+#### 6.4.4 Sequential Concatenation into Canonical `rawNarrationText`
+When a report submission includes multiple audio files or segmented chunks:
+1. Files and chunks are transcribed in strict chronological sequence ($1, 2, \dots, N$).
+2. The individual Amharic transcripts are concatenated with a single whitespace delimiter.
+3. The unified result is assigned to `report.rawTranscript` (and `message.transcription`), providing the LLM agent with the complete, unbroken operational narrative.
+
+#### 6.4.5 Acoustic Quality Gate & Zero-Hallucination Guardrail
+- If Addis AI returns an empty string `""` or low-confidence noise tokens (e.g. repetitive punctuation or acoustic artifacts), the server **never synthesizes or hallucinates report contents**.
+- Instead, the agent prompts the supervisor for clarification:
+  `"የተላከው የድምፅ መልዕክት ግልጽ አልነበረም። እባክዎ በድጋሚ ይናገሩ ወይም በጽሁፍ ያስገቡ (The voice recording was not clear. Please speak again or enter via text)."`
+
+---
+
+### 6.5 Mode 3 Ephemeral Voice Dictation Engine (`POST /api/v1/audio/transcribe-ephemeral`)
+
+Mode 3 provides supervisors with a lightning-fast voice-typing experience directly inside the chat composer.
+
+```mermaid
+flowchart TD
+    A["Supervisor taps Audio Orb in ChatComposerToolbar"] --> B["MediaRecorder captures WebM/Opus (max 120s)"]
+    B --> C["Audio Orb pulses with live waveform"]
+    C -->|"Supervisor taps Checkmark / Stop"| D["POST /api/v1/audio/transcribe-ephemeral (Multer upload.single)"]
+    D --> E["Multer validates MIME and size (max 25MB)"]
+    E --> F["FFmpeg normalizes to mono 16kHz PCM WAV"]
+    F --> G["Addis AI STT transcribes Amharic audio synchronously"]
+    G --> H["Express finally block unlinks temporary file"]
+    H --> I["Return JSON: { success: true, data: { text } }"]
+    I --> J["Injected directly into ChatComposerTextArea at cursor position"]
+    J --> K["Supervisor proofreads Ge'ez text / edits / appends"]
+    K --> L["Clicks Send -> Standard Text Message Flow"]
+```
+
+#### 6.5.1 Zero-Persistence Guarantee
+- Ephemeral audio notes are **never written to MongoDB** and **never saved as persistent files in storage**.
+- The temporary upload file on disk is unlinked immediately in an Express `finally` block:
+  ```javascript
+  export const transcribeEphemeralAudio = async (req, res, next) => {
+    const tempPath = req.file?.path;
+    let normalizedPath = null;
+    try {
+      if (!tempPath) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
+          message: 'No audio file provided',
+          data: null
+        });
+      }
+      normalizedPath = `${tempPath}-normalized.wav`;
+      await normalizeToWav(tempPath, normalizedPath);
+      const transcribedText = await transcribeAudioChunk(normalizedPath);
+
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        message: 'Audio transcribed successfully',
+        data: { text: transcribedText }
+      });
+    } catch (error) {
+      next(error);
+    } finally {
+      // Guaranteed zero-orphan disk cleanup
+      if (tempPath) await fs.promises.unlink(tempPath).catch(() => {});
+      if (normalizedPath) await fs.promises.unlink(normalizedPath).catch(() => {});
+    }
+  };
+  ```
+
+#### 6.5.2 In-Composer Cursor Injection
+- Upon receiving the transcribed Amharic text, the frontend calculates the composer textarea's `selectionStart` and `selectionEnd`.
+- The text is inserted at the exact cursor position, preserving any text previously typed by the user without destructive replacement:
+  ```javascript
+  const insertTranscribedText = (transcribedText) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const current = textarea.value;
+    const updated = current.substring(0, start) + transcribedText + current.substring(end);
+    setValue('prompt', updated);
+    // Restore cursor position after the newly inserted text
+    setTimeout(() => {
+      textarea.selectionStart = textarea.selectionEnd = start + transcribedText.length;
+      textarea.focus();
+    }, 0);
+  };
+  ```
+- **Supervisor Control**: The supervisor inspects the Ge'ez text directly on screen, corrects any minor phonetic transliterations, and clicks **Send** when ready.
+
+---
+
+### 6.6 Chat Composer Audio Attachment Flow (Mode 4 Voice Note Messages)
+
+When a supervisor wants to send an actual audio voice note into the ongoing chat thread for the agent to analyze and store in the permanent conversation record:
+
+1. **Ingress**:
+   - The supervisor clicks the Paperclip icon `[ 📎 ]` in `ChatComposerToolbar`, or drags and drops an audio file directly over the chat composer.
+2. **Pre-Send Attachment Chip**:
+   - An interactive Material-UI `Chip` is mounted above `ChatComposerTextArea`:
+     `[ 🎵 voice-memo-fryer.m4a (1:45)  ✕ ]`
+   - The user can type an accompanying text prompt (e.g., `"ይሄን ድምፅ ሰምተህ የችግሩን አይነት በሪፖርቱ ላይ መዝግብ"`).
+3. **Multipart Message Ingestion (`POST /api/v1/chats/:chatId/messages`)**:
+   - The payload is dispatched as `multipart/form-data` containing optional fields `text` and `audio`.
+   - The backend normalizes the audio to mono 16kHz WAV, saves it to `uploads/audio/`, calls Addis AI STT, and creates the `Message` document:
+     ```javascript
+     const message = new Message({
+       chat: chatId,
+       sender: 'user',
+       text: req.body.text || '',
+       audio: {
+         originalName: req.file.originalname,
+         fileName: req.file.filename,
+         path: req.file.path,
+         duration: probedMetadata.duration,
+         mimeType: req.file.mimetype
+       },
+       transcription: transcribedText
+     });
+     await message.save({ session });
+     ```
+4. **Agent Processing**:
+   - In report chats (`type: 'report'`), the agent reviews both the user's typed prompt and the transcribed audio narration, invoking `update_report` if operational modifications are dictated.
+
+---
+
+### 6.7 Method 1: Authenticated Client-Side Blob URL Playback Engine
+
+To permanently eliminate the common web development pitfalls associated with backend audio streaming (HTTP 206 Partial Content errors, missing Range header crashes, Safari `NaN:NaN` duration freezes, and cookie-dropping on `<audio src="...">` tags), the application standardizes exclusively on **Method 1: Authenticated Binary Fetch with In-Memory Blob URL Playback**.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Supervisor
+    participant UI as React Audio Player Component
+    participant API as Express Audio Endpoint (/reports/:reportId/clips/:clipId)
+    participant Disk as Physical Storage (uploads/audio/*)
+
+    User->>UI: Clicks Play icon on Report Audio Card
+    UI->>API: GET /api/v1/reports/:reportId/clips/:clipId (credentials: 'include')
+    Note over UI, API: Standard HTTP 200 GET (No Range Header Required!)
+    API->>API: Verify authenticated user (req.user._id)
+    API->>Disk: res.sendFile(filePath)
+    Disk-->>API: Binary file stream
+    API-->>UI: HTTP 200 OK with binary audio/wav payload
+    UI->>UI: const blob = await response.blob()
+    UI->>UI: const localBlobUrl = URL.createObjectURL(blob)
+    UI->>UI: new Audio(localBlobUrl).play()
+    Note over UI: Zero-Latency 60fps Scrubbing & Native Browser Seeking
+    User->>UI: Navigates away / unmounts component
+    UI->>UI: URL.revokeObjectURL(localBlobUrl) (Garbage Collection)
+```
+
+#### 6.7.1 The Three Backend Audio Serving Endpoints
+All audio playback routes are protected, user-scoped endpoints that stream the entire file via `res.sendFile()` as a standard HTTP 200 binary response:
+1. **Report Audio Clips**: `GET /api/v1/reports/:reportId/clips/:clipId`
+   - Verifies `report.user.toString() === req.user._id.toString()`.
+   - Resolves `audioFiles.id(clipId).path` and calls `res.sendFile(resolvedPath)`.
+2. **Chat Message Audio Clips**: `GET /api/v1/chats/:chatId/messages/:messageId/audio`
+   - Verifies `chat.user.toString() === req.user._id.toString()`.
+   - Resolves `message.audio.path` and calls `res.sendFile(resolvedPath)`.
+3. **Avatar Serving**: `GET /api/v1/auth/avatar`
+   - Handled symmetrically via `res.sendFile()` for local avatars.
+
+#### 6.7.2 Custom React Audio Hook (`useAudioBlob`)
+The client encapsulates audio playback inside a reusable custom hook that handles binary retrieval, Blob URL generation, and automatic memory cleanup:
+```javascript
+/**
+ * @hook useAudioBlob
+ * @description Fetches authenticated audio binaries and creates in-memory Object URLs.
+ * @param {string} audioEndpoint - Authenticated backend API URL.
+ * @returns {{ play: Function, pause: Function, isPlaying: boolean, duration: number, currentTime: number, seek: Function, loading: boolean }}
+ */
+export const useAudioBlob = (audioEndpoint) => {
+  const [blobUrl, setBlobUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    let createdUrl = null;
+
+    const fetchAudio = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(audioEndpoint, {
+          credentials: 'include' // Guarantees httpOnly cookie transport
+        });
+        if (!response.ok) throw new Error('Failed to load audio');
+        const blob = await response.blob();
+        if (active) {
+          createdUrl = URL.createObjectURL(blob);
+          setBlobUrl(createdUrl);
+          audioRef.current = new Audio(createdUrl);
+        }
+      } catch (err) {
+        console.error('Audio loading error:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    fetchAudio();
+
+    return () => {
+      active = false;
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl); // Prevents memory leaks
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [audioEndpoint]);
+
+  return { blobUrl, loading, audioRef };
+};
+```
+
+#### 6.7.3 Technical Advantages of Method 1
+1. **Zero HTTP 206 Range Complexity**: Does not rely on complex byte-range math or chunked streaming headers that vary across web servers and reverse proxies.
+2. **100% Reliable Cookie Authentication**: Uses standard `fetch({ credentials: 'include' })` instead of relying on `<audio src="...">` which frequently drops cookies in Safari and mobile browsers.
+3. **Instantaneous In-Memory Seeking**: Once downloaded (1–3MB for a 1-minute 16kHz WAV), the user can scrub back and forth along the audio waveform with **zero network latency** and zero server roundtrips.
+4. **Offline Resilience**: The loaded audio clip remains fully playable in browser RAM even if the supervisor temporarily loses connectivity while reading the report details.
+
+---
+
+### 6.8 Storage Hygiene, Two-Tier Sweeper & Error Isolation
+
+```mermaid
+flowchart TD
+    A["Active Audio File in uploads/audio/"] -->|"Report or Chat soft-archived"| B["isArchived: true (Audio preserved on disk)"]
+    B -->|"30 Days Elapsed in Archive"| C["Daily node-cron Sweeper Engine (0 0 * * *)"]
+    B -->|"Supervisor deletes account"| D["DELETE /api/v1/users/me"]
+    C --> E["session.withTransaction() purges MongoDB documents"]
+    D --> E
+    E --> F["Post-Commit: fs.promises.unlink(audio.path)"]
+    F --> G["fs.promises.unlink.catch(() => {}) Error Suppression"]
+    G --> H["Guaranteed: Missing disk file NEVER breaks DB transaction!"]
+```
+
+#### 6.8.1 Audio File Invariants & Document Linkage
+- Every persisted audio file on disk is referenced by exactly one parent document:
+  - Report narrations: referenced in `report.audioFiles[{ path, fileName, originalName, duration, mimeType }]`.
+  - Chat voice notes: referenced in `message.audio{ path, fileName, originalName, duration, mimeType }`.
+
+#### 6.8.2 Cascade Purge in 30-Day Sweeper (`jobs/sweeperJob.js`)
+When the daily midnight sweeper executes, physical audio files are unlinked from disk **immediately after the database transaction commits**:
+```javascript
+// Unlink physical audio files post-commit
+for (const audio of report.audioFiles) {
+  if (audio.path) {
+    await fs.promises.unlink(audio.path).catch((err) => {
+      logger.warn(`Failed to unlink audio file ${audio.path}: ${err.message}`);
+    });
+  }
+}
+```
+
+#### 6.8.3 Resilient Error Isolation
+- **The Golden Rule of File Deletion**: Database transactions must **never** be rolled back or disrupted because a physical file is missing from disk (e.g. if an administrator manually cleared a directory or if a container restarted).
+- All `fs.promises.unlink()` operations are strictly wrapped in `.catch(() => {})` with a Winston warning log, guaranteeing complete operational resilience and zero transaction rollback failures.
 

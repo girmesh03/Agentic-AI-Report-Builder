@@ -151,7 +151,19 @@ Use this file as the chronological record of work performed, files created, git 
       - Enhanced Section 4.2.3 `reportSchema.pre('save')` with session awareness documentation, `.session(this.$session())` requirement for async lookups, and retrieve-and-save invariant.
       - Updated Section 4.3 with cascading soft archive/restore and wrapped `sweeperJob.js` physical purge cascades in per-report atomic transactions.
       - Updated Section 5.5 downstream message truncation to execute within atomic transactions with `{ session }`.
-    - Preserved and synchronized complete `implementation_plan.md` artifact.
+    - Section 6 (Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine) drafted and integrated into `master_specification.md`:
+      - Detailed in-browser audio capture (MediaRecorder WebM/Opus with MP4 fallback, 120s countdown guardrail, silence detection).
+      - Formalized tri-modal audio ingestion in Row 7 of 10-Row Form (Live mic Audio Orb, Paperclip browse, Drag-and-drop zone).
+      - Structured client-side `audioQueue` with local mini-player preview (Method 1 in-memory Blob URL) and atomic multipart submission.
+      - Specified Multer server-side ingress: strict 7-format MIME allowlist, 25MB limits, cryptographic random filename sanitization.
+      - Specified FFmpeg normalization engine: dynamic binary resolution, `ffprobe` metadata probing, standardization to mono 16-bit 16kHz PCM WAV (`-ac 1 -ar 16000 -c:a pcm_s16le`).
+      - Engineered silence-based segmentation filter (`silencedetect=noise=-30dB:d=0.5`) for clips >120s or >25MB to eliminate mid-word Amharic truncation.
+      - Specified Addis AI STT synchronous integration with `AI_TIMEOUT_MS` bounding, 1s -> 2s -> 4s exponential backoff, and sequential transcript concatenation into `rawNarrationText`.
+      - Detailed Mode 3 Ephemeral Voice Dictation with zero-persistence Express `finally` block unlinking and in-composer textarea cursor injection.
+      - Detailed Mode 4 Chat Composer Audio Attachment flow with pre-send chip and multipart message ingestion.
+      - Standardized on Method 1 (Authenticated Binary Fetch -> `URL.createObjectURL(blob)`) for all audio playback routes (`/reports/:reportId/clips/:clipId` and `/chats/:chatId/messages/:messageId/audio`), eliminating HTTP 206 Range bugs and Safari cookie-dropping.
+      - User reviewed and confirmed Section 6 specification.
+      - Committed Section 6 to `phase-0-specification`.
 - Files created/modified:
   - `docs/specifications/master_specification.md`
   - `findings.md`
@@ -162,8 +174,8 @@ Use this file as the chronological record of work performed, files created, git 
 
 | Question | Answer |
 |---|---|
-| Where am I? | All 9 review points, including the comprehensive Mongoose ClientSession & Transaction Protocol, fully applied to `master_specification.md` and `implementation_plan.md` on branch `phase-0-specification`. |
-| Where am I going? | Presenting complete verification summary to user for authorization to stage and commit to `phase-0-specification`. |
+| Where am I? | Section 6 committed to `phase-0-specification`; preparing Section 7 (Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime). |
+| Where am I going? | Plan Mode formulation and review of Section 7 architecture. |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Mongoose document middleware accesses the session via `this.$session()`, in-memory mutations commit automatically with the document's session, any DB queries in hooks must pass `.session(this.$session())`, `Model.create` requires array syntax with sessions, and `doc.save({ session })` must be used over `Model.updateOne` to prevent bypassing `pre('save')`. |
-| What have I done? | Applied all 9 review points and Mongoose session protocols cleanly without a single error; verified via git status and diff. Ready for user commit authorization. |
+| What have I learned? | Method 1 in-memory Blob URL playback guarantees zero HTTP 206 Range errors and zero Safari cookie-dropping; FFmpeg silence-detect prevents mid-word Ge'ez speech truncation; Mode 3 ephemeral dictation guarantees zero disk persistence. |
+| What have I done? | Committed Section 6 (`phase-0-specification`); synchronized all planning files; prepared Section 7 blueprint for user review in Plan Mode. |
