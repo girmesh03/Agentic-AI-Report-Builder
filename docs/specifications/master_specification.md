@@ -17,7 +17,7 @@
 6. [Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine](#section-6-audio-pipeline-ffmpeg-preprocessing--addis-ai-stt-engine)
 7. [Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime](#section-7-agentic-reasoning-multi-tier-fallback--gemini-runtime)
 8. [Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance](#section-8-workplace-transliteration-engine--in-context-phonetic-guidance)
-9. *Section 9: Conversational Agent UI & MUI X Chat Integration (Pending)*
+9. [Section 9: Conversational Agent UI & MUI X Chat Integration](#section-9-conversational-agent-ui--mui-x-chat-integration)
 10. *Section 10: Frontend Routing, Shell Layout & Component Matrix (Pending)*
 11. *Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes (Pending)*
 12. *Section 12: Backend Infrastructure, Winston Logging & Sweeper Tasks (Pending)*
@@ -4435,5 +4435,769 @@ What if the supervisor dislikes the AI's first phonetic spelling?
 
 ---
 
+# Section 9: Conversational Agent UI & MUI X Chat Integration
 
+### 9.1 Single-Column ChatBox Canvas & AppShell Architecture
 
+#### 9.1.1 Architectural Layout & Strict Single-Column Canvas
+The Conversational Agent UI is built entirely upon **`@mui/x-chat`**, using the **`<ChatBox>`** component as the root conversational container. Across the entire application, both **Report Chat** (`type: 'report'`) and **General Chat** (`type: 'general'`) adhere strictly to a **Single-Column Canvas Layout**:
+
+1. **Chronological Message Stream**: The conversational canvas consists of a single, unified vertical thread where messages are rendered sequentially from top to bottom.
+2. **Horizontal Message Role Alignment**:
+   - **Assistant Response (Agent)**: Fixed to the **LEFT** side of the canvas (`role="assistant"`). Renders with the AI Assistant avatar, dark slate neutral background (`#1E293B`), Ge'ez-optimized typography, tool execution indicators, and interactive report action cards.
+   - **User Request (Supervisor)**: Fixed to the **RIGHT** side of the canvas (`role="user"`). Renders with the Supervisor avatar, primary brand accent background (`#2563EB`), white text, and attached voice note chips.
+3. **Prohibition of Multi-Column Chat Views**: Under no circumstances shall the chat interface be split into a two-column desktop layout (such as placing a message stream on the left and a live document or metadata panel on the right within the chat route). The conversational workspace is strictly single-column to maximize readability of complex Ge'ez script, eliminate layout shifting during streaming, and provide identical visual experiences across desktop monitors, field laptops, and tablets.
+
+#### 9.1.2 Linguistic Separation: 100% English Shell vs Amharic/Mixed Content
+In strict compliance with Section 1.4.1 (Linguistic Separation Law), the Conversational Agent UI enforces an immutable linguistic boundary:
+
+- **100% English App Shell**: All navigational chrome, drawer menus, header titles, status chips, buttons (`Send`, `Stop Generation`, `Copy`, `Edit`, `Retry`, `View Full Report`), tooltips, dialogs, validation messages, and composer helper text are rendered **exclusively in English**. No Amharic text may ever appear in UI chrome, button labels, or navigation elements.
+- **Amharic / Mixed Conversational Content**: The text content within message bubbles, transcribed audio voice notes, and generated report payloads may be in **Amharic, English, or mixed**. Spoken audio recordings are always Amharic. English workplace technical terms appearing in chat text or generated reports are transliterated into natural Amharic phonetics (e.g., `ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`, `ቺለር`, `ጀነሬተር`) per Section 8. Translation of user speech or report content is never artificially forced.
+
+#### 9.1.3 Direct Request/Response Interaction Model (Zero `ChatConfirmation`)
+The interaction architecture follows a clean, direct **Request/Response Model**:
+- When a supervisor sends a message (via text input or Mode 3 audio dictation), the conversational agent immediately evaluates intent, executes required server-side tools (e.g., querying operational data, generating comparisons, mutating report fields), streams back the response, and renders in-stream action triggers.
+- **Zero Gating Modals**: The UI **never** renders blocking approval popups, confirmation dialogs, or `ChatConfirmation` widgets. Supervisors are never forced to click "Confirm Action" or "Approve Tool Execution" before an action is carried out.
+- **Post-Action Control**: If a supervisor wishes to modify an action taken by the agent, they do so directly through post-response controls: clicking **`[ ✏️ Edit in Form ]`**, clicking **`[ 📄 View Full Report ]`**, editing the message via **`[Edit]`**, or providing a natural conversational follow-up prompt.
+
+#### 9.1.4 Zero Inner Chat Header Architecture
+The chat interface mounts directly into the `AppShell` main content outlet (`<Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>`):
+- **Single Global App Bar**: The top sticky `MuiAppbar` of the `AppShell` serves as the sole, authoritative header for the application.
+- **Zero Duplicate Header**: The `<ChatBox>` component is explicitly configured with `features={{ conversationHeader: false }}`, completely removing the inner chat header, subtitle, and action toolbar. Stacked double-headers are strictly prohibited.
+- **Top App Bar Controls**: The global `AppShell` header houses the **Preset Selector** (`[Preset: Operations Assistant ▾]`), font size scaling controls (`[ A- A+ ]`), and the User Avatar/Profile menu.
+
+#### 9.1.5 General Chat vs Report Chat Symmetrical Layout
+The application maintains two specialized conversational modes that share the exact same single-column `<ChatBox>` foundation:
+
+| Feature | General Chat (`type: 'general'`) | Report Chat (`type: 'report'`) |
+| :--- | :--- | :--- |
+| **Primary Route** | `/chats/:chatId` | `/reports/:reportId/chat` |
+| **Header Badge** | `General Operations Chat` | `Report Co-Pilot: <Branch> (<DD-MM-YY>)` |
+| **Primary Capabilities** | Cross-branch analytics, Google Sheets generation, management escalation memos, SOP guidance, financial calculations, read-only report querying. | 1-to-1 active report compilation, field mutation (`update_report_item`), visit scheduling, plain-text export. |
+| **Interactive Triggers** | `[ 📄 View Full Report ]`, `[ 📊 Open Google Sheet ]`, Dynamic Comparison Matrices. | `[ 📄 View Full Report ]`, `[ ✏️ Edit in Form ]`, `[ 📋 Copy Report Text ]`. |
+| **Composer Capabilities** | Mode 3 Audio Dictation, Mode 4 Voice Note Attachment, Suggestion Pills. | Mode 3 Audio Dictation, Mode 4 Voice Note Attachment, Transliteration Guidance. |
+| **Message Alignment** | Agent on Left, User on Right. | Agent on Left, User on Right. |
+
+---
+
+#### 9.1.6 Visual Wireframes
+
+##### Wireframe 1: General Chat (`type: 'general'`)
+```
++-------------------------------------------------------------------------------------------------------------------+
+| [☰] Report Builder   [Preset: Operations Assistant ▾]                    [ A- A+ ]   [ 🔔 ]   [ User Avatar ▾ ]   |  <-- AppShell AppBar
++--------------+----------------------------------------------------------------------------------------------------+
+| [ + New Rpt ]|                                                                                                    |
+| [ + New Chat]|  [ 🤖 AI Operations Assistant ]                                                                     |
+|              |  +-----------------------------------------------------------------------------------------------+  |
+| DASHBOARD    |  | ሰላም ግርማ! በዛሬው ዕለት በሁሉም ብራንቾች የተመዘገቡ ዋና ዋና የአሰራር ጉዳዮችን እና የሽያጭ ሁኔታዎችን መመልከት ትችላለህ።     |  |  <-- Agent on LEFT
+| • Overview   |  | ምን ማወቅ ትፈልጋለህ?                                                                            |  |
+|              |  +-----------------------------------------------------------------------------------------------+  |
+| REPORTS      |                                                                                                    |
+| • All Reports|                                              +---------------------------------------------------+ |
+| • Drafts     |                                              | የቦሌ እና የሳርቤት ብራንቾችን የትላንትና የቺለር እና የፒኦኤስ ማሽን ሁኔታ አወዳድርልኝ። | |  <-- User on RIGHT
+|              |                                              +---------------------------------------------------+ |
+| CHATS        |                                                                                                    |
+| • Today's Ops|  [ 🤖 AI Operations Assistant ]                                                                     |
+| • Bole Visit |  [ ⚙️ Queried 2 Branch Reports: Bole & Sarbet (19-01-2016 ዓ.ም) ]                                  |
+| • Sarbet Rpt |  +-----------------------------------------------------------------------------------------------+  |
+|              |  | ሁለቱንም ብራንቾች አወዳድሬያለሁ። በቦሌ ብራንች ቺለር ላይ የሙቀት መጨመር ችግር ሪፖርት ተደርጓል፤              |  |
+| BRANCHES     |  | የሳርቤት ፒኦኤስ ማሽን ደግሞ የኔትወርክ መቆራረጥ አሳይቷል።                                             |  |
+| • Bole       |  |                                                                                               |  |
+| • Sarbet     |  | [ Branch Comparison Matrix ]                                                                  |  |
+| • CMC        |  | +-------------+----------------------+--------------------+--------------------+            |  |
+|              |  | | Branch      | Equipment Issue      | Severity           | Action Taken       |            |  |
+| SETTINGS     |  | +-------------+----------------------+--------------------+--------------------+            |  |
+| • Profile    |  | | Bole        | ቺለር የሙቀት መጨመር  | High (አፋጣኝ)       | ቴክኒሻን ተጠርቷል    |            |  |
+| • Presets    |  | | Sarbet      | ፒኦኤስ ማሽን መቆራረጥ  | Medium             | በሞባይል ዳታ ተተክቷል |            |  |
+|              |  | +-------------+----------------------+--------------------+--------------------+            |  |
+|              |  |                                                                                               |  |
+|              |  | [ 📄 View Bole Report ]   [ 📄 View Sarbet Report ]   [ 📊 Export to Google Sheets ]            |  |  <-- Action Cards
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |                                                                                                    |
+|              |                             [ ↓ Jump to Latest ]                                                   |  <-- Scroll Affordance
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |  | [ chiller ➔ ቺለር | Convert ]  [ pos ➔ ፒኦኤስ ማሽን | Convert ]                                     |  |  <-- Suggestion Chips
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |  | [ 🎙️ ] [ 📎 ] | Ask a question, compare branches, or export data...                | [ ➤ Send ] |  |  <-- Centered Composer
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |    Hold 🎙️ for Amharic dictation • Press Shift+Enter for newline • 100% Secure Enterprise AI     |  <-- Composer Helper
++--------------+----------------------------------------------------------------------------------------------------+
+```
+
+##### Wireframe 2: Report Chat (`type: 'report'`)
+```
++-------------------------------------------------------------------------------------------------------------------+
+| [☰] Report Builder   [ Report Co-Pilot: Bole Branch (19-01-2016 ዓ.ም) ]          [ A- A+ ]   [ 🔔 ]   [ User Avatar ▾ ]   |  <-- AppShell AppBar
++--------------+----------------------------------------------------------------------------------------------------+
+| [ + New Rpt ]|                                                                                                    |
+| [ + New Chat]|  [ 🤖 AI Report Co-Pilot ]                                                                         |
+|              |  +-----------------------------------------------------------------------------------------------+  |
+| DASHBOARD    |  | የቦሌ ብራንች የ 19-01-2016 ዓ.ም የቁጥጥር ሪፖርት ረቂቅ ተዘጋጅቷል። 4 ስራዎች እና 1 ችግር ተመዝግቧል።           |  |  <-- Agent on LEFT
+| • Overview   |  | ሪፖርቱን እዚህ መመልከት፣ ማስተካከል ወይም በቀጥታ ወደ ሙሉ ፎርም መውሰድ ትችላለህ።                     |  |
+|              |  |                                                                                               |  |
+| REPORTS      |  | 📋 ሪፖርት ማጠቃለያ:                                                                           |  |
+| • All Reports|  | • ብራንች: ቦሌ                                                                                 |  |
+| • Drafts     |  | • ሰዓት: 08:30 - 17:00                                                                         |  |
+|              |  | • ዋና ጉዳይ: የዲፕ ፍራየር ቴርሞስታት ብልሽት                                                       |  |
+| CHATS        |  |                                                                                               |  |
+| • Today's Ops|  | [ 📄 View Full Report ]   [ ✏️ Edit in Form ]   [ 📋 Copy Report Text ]                          |  |  <-- Direct Triggers
+| • Bole Visit |  +-----------------------------------------------------------------------------------------------+  |
+| • Sarbet Rpt |                                                                                                    |
+|              |                                              +---------------------------------------------------+ |
+| BRANCHES     |                                              | በመፍትሄ የሚፈልጉ ጉዳዮች ላይ የዲፕ ፍራየሩ ቴክኒሻን ነገ ከቀኑ 8 ሰዓት  | |  <-- User on RIGHT
+| • Bole       |                                              | እንደሚመጣ ጨምርበት።                                | |
+| • Sarbet     |                                              +---------------------------------------------------+ |
+| • CMC        |                                                                                                    |
+|              |  [ 🤖 AI Report Co-Pilot ]                                                                         |
+| SETTINGS     |  [ ⚙️ Updated Report Field: issues[0].actionTaken ]                                                |
+| • Profile    |  +-----------------------------------------------------------------------------------------------+  |
+| • Presets    |  | በቦሌ ብራንች ሪፖርት ላይ ጉዳዩ ተስተካክሏል:                                                           |  |
+|              |  | "የዲፕ ፍራየር ቴርሞስታት ብልሽት አጋጥሟል፤ ቴክኒሻን ነገ ከቀኑ 8:00 ሰዓት መጥቶ እንደሚያስተካክል ተረጋግጧል።"      |  |
+|              |  |                                                                                               |  |
+|              |  | [ 📄 View Full Report ]   [ ✏️ Edit in Form ]   [ 📋 Copy Report Text ]                          |  |  <-- Interactive Triggers
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |                                                                                                    |
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |  | [ deep fryer ➔ ዲፕ ፍራየር | Convert ]                                                           |  |  <-- Suggestion Chips
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |  | [ 🎙️ ] [ 📎 ] | Instruct the co-pilot or narrate changes in Amharic...            | [ ➤ Send ] |  |  <-- Centered Composer
+|              |  +-----------------------------------------------------------------------------------------------+  |
+|              |    Hold 🎙️ for Amharic dictation • Press Shift+Enter for newline • Direct Request/Response Model    |  <-- Composer Helper
++--------------+----------------------------------------------------------------------------------------------------+
+```
+
+---
+
+### 9.2 MUI X Chat Compound Component Specification & Styling Tokens
+
+#### 9.2.1 Component Tree & Slot Architecture
+The conversational interface uses the official `@mui/x-chat` component hierarchy:
+
+```jsx
+import {
+  ChatBox,
+  ChatMessageList,
+  ChatMessage,
+  ChatMessageAvatar,
+  ChatMessageContent,
+  ChatMessageActions,
+  ChatTypingIndicator,
+  ChatScrollToBottomAffordance,
+  ChatComposer,
+  ChatComposerTextArea,
+  ChatComposerSendButton,
+  ChatComposerAttachmentList
+} from '@mui/x-chat';
+```
+
+##### Master Compound Hierarchy:
+```
+<ChatBox adapter={chatAdapter} features={{ conversationHeader: false, conversationList: false, scrollToBottom: true, autoScroll: true, attachments: true }}>
+  ├── <ChatMessageList> (Virtualized with @tanstack/react-virtual or MUI Virtualizer)
+  │     ├── <ChatDateDivider /> (Marks Ethiopian Calendar daily boundaries)
+  │     ├── <ChatMessageGroup>
+  │     │     ├── <ChatMessage role="assistant" | "user">
+  │     │     │     ├── <ChatMessageAvatar src={...} />
+  │     │     │     ├── <ChatMessageContent>
+  │     │     │     │     ├── <ToolExecutionChip /> (e.g. "⚙️ Queried 2 Branch Reports")
+  │     │     │     │     ├── <Typography className="chat-bubble-text"> (Ge'ez Script)
+  │     │     │     │     ├── <ReportActionCard /> ([ View Full Report ], [ Edit in Form ], [ Copy Text ])
+  │     │     │     │     └── <ComparisonMatrixTable /> (Responsive dynamic data grid)
+  │     │     │     └── <ChatMessageActions>
+  │     │     │           ├── <ActionButton label="Copy" icon={<ContentCopyIcon />} />
+  │     │     │           ├── <ActionButton label="Edit" icon={<EditIcon />} />
+  │     │     │           └── <ActionButton label="Retry" icon={<RefreshIcon />} />
+  │     │     └── ...
+  │     ├── <ChatTypingIndicator /> (Active when SSE stream is open or STT transcribing)
+  │     └── <ChatScrollToBottomAffordance /> (Floating jump button when scrolled up)
+  │
+  └── <ChatComposer sx={{ maxWidth: 880, mx: 'auto', width: '100%' }}>
+        ├── <TransliterationSuggestionBar /> (Surfaces novel word chips, e.g. "chiller" ➔ ቺለር)
+        ├── <ChatComposerAttachmentList /> (Renders Mode 4 audio voice note attachments)
+        └── <Box className="composer-input-row">
+              ├── <AudioOrbButton mode="mode-3" /> (Ephemeral Amharic dictation)
+              ├── <AudioAttachmentButton mode="mode-4" /> (File attachment paperclip)
+              ├── <ChatComposerTextArea placeholder="Ask a question or dictate in Amharic..." />
+              └── <ChatComposerSendButton /> (Transforms into Stop button during SSE stream)
+```
+
+#### 9.2.2 Legibility & Ge'ez Typography Tokens
+Rendering Ethiopic Fidel characters requires careful typographic tuning to eliminate cramped glyphs, overlapping diacritics, and eye strain:
+
+- **Font Family**: `'Noto Sans Ethiopic', 'Roboto', 'Helvetica', sans-serif`. `Noto Sans Ethiopic` is loaded via `@fontsource` to guarantee complete glyph coverage for all Amharic syllables.
+- **Default Base Font Size**: **17px** (`1.0625rem`). Standard Latin 14px/16px sizes are too small for complex Ge'ez ligatures.
+- **Line Height**: **1.75** (`lineHeight: 1.75`). Amharic characters possess distinct vertical ascenders and base variations; an expanded line height guarantees breathing room.
+- **Letter Spacing**: `0.015em` for optimal optical character recognition by native Amharic readers.
+
+#### 9.2.3 Dynamic Font-Size Scaling Subsystem
+To ensure maximum comfort for field personnel working in varying lighting conditions, the UI includes a global font-size scaling mechanism:
+- **Header Controls**: Located in the top `AppShell` `AppBar` as `[ A- A+ ]` buttons.
+- **State Definition**: Managed in Redux `themeSlice.fontSizeDelta` with values `-2`, `0` (default), `+2`, `+4`:
+  - `fontSizeDelta: -2` $\rightarrow$ Base size **15px** (`lineHeight: 1.65`).
+  - `fontSizeDelta: 0` $\rightarrow$ Base size **17px** (`lineHeight: 1.75`) — **Default**.
+  - `fontSizeDelta: +2` $\rightarrow$ Base size **19px** (`lineHeight: 1.85`).
+  - `fontSizeDelta: +4` $\rightarrow$ Base size **21px** (`lineHeight: 1.95`).
+- **Persistence**: Persisted to `localStorage.getItem('theme_font_delta')` and applied universally across all `<ChatMessageContent>` and `<ReportActionCard>` components.
+
+#### 9.2.4 Message Bubble Theming Tokens
+Message bubbles derive visual styles from the active Material UI theme with curated contrast tokens:
+
+| Element | Role / Variant | Light Mode Palette | Dark Mode Palette | Border & Shape |
+| :--- | :--- | :--- | :--- | :--- |
+| **Assistant Bubble** | `role="assistant"` | Background: `#F8FAFC`<br>Text: `#0F172A`<br>Code: `#E2E8F0` | Background: `#1E293B`<br>Text: `#F8FAFC`<br>Code: `#334155` | Border: `1px solid divider`<br>Border Radius: `16px 16px 16px 4px` |
+| **User Bubble** | `role="user"` | Background: `#2563EB`<br>Text: `#FFFFFF`<br>Code: `#1D4ED8` | Background: `#3B82F6`<br>Text: `#FFFFFF`<br>Code: `#1D4ED8` | Border: `none`<br>Border Radius: `16px 16px 4px 16px` |
+| **Tool Execution Chip** | `variant="outlined"` | Background: `#EFF6FF`<br>Text: `#1E40AF`<br>Border: `#BFDBFE` | Background: `#1E293B`<br>Text: `#93C5FD`<br>Border: `#3B82F6` | Border Radius: `8px`<br>Font Size: `13px` |
+| **Action Trigger Card** | `variant="card"` | Background: `#FFFFFF`<br>Border: `#E2E8F0` | Background: `#0F172A`<br>Border: `#334155` | Border Radius: `12px`<br>Padding: `12px 16px` |
+
+#### 9.2.5 Virtualized List & Auto-Scroll Configuration
+- **Virtualization**: Long operational threads (exceeding 50+ turns) utilize `@tanstack/react-virtual` to virtualize off-screen message nodes, preserving a constant DOM node count under 100 elements.
+- **Scroll Stickiness**: `<ChatBox>` sets `autoScroll={{ buffer: 300 }}`. When the supervisor is within 300px of the bottom, incoming SSE tokens auto-scroll smoothly. If the supervisor scrolls up to inspect previous turns, auto-scroll unlocks automatically.
+- **Scroll Affordance**: `<ChatScrollToBottomAffordance>` renders a floating `[ ↓ Jump to Latest ]` badge with unread token count whenever auto-scroll is unlocked.
+
+---
+
+### 9.3 Custom SSE Streaming Adapter (`useChatStreamAdapter`) & Abort Protocol
+
+#### 9.3.1 Adapter Implementation (`ChatAdapter` Specification)
+The application bridges the backend SSE endpoint (`POST /api/v1/chats/:chatId/messages`) with MUI X Chat via a custom `ChatAdapter`:
+
+```javascript
+/**
+ * Custom MUI X Chat Adapter bridging backend SSE streaming
+ * @param {string} chatId - Target Chat ID
+ * @param {string} activePresetId - Currently active Preset ID
+ * @returns {import('@mui/x-chat').ChatAdapter}
+ */
+export const createChatStreamAdapter = (chatId, activePresetId) => {
+  let activeAbortController = null;
+
+  return {
+    async sendMessage({ message, signal }) {
+      activeAbortController = new AbortController();
+
+      // Combined abort signal: UI stop button or adapter unmount
+      const combinedSignal = signal || activeAbortController.signal;
+
+      const payload = {
+        prompt: message.parts.find((p) => p.type === 'text')?.text || '',
+        preset: activePresetId,
+        audioFileIds: message.attachments?.map((a) => a.id) || []
+      };
+
+      const response = await fetch(`/api/v1/chats/${chatId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'include',
+        signal: combinedSignal
+      });
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          throw new Error('Another generation is currently active for this chat.');
+        }
+        throw new Error(`Server error: ${response.statusText}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      const messageId = `msg-assistant-${Date.now()}`;
+
+      return new ReadableStream({
+        async start(controller) {
+          controller.enqueue({ type: 'start', messageId });
+          controller.enqueue({ type: 'text-start', id: `text-${messageId}` });
+
+          let buffer = '';
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n\n');
+              buffer = lines.pop(); // Retain partial chunks
+
+              for (const block of lines) {
+                const eventMatch = block.match(/^event:\s*(.+)$/m);
+                const dataMatch = block.match(/^data:\s*(.+)$/m);
+
+                if (!eventMatch || !dataMatch) continue;
+
+                const eventType = eventMatch[1].trim();
+                const eventData = JSON.parse(dataMatch[1]);
+
+                switch (eventType) {
+                  case 'text_delta':
+                    controller.enqueue({
+                      type: 'text-delta',
+                      id: `text-${messageId}`,
+                      delta: eventData.delta
+                    });
+                    break;
+
+                  case 'tool_call_start':
+                    controller.enqueue({
+                      type: 'custom',
+                      name: 'tool_indicator',
+                      data: { toolName: eventData.tool, status: 'running' }
+                    });
+                    break;
+
+                  case 'tool_call_result':
+                    controller.enqueue({
+                      type: 'custom',
+                      name: 'tool_indicator',
+                      data: { toolName: eventData.tool, status: 'completed', result: eventData.summary }
+                    });
+                    break;
+
+                  case 'report_updated':
+                    controller.enqueue({
+                      type: 'custom',
+                      name: 'report_trigger',
+                      data: {
+                        reportId: eventData.reportId,
+                        branchName: eventData.branchName,
+                        ethiopianDate: eventData.ethiopianDate,
+                        plainText: eventData.plainText
+                      }
+                    });
+                    break;
+
+                  case 'provider_fallback':
+                    controller.enqueue({
+                      type: 'custom',
+                      name: 'fallback_notification',
+                      data: { from: eventData.from, to: eventData.to, reason: eventData.reason }
+                    });
+                    break;
+
+                  case 'stream_end':
+                    controller.enqueue({ type: 'text-end', id: `text-${messageId}` });
+                    controller.enqueue({ type: 'finish', messageId });
+                    return;
+
+                  case 'error':
+                    throw new Error(eventData.message);
+                }
+              }
+            }
+          } catch (err) {
+            controller.enqueue({ type: 'text-end', id: `text-${messageId}` });
+            controller.enqueue({ type: 'abort', messageId });
+          } finally {
+            controller.close();
+          }
+        }
+      });
+    },
+
+    stop() {
+      // Explicit backend notification to halt Gemini generation and release lock
+      if (activeAbortController) {
+        activeAbortController.abort();
+      }
+      fetch(`/api/v1/chats/${chatId}/abort`, {
+        method: 'POST',
+        credentials: 'include'
+      }).catch(() => {});
+    },
+
+    async listMessages({ conversationId, cursor }) {
+      const params = new URLSearchParams({ cursor: cursor || '', limit: '20' });
+      const res = await fetch(`/api/v1/chats/${chatId}/messages?${params}`, {
+        credentials: 'include'
+      });
+      const { data } = await res.json();
+      return {
+        messages: data.docs.map(transformMessageToMuiFormat),
+        cursor: data.nextCursor,
+        hasMore: Boolean(data.hasMore)
+      };
+    }
+  };
+};
+```
+
+#### 9.3.2 Client-Side Stream Cancellation Protocol (`POST /api/v1/chats/:chatId/abort`)
+When a supervisor clicks the **`[ Stop Generation ]`** button while the assistant is streaming:
+1. **Frontend Abort**: The adapter immediately calls `activeAbortController.abort()`, which terminates the client-side `fetch` stream and stops browser rendering.
+2. **Backend Abort Request**: The adapter simultaneously fires `POST /api/v1/chats/:chatId/abort`.
+3. **Backend Processing**: The backend looks up the active chat in the in-memory `activeChatStreams` map, triggers the associated Node.js `AbortController.abort()`, interrupts the Gemini API token stream, persists the partial text to MongoDB with `isTruncated: true`, and deletes the entry from `activeChatStreams`.
+4. **Lock Release**: The per-chat concurrency lock is released within **<50ms**, allowing the supervisor to immediately send a new query without encountering an HTTP 409 Conflict.
+
+---
+
+### 9.4 Centered Composer, Sub-5ms Latency Guarantee & Mode 3 Audio Dictation Flow
+
+#### 9.4.1 Layout & Responsive Centering
+The conversational composer is housed in a fixed bottom container engineered for maximum ergonomic comfort:
+- **Max Width**: Strictly constrained to **880px** (`maxWidth: 880, width: '100%'`). On ultra-wide monitors, the composer never stretches across the entire screen; it remains centered directly under the user's primary line of sight.
+- **Horizontal Centering**: Centered via `margin: '0 auto'` with responsive padding (`px: { xs: 2, sm: 3 }`).
+- **Elevated Pill Surface**: Designed as an elevated rounded container (`borderRadius: '24px'`, `boxShadow: '0 8px 32px rgba(0,0,0,0.12)'`, background `#1E293B` in dark mode, `#FFFFFF` in light mode).
+
+#### 9.4.2 Sub-5ms Typing Latency Guarantee
+Typing in Amharic or mixed English requires extreme keystroke responsiveness. A typing lag exceeding 16ms causes dropped frames and typing stutter:
+1. **Strict Component Isolation**: The `<ChatComposer>` component maintains its own local, uncontrolled input state via `useRef` and local `useState`. Typing in the textarea **never** triggers re-renders in the parent `<ChatBox>`, `<ChatMessageList>`, or global Redux store.
+2. **`React.memo` Boundary**: The entire composer tree is wrapped in `React.memo`, preventing any re-render cycles while messages are streaming in the list above.
+3. **Hardware-Accelerated Layout**: Fixed height limits and CSS `contain: layout style` ensure that keystroke DOM updates take **<3ms** to layout and paint, satisfying the sub-5ms latency guarantee at 60fps.
+
+#### 9.4.3 Mode 3 Audio Dictation Flow (Audio Orb)
+The composer features a dedicated **Microphone Audio Orb** button for natural spoken Amharic dictation:
+
+```
+[ Click 🎙️ Orb ]
+       │
+       ▼
+[ Browser MediaRecorder starts (audio/webm;codecs=opus) ]
+       │
+       ▼
+[ Orb pulses with GPU-accelerated CSS keyframe animation ]
+       │
+       ▼
+[ Supervisor clicks Stop (or 120s auto-cutoff) ]
+       │
+       ▼
+[ Client uploads Audio Blob to POST /api/v1/audio/transcribe-draft ]
+       │
+       ▼
+[ Addis AI STT processes audio synchronously (mono 16kHz PCM) ]
+       │
+       ▼
+[ Amharic plain text returned to frontend ]
+       │
+       ▼
+[ Injected directly at cursor position in <ChatComposerTextArea> ]
+       │
+       ▼
+[ Supervisor reviews/edits text in composer ➔ Presses [ Send ] ]
+       │
+       ▼
+[ Ephemeral audio blob in memory garbage-collected; ZERO server disk files saved ]
+```
+
+##### 9-Point Mode 3 Edge-Case Defense Matrix:
+1. **Zero Server Disk Storage**: Audio recorded via Mode 3 is sent to an ephemeral endpoint that streams directly to Addis AI. The file is never written to disk or GridFS.
+2. **Microphone Permission Denied**: If the user denies mic access, a non-blocking toast informs: `"Microphone access required. Please enable permissions in your browser settings."` The composer remains active for text input.
+3. **Empty / Silent Audio Gate**: If the supervisor records silence or ambient noise (<1.5s or RMS < -45dB), the client detects low amplitude and displays: `"No speech detected. Please speak clearly into the microphone."` No API call is made.
+4. **Mid-Dictation Network Drop**: If the network disconnects during transcription, the client caches the audio Blob locally in memory and displays a `[ Retry Transcription ]` button.
+5. **Cursor Position Preservation**: If text already exists in `<ChatComposerTextArea>`, the transcribed Amharic text is spliced exactly at `selectionStart`, inserting a leading and trailing space automatically.
+6. **Maximum Duration Bounding**: Mode 3 enforces a hard client-side cutoff of **120 seconds**. At 115 seconds, a countdown timer pulses red; at 120 seconds, recording stops automatically and dispatches to STT.
+7. **Accidental Tab Close / Navigation**: If recording is active and the user attempts to close the tab, the `beforeunload` event triggers a native browser warning.
+8. **Audio Recording During Active SSE Stream**: If the assistant is currently streaming a response, clicking the mic orb automatically stops the SSE stream first via `adapter.stop()` before opening the microphone stream.
+9. **Zero Latin Transliteration Enforcement**: Text transcribed by Addis AI is verified against the Section 8 phonetic dictionary; English equipment terms (e.g. `chiller`) are automatically harmonized to canonical Ge'ez (`ቺለር`) before insertion.
+
+#### 9.4.4 Mode 4 Audio Attachment Flow
+Next to the Audio Orb sits the **Paperclip Attachment Button** (`[ 📎 ]`):
+- Clicking the paperclip allows supervisors to attach pre-recorded audio files (`.m4a`, `.mp3`, `.wav`, `.aac`, max 25MB).
+- Attached audio files render as removable audio chips in `<ChatComposerAttachmentList>` directly above the textarea:
+  `[ 🎵 Bole_Visit_Audio.m4a (3:12) | ✕ ]`
+- When sent, the audio file is uploaded via `multipart/form-data` to `/api/v1/audio/upload`, saved to GridFS/disk, processed through FFmpeg, transcribed, and attached permanently to the `Message` node.
+
+#### 9.4.5 Real-Time Transliteration Guidance & Suggestion Chips
+Directly above the composer sits the **Transliteration Suggestion Bar**:
+- As the supervisor types in the composer, an in-memory lexical watcher scans for English words matching known restaurant/workplace hardware.
+- If a supervisor types `"chiller"`, a pill chip immediately appears:
+  **`[ chiller ➔ ቺለር | Convert ]`**
+- Clicking the chip (or pressing `Tab`) instantly replaces `"chiller"` with `"ቺለር"` inside the textarea at the active cursor position.
+- This empowers supervisors to type quickly without memorizing complex phonetic key combinations.
+
+---
+
+### 9.5 In-Stream Interactive Action Cards & Dynamic Matrices
+
+#### 9.5.1 Report Action Triggers
+Whenever the agent compiles, queries, or updates a report, the assistant message bubble renders an interactive **Action Button Bar** directly below the response text:
+
+```jsx
+<Box sx={{ display: 'flex', gap: 1.5, mt: 2, flexWrap: 'wrap' }}>
+  <Button
+    variant="contained"
+    size="medium"
+    startIcon={<DescriptionIcon />}
+    onClick={() => navigate(`/reports/${report._id}/details`)}
+    sx={{ textTransform: 'none', fontWeight: 600 }}
+  >
+    View Full Report
+  </Button>
+  
+  <Button
+    variant="outlined"
+    size="medium"
+    startIcon={<EditIcon />}
+    onClick={() => navigate(`/reports/${report._id}/edit`)}
+    sx={{ textTransform: 'none' }}
+  >
+    Edit in Form
+  </Button>
+  
+  <Button
+    variant="outlined"
+    size="medium"
+    startIcon={<ContentCopyIcon />}
+    onClick={() => handleCopyReportText(report.generated)}
+    sx={{ textTransform: 'none' }}
+  >
+    Copy Report Text
+  </Button>
+</Box>
+```
+
+- **`[ 📄 View Full Report ]`**: Navigates the supervisor to `/reports/:reportId/details` or opens the full-screen report viewer drawer with zero page reload.
+- **`[ ✏️ Edit in Form ]`**: Deep-links to the 2-column dedicated report editor `/reports/:reportId/edit` with all fields pre-populated.
+- **`[ 📋 Copy Report Text ]`**: Copies the locked, formatted Amharic plain-text string directly to the clipboard and triggers a green confirmation toast: `"Amharic report text copied to clipboard!"`.
+
+#### 9.5.2 In-Message Report Preview Card (`ReportReferenceCard`)
+When an existing report is referenced in General Chat, the agent embeds an interactive reference card:
+```
++-----------------------------------------------------------------------------------------------+
+| 📄 Bole Branch Operational Report                                          [ Status: Approved ]|
+| Date: 19-01-2016 ዓ.ም (29-09-2024) • Shift: 08:30 - 17:00 • Supervisor: ግርማ ተስፋዬ               |
+| Activities: 4 Recorded • Issues: 1 Critical (ዲፕ ፍራየር) • Comments: Good Progress             |
+|                                                                                               |
+| [ View Full Report ]          [ Edit in Form ]          [ Copy Plain Text ]                   |
++-----------------------------------------------------------------------------------------------+
+```
+
+#### 9.5.3 Dynamic Multi-Branch Comparison Matrix (`OperationalMatrixCard`)
+When the supervisor asks cross-branch analytical questions (e.g. comparing POS machine uptime or chiller temperatures across branches), the agent invokes `generate_operational_matrix` and renders a responsive Material UI table card:
+
+```
++-----------------------------------------------------------------------------------------------+
+| 📊 Multi-Branch Comparison: Equipment & Systems Status (19-01-2016 ዓ.ም)                        |
++-------------------+----------------------+--------------------+-------------------------------+
+| Branch            | Equipment / System   | Status / Severity  | Action Taken / Note           |
++-------------------+----------------------+--------------------+-------------------------------+
+| Bole (ቦሌ)         | ዲፕ ፍራየር          | 🔴 High (አፋጣኝ)    | ቴክኒሻን ተጠርቷል                |
+| Sarbet (ሳርቤት)     | ፒኦኤስ ማሽን          | 🟡 Medium          | በሞባይል ዳታ እየሰራ ነው          |
+| CMC (ሲኤምሲ)       | ቺለር                 | 🟢 Normal          | መደበኛ ፍተሻ ተካሂዷል             |
+| Kazanchis (ካዛንቺስ) | ጀነሬተር              | 🟢 Normal          | የነዳጅ መጠን ተሞልቷል            |
++-------------------+----------------------+--------------------+-------------------------------+
+| [ Export to Google Sheets ]                       [ Query Specific Branch Details ]           |
++-----------------------------------------------------------------------------------------------+
+```
+
+#### 9.5.4 Google Sheets Live Export Trigger (`GoogleSheetsExportCard`)
+When the agent executes `export_to_google_sheet`, it returns an interactive chip card with a direct Google Drive link:
+```
++-----------------------------------------------------------------------------------------------+
+| 📊 Google Spreadsheet Generated Successfully                                                  |
+| Title: "Enjoy Burger - Multi-Branch Operations Comparison (19-01-2016)"                       |
+| Created: Just now • Rows: 14 Branches • Permissions: Restricted to your Google Account         |
+|                                                                                               |
+| [ 🔗 Open in Google Sheets ↗ ]                                  [ 📋 Copy Sheet Link ]       |
++-----------------------------------------------------------------------------------------------+
+```
+
+---
+
+### 9.6 Preset Switcher & Modal Specification
+
+#### 9.6.1 Top `AppBar` Preset Selector Placement
+The active operational persona is controlled via the **Preset Selector** mounted in the sticky top `AppShell` `AppBar`:
+- **Visual Appearance**: A sleek outlined button with dropdown chevron: `[ Preset: Operations Assistant ▾ ]`.
+- **System Presets Catalog**:
+  1. **Operations Assistant** (Default): Practical supervisor routine co-pilot. Focuses on branch visits, equipment maintenance tracking, and compiling locked daily reports.
+  2. **Audit & Compliance Inspector**: Rigorous quality control persona. Evaluates hygiene standards, food safety protocols, and operational checklists against company SOPs.
+  3. **Executive Summary & Analytics**: Analytical executive persona. Summarizes multi-branch trends, calculates financial anomalies, and drafts formal escalation memos for executive leadership.
+- **Dropdown List**: Displays all active presets with an active checkmark icon next to the currently selected preset. At the bottom of the list sits a permanent action: **`[ + Create New Preset ]`**.
+
+#### 9.6.2 `[ + Create New Preset ]` Modal Specification
+Clicking `[ + Create New Preset ]` opens an accessible, validated Material UI dialog:
+
+```
++-----------------------------------------------------------------------+
+| Create New Agent Preset                                           [✕] |
++-----------------------------------------------------------------------+
+| Preset Name *                                                         |
+| [ e.g., Maintenance & Facilities Auditor                            ] |
+|                                                                       |
+| Description                                                           |
+| [ Specialized persona for electrical and HVAC equipment inspection  ] |
+|                                                                       |
+| System Persona & Tone *                                               |
+| (•) Formal Professional   ( ) Concise Direct   ( ) Technical Auditor  |
+|                                                                       |
+| Custom Instructions & SOP Rules (Markdown / Plain Text)               |
+| +-------------------------------------------------------------------+ |
+| | Always check generator fuel levels and verify chiller temperature | |
+| | logs before approving daily maintenance status.                   | |
+| +-------------------------------------------------------------------+ |
+|                                                                       |
+| Enabled Tools                                                         |
+| [✓] Query Operational Data    [✓] Generate Comparison Matrix          |
+| [✓] Update Report Item        [✓] Export to Google Sheets             |
+|                                                                       |
+| Default Branch Scope (Optional)                                       |
+| [ Select Branch Scope: All Branches ▾                               ] |
++-----------------------------------------------------------------------+
+| [ Cancel ]                                         [ Create Preset ]  |
++-----------------------------------------------------------------------+
+```
+- **Validation**: Name is required (3–50 chars); custom instructions max 2,000 chars.
+- **Persistence**: Saved to the `Preset` collection via `POST /api/v1/presets` and immediately selectable in the dropdown.
+
+#### 9.6.3 Mid-Chat Preset Switching Behavior
+A supervisor may change the preset in the middle of an ongoing conversation:
+- **Zero Thread Disruption**: Switching preset does **not** wipe or reload the current chat history.
+- **Dynamic Context Update**: The next message sent uses the new preset's persona and system instructions.
+- **Past Message Integrity**: Past message nodes retain the exact preset ID and model parameters under which they were generated (`aiMetadata.preset`).
+
+---
+
+### 9.7 The 10-Row Symmetrical Report Initiation Form (`/reports/new`)
+
+#### 9.7.1 Form Architecture & Two-Column Split Layout
+While chat is single-column, the **Report Initiation Form** at `/reports/new` is a dedicated, high-productivity structured entry page utilizing a **Two-Column Split Layout**:
+- **Left Column (60% width)**: The 10-row structured input form with pickers, autocomplete, audio ingestion, and task tables.
+- **Right Column (40% width)**: Sticky, real-time live preview of the assembled **Plain-Text Amharic Report**. As the supervisor selects branches, times, or issues, the locked Amharic text updates deterministically before their eyes.
+
+#### 9.7.2 Row-by-Row Field Specification
+
+```
++--------------------------------------------------------------------------------------------------------------------+
+| The 10-Row Symmetrical Report Initiation Surface (/reports/new)                                                    |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 1: Ethiopian Date Picker                                                                                       |
+|   [ 📅 19-01-2016 ዓ.ም ]  (Bidirectionally synced with Gregorian: 29-09-2024 UTC)                                   |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 2: Shift Selector                                                                                              |
+|   (•) Morning (08:30 - 17:00)   ( ) Afternoon (13:00 - 21:00)   ( ) Night (20:00 - 04:00)   ( ) Custom Shift       |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 3: Primary Branch Autocomplete                                                                                 |
+|   [ Search or select primary branch: Bole Branch ▾ ]   Chips: [ Bole ] [ Sarbet ] [ CMC ] [ Kazanchis ]            |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 4: Multi-Branch Visits Table (Chronological Itinerary)                                                          |
+|   +----+---------------+----------+-----------+--------------------+-----------------------------+                 |
+|   | #  | Branch Name   | Clock-In | Clock-Out | Inspection Status  | Actions                     |                 |
+|   +----+---------------+----------+-----------+--------------------+-----------------------------+                 |
+|   | 1  | Sarbet        | 08:30    | 11:45     | Completed          | [ ✏️ Edit ] [ 🗑️ Delete ]     |                 |
+|   | 2  | Bole (Primary)| 12:15    | 15:30     | In Progress        | [ ✏️ Edit ] [ 🗑️ Delete ]     |                 |
+|   | 3  | CMC           | 15:45    | 17:00     | Scheduled          | [ ✏️ Edit ] [ 🗑️ Delete ]     |                 |
+|   +----+---------------+----------+-----------+--------------------+-----------------------------+                 |
+|   [ + Add Branch Visit ]                                                                                           |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 5: Activities Multi-Input                                                                                      |
+|   • የጠዋት የሰራተኞች ስብሰባ ተካሂዶ የስራ ድልድል ተሰጥቷል።                                                  [ ✕ ]           |
+|   • የጥሬ ዕቃ እና የፍሪጅ ሙቀት ፍተሻ ተደርጓል።                                                               [ ✕ ]           |
+|   [ + Add Activity in Amharic...                                                            ] [ Add ]              |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 6: Issues & Corrective Actions Grid                                                                            |
+|   +---------------+--------------------------------+---------------+--------------------+--------+                 |
+|   | Branch        | Issue Description (Amharic)    | Severity      | Action Taken       | Action |                 |
+|   +---------------+--------------------------------+---------------+--------------------+--------+                 |
+|   | Bole          | የዲፕ ፍራየር ቴርሞስታት ብልሽት       | High (አፋጣኝ)  | ቴክኒሻን ተጠርቷል   | [ 🗑️ ] |                 |
+|   +---------------+--------------------------------+---------------+--------------------+--------+                 |
+|   [ + Add Issue / Corrective Action ]                                                                              |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 7: Tri-Modal Audio Ingestion Bar                                                                               |
+|   [ Mode A: 🎙️ Record Spoken Amharic Narration (Audio Orb) ]                                                        |
+|   [ Mode B: 📁 Browse Audio Files ]                                                                                 |
+|   [ Mode C: 📥 Drag and drop audio files here (.m4a, .mp3, .wav, .aac - max 25MB) ]                                 |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 8: Audio Queue Deck (Method 1 In-Memory Client Blob Players)                                                   |
+|   +----------------------------------------------------------------------------------------------+                 |
+|   | 🎵 Bole_Morning_Narration.m4a (2:45) • 4.2 MB • Ready for Compilation                         |                 |
+|   | [ ▶ Play ] ──●──────────────────────── 02:45   Volume: [ 🔊 ──●── ]   [ 🗑️ Remove Clip ]       |                 |
+|   +----------------------------------------------------------------------------------------------+                 |
+|   | 🎵 Sarbet_Issue_Note.wav (1:12) • 1.8 MB • Ready for Compilation                             |                 |
+|   | [ ▶ Play ] ──────●──────────────────── 01:12   Volume: [ 🔊 ──●── ]   [ 🗑️ Remove Clip ]       |                 |
+|   +----------------------------------------------------------------------------------------------+                 |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 9: Supervisory Opinions & Recommendations                                                                      |
+|   +----------------------------------------------------------------------------------------------+                 |
+|   | በሳርቤት ብራንች የነበረው የደንበኞች መስተንግዶ ፈጣን ነበር። በቦሌ ብራንች የተበላሸው ዲፕ ፍራየር በአፋጣኝ እንዲጠገን        |                 |
+|   | ክትትል ሊደረግበት ይገባል።                                                                    |                 |
+|   +----------------------------------------------------------------------------------------------+                 |
++--------------------------------------------------------------------------------------------------------------------+
+| Row 10: Action Footer (Sticky Bottom Bar)                                                                          |
+|   [ Reset Form ]                    [ Save as Draft ]           [ 🚀 Compile & Open in Report Chat ]               |
++--------------------------------------------------------------------------------------------------------------------+
+```
+
+#### 9.7.3 Row 7 Tri-Modal Audio Ingestion & Row 8 Audio Queue Deck
+Row 7 provides three flexible ways for supervisors to ingest spoken audio notes:
+1. **Mode A (Live Audio Orb)**: Click the embedded Audio Orb to record spoken Amharic directly into the browser.
+2. **Mode B (File Browser)**: Standard file picker allowing multi-selection of `.m4a`, `.mp3`, `.wav`, `.aac` files.
+3. **Mode C (Drag-and-Drop Dropzone)**: Visual drop area supporting file drop events.
+
+All ingested audio clips stage into **Row 8: Audio Queue Deck**. Each clip displays:
+- Original file name and byte size.
+- Duration formatted as `MM:SS`.
+- **Method 1 In-Memory Client Blob Player**: Plays audio directly from `URL.createObjectURL(file)` in browser memory. This guarantees zero network roundtrips, instant playback seeking, and complete immunity to HTTP 206 Range stream errors.
+- Remove / Re-record button.
+
+#### 9.7.4 Form Submission & Transition into Report Chat
+When the supervisor clicks **`[ 🚀 Compile & Open in Report Chat ]`**:
+1. The client performs atomic validation of required fields (Date, Shift, Primary Branch).
+2. The client packages all form fields along with audio clips into a single `multipart/form-data` request sent to `POST /api/v1/reports`.
+3. The backend executes Section 1.4.7 (Mongoose `ClientSession` atomic transaction), creates the `Report` document, initializes the corresponding `type: 'report'` `Chat` document, transcribes queued audio via Addis AI STT, deterministically assembles the locked Amharic report string, and commits the transaction.
+4. The frontend receives `{ success: true, data: { report, chat } }` and smoothly navigates to:
+   **`/reports/:reportId/chat`**
+5. The supervisor lands directly in the Report Chat, with the draft report pre-loaded on the left, ready for conversational refinement!
+
+---
+
+### 9.8 Implementation Precautions & Cross-Section Guardrails
+
+To prevent implementation defects in subsequent phases (Frontend Routing in Section 10, REST API in Section 11, Backend Infrastructure in Section 12, Verification in Section 13, and Deployment in Section 14), downstream developers and builder agents must enforce the following explicit guardrails:
+
+#### 9.8.1 Common Implementation Pitfalls & Mitigation Checklist
+1. **Composer Redux Decoupling**: **Never** connect the `<ChatComposerTextArea>` value to the global Redux store. Storing every keystroke in Redux triggers top-level state updates that re-render the virtualized message list, violating the sub-5ms latency guarantee. State must be purely local to `<ChatComposer>`.
+2. **Audio Blob Memory Leak Prevention**: When audio clips are staged in Row 8 using `URL.createObjectURL(blob)`, always revoke the URLs using `URL.revokeObjectURL(url)` inside the component's `useEffect` cleanup return:
+   ```javascript
+   useEffect(() => {
+     return () => {
+       audioQueue.forEach((item) => {
+         if (item.blobUrl) URL.revokeObjectURL(item.blobUrl);
+       });
+     };
+   }, [audioQueue]);
+   ```
+3. **SSE Connection Teardown on Route Change**: When a supervisor navigates away from `/chats/:chatId` while an SSE stream is active, the React router cleanup hook must explicitly call `adapter.stop()`. Leaving dangling fetch connections results in orphaned Gemini generation tokens and persistent concurrency locks.
+4. **MUI X Chat Feature Flag Enforcement**: Always set:
+   ```javascript
+   features={{
+     conversationHeader: false, // Ensures zero inner header
+     conversationList: false,   // Prevents duplicate inner conversation drawer
+     scrollToBottom: true,
+     autoScroll: true,
+     attachments: true
+   }}
+   ```
+5. **Dynamic Font Sizing Consistency**: The `fontSizeDelta` value managed in `themeSlice` must be passed into MUI theme typography overrides so that tool execution chips, preview cards, and composer inputs scale harmoniously with message bubble text.
+
+#### 9.8.2 Novel Workplace Term Lifecycle in the UI (Continuous Learning Loop)
+When a supervisor encounters or dictates a novel English workplace term (e.g. `air fryer`), the UI seamlessly executes the 4-Stage Learning Loop established in Section 8:
+1. **Real-Time Suggestion**: As the supervisor types `air fryer`, the composer's transliteration watcher suggests `[ air fryer ➔ ኤር ፍራየር | Convert ]`.
+2. **Addis AI Harmonization**: If spoken in audio, Addis AI transcribes the phonetics as `ኤር ፍራየር`.
+3. **Report Persistence**: When the supervisor clicks `[ Save as Draft ]` or compiles the report, `ኤር ፍራየር` is stored in the `Report` document.
+4. **Dynamic Harvest Loop**: On subsequent chats, the backend lexical harvester automatically discovers `ኤር ፍራየር` from the supervisor's last 4 approved reports and injects it into `<workplace_glossary>`.
+5. **Supervisor Correction Support**: If the supervisor prefers a different phonetic spelling (e.g. `ኤይር ፍራየር`), they simply click `[ ✏️ Edit in Form ]` or `[Edit]`, modify the word, and save. The harvester immediately adopts the supervisor's corrected spelling on the very next harvest cycle!
+
+---
+
+### Summary of Invariants for Section 9
+
+| Invariant | Enforcement Mechanism |
+| :--- | :--- |
+| **Strict Single-Column ChatBox Canvas** | Root layout is strictly 1-column `@mui/x-chat` `<ChatBox>`. Multi-column split views prohibited in chat. |
+| **Horizontal Role Alignment** | Assistant on LEFT (`#1E293B`, dark slate, avatar); User on RIGHT (`#2563EB`, primary blue, avatar). |
+| **100% English Shell / Amharic Content** | UI chrome, buttons, badges, navigation are 100% English; message/report text is Amharic/mixed. |
+| **Direct Request/Response Model** | Direct execution without `ChatConfirmation` approval dialogs or blocking popups. |
+| **Zero Inner Chat Header** | `ChatBox` sets `features={{ conversationHeader: false }}`; `AppShell` `AppBar` is the only header. |
+| **Legibility & Ge'ez Typography** | Default base font size **17px**, `lineHeight: 1.75`, `Noto Sans Ethiopic` font family. |
+| **Dynamic Font Scaling** | `[ A- A+ ]` header buttons adjust `fontSizeDelta` (`-2`, `0`, `+2`, `+4`) with `localStorage` persistence. |
+| **Custom SSE Streaming Adapter** | `createChatStreamAdapter` maps SSE chunks to typed MUI X Chat events (`text_delta`, `tool_call`, etc.). |
+| **Clean Stream Abort Protocol** | Stop button triggers `AbortController.abort()` and `POST /api/v1/chats/:chatId/abort` to release lock. |
+| **Sub-5ms Typing Latency** | `React.memo` composer isolation, uncontrolled input state, zero Redux dispatch on keystroke. |
+| **Mode 3 Audio Dictation** | Ephemeral voice recording via Audio Orb transcribes to Amharic text at cursor; 0 disk files saved. |
+| **Interactive Action Triggers** | Every report response renders `[ View Full Report ]`, `[ Edit in Form ]`, and `[ Copy Report Text ]`. |
+| **App Bar Preset Switcher** | Sticky header houses `[ Preset: Operations Assistant ▾ ]` and `[ + Create New Preset ]` modal. |
+| **The 10-Row Initiation Form** | 2-column split at `/reports/new`: structured form on left, sticky live Amharic plain-text preview on right. |
+| **Method 1 In-Memory Audio Playback** | Row 8 audio players stream directly from client memory Blob URLs; zero server re-download. |
+
+---

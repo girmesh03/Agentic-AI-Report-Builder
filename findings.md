@@ -110,6 +110,13 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Zero-Latin Pre-Save Linter | `reportSchema.pre('save')` regex `/[a-zA-Z]/` scans `plainTextReport` and executes automatic phonetic fallback normalization to guarantee zero raw Latin script. |
 | Canonical Homophone Normalizer | In-memory normalizer collapses Ge'ez homophones (`ሀ/ሐ/ኀ`, `ሰ/ሠ`, `አ/ዐ`, `ጸ/ፀ`) to canonical forms to ensure search and text indexing resilience. |
 | Single-Column ChatBox & Request/Response | Single-column MUI `<ChatBox>` (Agent Left, User Right); direct request/response with zero `ChatConfirmation`; 17px default font size for Ge'ez readability; interactive `[View Full Report]` trigger. |
+| Zero Inner Chat Header | ChatBox features set `conversationHeader: false` and `conversationList: false`; global AppShell sticky AppBar is sole authoritative header. |
+| Custom SSE Adapter & Abort Protocol | `createChatStreamAdapter` maps SSE chunks to typed MUI X Chat events; stop button triggers client abort and `POST /chats/:chatId/abort` releasing concurrency lock. |
+| Centered Composer & Sub-5ms Latency | Fixed bottom container max-width 880px; `React.memo` and uncontrolled state isolate typing from message list, ensuring <5ms keystroke latency. |
+| Mode 3 Audio Dictation Flow | Ephemeral spoken Amharic dictation via Audio Orb; transient STT via Addis AI; text injected at cursor; zero audio files saved to server disk. |
+| Transliteration Chips in Composer | Real-time suggestion bar surfaces novel word chips (e.g. `chiller ➔ ቺለር [Convert]`); reinforces 4-stage organic learning lifecycle. |
+| In-Stream Action Cards & Matrices | Assistant bubbles render `[ View Full Report ]`, `[ Edit in Form ]`, `[ Copy Report Text ]`, responsive comparison matrices, and Google Sheets links. |
+| 10-Row Initiation Form (`/reports/new`) | 2-column split (form left, sticky plain-text Amharic preview right); Rows 1–10 with Tri-Modal Audio Ingestion and Method 1 in-memory Blob players. |
 
 ## Locked Package Manifest
 

@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Plan Mode review of Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime.
+User review and confirmation of Section 9: Conversational Agent UI & MUI X Chat Integration.
 
 ## Current Phase
 
-Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
+Phase 9: Section 9 - Conversational Agent UI & MUI X Chat Integration
 
 ## Phases
 
@@ -114,17 +114,22 @@ Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
 - [x] Detail composer phonetic suggestion chips and Addis AI STT transliteration harmonization
 - [x] Detail novel technical word 4-stage organic learning lifecycle (detection -> persistence -> harvest loop -> user correction)
 - [x] Output complete Section 8 specification content to `docs/specifications/master_specification.md`
-- [ ] User review and confirmation of Section 8
-- [ ] Commit Section 8 to `phase-0-specification`
-- **Status:** in_progress
+- [x] User review and confirmation of Section 8
+- [x] Commit Section 8 to `phase-0-specification` (`9eb67c2`)
+- **Status:** complete
 
 ### Phase 9: Section 9 - Conversational Agent UI & MUI X Chat Integration
-- [ ] Detail MUI X Chat `ChatBox` configuration, centered composer, and free chat
-- [ ] Detail custom `sendMessage` streaming adapter (ReadableStream of typed chunks)
-- [ ] Detail 10-row report initiation form with Ethiopian date picker, branch autocomplete, time pickers, audio orb, and narration cards
-- [ ] Review in Plan Mode with user
-- [ ] Output specification content in Build Mode and commit
-- **Status:** pending
+- [x] Detail MUI X Chat `ChatBox` configuration, centered composer, and single-column canvas
+- [x] Detail custom `createChatStreamAdapter` streaming adapter and abort protocol (`POST /chats/:chatId/abort`)
+- [x] Detail sub-5ms typing latency guarantee with `React.memo` isolation and zero global context churn
+- [x] Detail Mode 3 Audio Dictation flow (Audio Orb -> Addis AI STT -> cursor injection -> 0 disk files)
+- [x] Detail interactive report action cards (`[ View Full Report ]`, `[ Edit in Form ]`, `[ Copy Report Text ]`)
+- [x] Detail App Bar Preset Selector (`[ Preset: Operations Assistant ▾ ]`) and `[ + Create New Preset ]` modal
+- [x] Detail 10-row symmetrical report initiation form (`/reports/new`) with Method 1 in-memory Blob players
+- [x] Detail cross-section implementation guardrails and novel workplace term UI lifecycle
+- [ ] User review and confirmation of Section 9
+- [ ] Commit Section 9 to `phase-0-specification`
+- **Status:** in_progress
 
 ### Phase 10: Section 10 - Frontend Routing, Shell Layout & Component Matrix
 - [ ] Detail `main.jsx` route configuration with `PublicRoute`, `ProtectedRoute`, and lazy `Component` loading

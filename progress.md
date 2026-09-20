@@ -183,20 +183,35 @@ Use this file as the chronological record of work performed, files created, git 
       - Specified two-tier zero-Latin guardrail: LLM system prompt directive + deterministic pre-save linter (`reportSchema.pre('save')` regex check `/[a-zA-Z]/`) with automated phonetic fallback.
       - Detailed in-composer real-time phonetic suggestion chips for QWERTY typing and Addis AI STT transliteration harmonization.
       - Formalized 4-stage organic learning lifecycle for novel technical words (detection & syllabic phonetics -> document persistence -> dynamic harvest loop -> user correction adaptation).
-      - Updated `implementation_plan.md` recording all 17 active architectural decisions (English UI shell, Amharic content, single-column ChatBox, direct request/response, 17px default font, preset management, new report creation, and novel word lifecycle).
+      - User reviewed and confirmed Section 8.
+      - Committed Section 8 to `phase-0-specification` (`9eb67c2`).
+    - Section 9 (Conversational Agent UI & MUI X Chat Integration) drafted and integrated into `master_specification.md`:
+      - Engineered Single-Column `<ChatBox>` Canvas (`@mui/x-chat`): Assistant on Left (`#1E293B`, dark slate, avatar), User on Right (`#2563EB`, primary blue, avatar); prohibited 2-column desktop split views for chat.
+      - Enforced 100% English App Shell (navigation, chrome, buttons, badges) vs Amharic/Mixed conversational content.
+      - Formalized Direct Request/Response Interaction Model (zero `ChatConfirmation` approval dialogs).
+      - Implemented Zero Inner Chat Header Architecture: Chat mounts directly into AppShell; `ChatBox` sets `features={{ conversationHeader: false, conversationList: false }}`; global sticky `AppBar` is sole header.
+      - Standardized Ge'ez Typography: 17px default font size (`lineHeight: 1.75`, `Noto Sans Ethiopic`) with dynamic font scaling controls (`[ A- A+ ]` adjusting `fontSizeDelta` `-2`, `0`, `+2`, `+4` with localStorage persistence).
+      - Engineered custom SSE streaming adapter (`createChatStreamAdapter`) mapping `POST /chats/:chatId/messages` stream to typed MUI X Chat events (`text_delta`, `tool_call_start`, `tool_call_result`, `report_updated`, `provider_fallback`, `stream_end`).
+      - Detailed clean client stream abort protocol: stop button fires client abort and `POST /chats/:chatId/abort` to halt Gemini generation and release in-memory concurrency lock in <50ms.
+      - Established Centered Composer (max-width 880px, sticky bottom) with sub-5ms typing latency guarantee via `React.memo` isolation and zero parent Redux churn.
+      - Detailed Mode 3 Ephemeral Audio Dictation Flow (Audio Orb -> Addis AI STT -> cursor injection -> 0 disk files) with 9-point edge-case defense matrix.
+      - Specified in-composer transliteration guidance chips (`chiller ➔ ቺለር [Convert]`) reinforcing 4-stage organic learning lifecycle.
+      - Embedded in-stream interactive action triggers: `[ 📄 View Full Report ]`, `[ ✏️ Edit in Form ]`, `[ 📋 Copy Report Text ]`, dynamic multi-branch comparison matrices, and Google Sheets live export chips.
+      - Detailed App Bar Preset Selector (`[ Preset: Operations Assistant ▾ ]`) and `[ + Create New Preset ]` modal with mid-chat dynamic persona switching.
+      - Specified 10-Row Symmetrical Report Initiation Surface at `/reports/new` (2-column layout: structured form on left, sticky live Amharic plain-text preview on right; Rows 1–10 with Tri-Modal Audio Ingestion and Method 1 in-memory Client Blob audio player deck).
+      - Documented cross-section implementation guardrails to prevent downstream developer errors in Sections 10–14.
 - Files created/modified:
   - `docs/specifications/master_specification.md`
   - `findings.md`
   - `task_plan.md`
   - `progress.md`
-  - `implementation_plan.md`
 
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Section 7 committed (`33477ef`); Section 8 drafted in `master_specification.md` and awaiting user review before committing. |
-| Where am I going? | User confirmation of Section 8 -> Commit -> Section 9 (Conversational Agent UI & MUI X Chat Integration). |
+| Where am I? | Section 8 committed (`9eb67c2`); Section 9 drafted in `master_specification.md` and presented for user review before committing. |
+| Where am I going? | User confirmation of Section 9 -> Commit -> Section 10 (Frontend Routing, Shell Layout & Component Matrix). |
 | What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Novel workplace words naturally enter the vocabulary through a 4-stage organic learning cycle without static database tables; English UI shell + Amharic content + single-column ChatBox with 17px font provides optimal supervisory UX. |
-| What have I done? | Formally drafted Section 8 in `master_specification.md`; updated `implementation_plan.md` with all 17 decisions; synchronized `findings.md`, `task_plan.md`, and `progress.md`. |
+| What have I learned? | MUI X Chat `<ChatBox>` with `conversationHeader: false` and `conversationList: false` delivers an ergonomic single-column conversational experience without duplicate headers; 17px default font size ensures crisp Ge'ez legibility; in-stream interactive triggers empower supervisors to view, edit, or copy reports directly without modals. |
+| What have I done? | Updated TOC; authored and appended Section 9 to `master_specification.md` (now 5,204 lines); updated `task_plan.md`, `findings.md`, and `progress.md`. |
