@@ -16,7 +16,7 @@
 5. [Section 5: Chat, Message & Conversation Node Architecture](#section-5-chat-message--conversation-node-architecture)
 6. *Section 6: Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine (Pending)*
 7. *Section 7: Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime (Pending)*
-8. *Section 8: Workplace Transliteration Engine & Per-User Glossary (Pending)*
+8. *Section 8: Workplace Transliteration Engine & In-Context Phonetic Guidance (Pending)*
 9. *Section 9: Conversational Agent UI & MUI X Chat Integration (Pending)*
 10. *Section 10: Frontend Routing, Shell Layout & Component Matrix (Pending)*
 11. *Section 11: REST API Endpoint Inventory, Validation Chains & Response Envelopes (Pending)*
@@ -65,15 +65,18 @@
        4. *Concurrency Lock Acquisition*: The server immediately acquires a dedicated `per-chat lock` for the initiating session to guarantee that parallel edits or duplicate submissions cannot create race conditions.
        5. *Audio Preprocessing & Segmentation*: The uploaded audio is validated via Multer (max 25MB per file, max 10 files per submission, strict MIME allowlist). System `ffprobe` extracts codec and duration; `ffmpeg` converts the input stream to standardized mono 16-bit 16kHz PCM WAV format. If duration exceeds 120 seconds or file size exceeds 25MB, FFmpeg automatically segments the stream into clean acoustic chunks on silence thresholds.
        6. *Synchronous Addis AI STT Execution*: Each audio chunk is dispatched synchronously via the official `addisai` SDK (`language: "am"`, `model: "default"`). Provider execution is bounded strictly by `AI_TIMEOUT_MS` with exponential backoff retries (1s $\rightarrow$ 2s $\rightarrow$ 4s). Transcribed segments are concatenated in exact chronological sequence into a unified `rawNarrationText`.
-       7. *Dual Document Instantiation & 1:1 Invariant*:
-          - The server immediately instantiates a `Report` document containing the validated metadata, author snapshot (`fullName`), audio metadata records, empty initial body collections (`activities: []`, `issues: []`, `comments: []`), and the stored `rawNarrationText`.
-          - Simultaneously, the server creates a `Chat` document of `type: 'report'` bound to `report._id`. Exactly one conversation node per report is enforced by a unique compound index on `(user, report)`.
+       7. *Dual Document Instantiation & 1:1 Invariant (Atomic Session Transaction)*:
+          - To guarantee that an orphaned Report or dangling Chat can never exist, instantiation executes within an atomic Mongoose transaction via `session.withTransaction(async () => { ... })`:
+            - The server instantiates a `Report` document containing the validated metadata, author snapshot (`fullName`), audio metadata records, empty initial body collections (`activities: []`, `issues: []`, `comments: []`), and the stored `rawNarrationText`, saving with `await report.save({ session })`.
+            - Within the same transaction, the server creates the linked `Chat` document of `type: 'report'` bound to `report._id` via `await Chat.create([{ user: req.user._id, report: report._id, type: 'report', title: `Report - ${report.branchName} - ${report.ethiopianDate}` }], { session })`.
+            - The server binds `report.chat = chat._id` and commits `await report.save({ session })`.
+          - Exactly one conversation node per report is enforced by the unique compound index on `(user, report)`.
        8. *Initial Agentic Turn & Tool Invocation*:
-          - The LLM agent (Gemini Free Tier or Addis-1-Alef via Preset) is initialized with the active system/persona prompt, user's technical workplace Glossary, report metadata, and the full Amharic transcript.
+          - The LLM agent (Gemini Free Tier or Addis-1-Alef via Preset) is initialized with the active system/persona prompt, dynamic in-context transliteration guidelines from recent approved reports, report metadata, and the full Amharic transcript.
           - The agent extracts and categorizes domain entities: activities (default status: `completed`), issues (default status: `reported`; or `no_issue` if clean), and general comments.
           - Any unlisted branch mentioned in the audio is programmatically added via the `create_branch` tool.
           - **Strict Server-Side Rendering Rule**: The LLM is explicitly forbidden from handcrafting or assembling the final formatted plain-text report string. Instead, the agent must execute the server-side tool `update_report` passing a structured JSON patch payload.
-          - The server validates the patch against Mongoose schema rules, writes the structured data to MongoDB, executes the deterministic internal Amharic Plain-Text Renderer, and saves the resulting string into `report.generatedReportText`.
+          - The server validates the patch against Mongoose schema rules, writes the structured data to MongoDB, executes the deterministic internal Amharic Plain-Text Renderer, and saves the resulting string into `report.generated`.
           - The server returns the rendered report text as the tool result back to the agent.
        9. *Token-by-Token Streaming to Client*:
           - The agent streams its response token-by-token over an HTTP `ReadableStream` (Server-Sent Events) to the client using typed event frames (`start`, `tool-call`, `tool-result`, `text-delta`, `finish`).
@@ -88,8 +91,8 @@
           - **Entry Point 1 (Sidebar Recent Chats List)**: Clicking any historical report chat node in the sidebar navigates directly to `/chat/:chatId`, loading the full chronological conversation thread.
           - **Entry Point 2 (Reports Page - Card / List View)**: When viewing reports as cards, each card exposes an action icon toolbar:
             - **Chat Icon**: Navigates directly to `/chat/:chatId` to resume the multi-turn discussion with the agent.
-            - **View Icon**: Navigates to `/reports/:reportId` for the standalone plain-text report view.
-            - **Edit Icon**: Opens the direct structured edit dialog (Mode 1).
+            - **View Icon**: Navigates to `/reports/:reportId/details` for the standalone plain-text report view (with `/reports/:reportId` automatically redirecting to `/details`).
+            - **Edit Icon**: Navigates directly to the dedicated Report Edit page `/reports/:reportId/edit` (Mode 1).
             - **Archive Icon**: Present when `isArchived: false` to soft-delete the report.
             - **Restore Icon & Delete Icon**: Present when `isArchived: true` (Delete triggers a `MuiConfirmDialog` for permanent removal).
           - **Entry Point 3 (Reports Page - DataGrid View `MuiDataGrid`)**: The action column exposes the exact same action icon set (Chat, View, Edit, Archive, Restore/Delete).
@@ -107,24 +110,26 @@
               - When the user clicks **Update**, **all subsequent messages (user requests and agent responses) below that message are permanently discarded/truncated**, the updated prompt is submitted to the agent, and the agent generates a fresh response from that new fork point forward.
 
        3. *The Three Operational Correction Modes*:
-          - **Mode 1 (Direct UI Edit)**:
-            - Triggered from the preview card in `/chat/:chatId` or from `/reports` (via the card/grid edit icon or `/reports/:reportId`).
-            - Opens the structured edit modal: supervisor edits metadata, times, branches, activities (text and `completed`/`in_progress` status), issues (text and `reported`/`in_progress`/`completed`/`no_issue` status), and comments.
-            - Issues `PUT /api/v1/reports/:reportId` $\rightarrow$ server validates, saves to MongoDB within a transaction, re-executes the deterministic Amharic plain-text renderer, and instantly updates the preview card across the chat and reports views.
+          - **Mode 1 (Dedicated GUI Edit Page - `/reports/:reportId/edit`)**:
+            - Navigated from the preview card in `/chat/:chatId` or from `/reports` (via card/grid edit icon or from `/reports/:reportId/details`).
+            - Renders a spacious 2-column operational control page: Left column provides 100% click-first controls (time pickers for `clockIn`/`clockOut`, primary branch selector, visit intervals, 1-click status chips for activities `completed`/`in_progress` and issues `reported`/`in_progress`/`completed`/`no_issue`, and item delete buttons). Right column renders a sticky live Amharic plain-text preview that re-compiles in real time as the user clicks.
+            - Submitting issues `PUT /api/v1/reports/:reportId` $\rightarrow$ server validates, saves to MongoDB within a transaction, re-executes the deterministic Amharic plain-text renderer `compileAmharicReport(report)`, and instantly updates the canonical report.
+            - A prominent bridge banner invites supervisors who wish to make narrative textual additions to jump directly to the AI Voice Co-pilot: `[ 🎙️ Speak to AI Co-pilot for text changes & additions ]`.
           - **Mode 2 (Typed Natural Language Prompt)**:
             - The supervisor types a natural language Amharic instruction in the composer (e.g., `"የዲፕ ፍራየሩ ችግር ተስተካክሎ ስራ ጀምሯል ስለዚህ ስታተሱን completed አድርገው"` or `"የስራ መውጫ ሰዓቴ 18:00 ነው አስተካክለው"`).
             - The server acquires the `per-chat lock`.
             - The agent invokes `get_report_context` to inspect current MongoDB report state.
             - The agent calls `update_report` with the precise differential patch.
             - The server validates, writes to MongoDB, re-renders the formatted Amharic report, and returns the result.
-            - The agent streams its confirmation token-by-token, presenting the revised formatted report as its visible reply.
+            - The agent streams its confirmation token-by-token, presenting the revised formatted report in the preview drawer.
             - The server releases the lock.
-          - **Mode 3 (Spoken Voice Clip)**:
-            - The supervisor records a short follow-up audio clip directly in the composer.
-            - The audio is posted to `/api/v1/reports/:reportId/clips`.
-            - **Ephemeral Clip Guarantee**: Mode 3 audio clips are strictly ephemeral. They are buffered in memory/temp storage, converted to 16kHz mono WAV via FFmpeg, and transcribed synchronously via Addis AI STT. Once transcribed, the audio file is immediately unlinked and is **never persisted** as a permanent row in the database or stored in long-term disk storage.
-            - The transcript is injected as the user's turn.
-            - The agent invokes `update_report`, the server updates and re-renders the report, and the revised report is streamed back into the chat.
+          - **Mode 3 (Audio Orb Dictation Flow & Ephemeral Voice Clips)**:
+            - The supervisor taps the animated Audio Orb directly inside `ChatComposerToolbar`.
+            - Ephemeral audio is recorded via browser `MediaRecorder` API and posted to `/api/v1/audio/transcribe-ephemeral`.
+            - Normalized to 16kHz mono WAV via FFmpeg and transcribed synchronously via Addis AI STT.
+            - **In-Composer Inspection**: The transcribed Amharic text is injected directly into `ChatComposerTextArea` for visual verification and optional editing before sending.
+            - Audio clips are strictly ephemeral—unlinked immediately after transcription and never persisted as permanent rows in database storage.
+            - Upon submission, the agent receives the verified prompt, invokes `update_report`, and streams back the revised report.
             - The server releases the lock.
 
      - **Guaranteed Operational Invariants**:
@@ -159,8 +164,8 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
 - **Status Enums**: All enum values must be lowercase strings (e.g., `'completed'`, `'in_progress'`, `'reported'`, `'no_issue'`).
 - **Domain Dates**: Domain dates displayed to the user must strictly adhere to the Ethiopian calendar format `DD-MM-YY` (e.g., `08-01-17`). Internal database storage uses UTC Gregorian `Date`.
 - **Times**: Time fields must strictly follow the 24-hour `HH:mm` format (e.g., `08:30`, `17:45`).
-- **Reusable Component Prefix**: All custom reusable UI wrappers around Material-UI must be prefixed with `Mui` (e.g., `MuiAppbar`, `MuiPageHeader`, `MuiConfirmDialog`, `MuiEmptyState`).
 - **Constants & Environment Variables**: Must use `UPPER_SNAKE_CASE` (e.g., `JWT_ACCESS_SECRET`, `AI_TIMEOUT_MS`, `DEFAULT_PAGE_LIMIT`).
+- **Centralized Constants Architecture**: Zero magic strings or inline hardcoded constants anywhere across backend controllers, models, or React components. All domain enums (`REPORT_TYPES`, `VISIT_STATUSES`, `ISSUE_STATUSES`, `ACTIVITY_STATUSES`, `CHAT_TYPES`, `MESSAGE_SENDERS`, `AI_PROVIDERS`, `AI_LANGUAGES`), standard Amharic phrases (`AMHARIC_NO_ISSUE_TEXT`, `AMHARIC_DEFAULT_COMMENTS_TEXT`), regexes (`TIME_24H_REGEX`, `ETHIOPIAN_DATE_REGEX`), time limits (`AI_TIMEOUT_MS`, `SESSION_ACCESS_TTL_MS`, `SESSION_REFRESH_TTL_MS`), file upload constraints (`MAX_AUDIO_SIZE_BYTES`, `MAX_AUDIO_FILES`, `MAX_AVATAR_SIZE_BYTES`), and sweeper retention (`SWEEPER_RETENTION_DAYS`) must be defined exclusively in `backend/utils/constants.js` and mirrored in `client/src/utils/constants.js`.
 
 #### 1.4.2 Identifiers, Keys & Database Scoping
 - **Primary Keys**: The database primary key is strictly `_id`. Code must never access or assign `.id`. DTO transforms must strip `id` and `__v`.
@@ -227,7 +232,14 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
 - **HTTP Status Codes**: Numeric status literals (e.g., `200`, `400`, `404`) are banned. All status codes must be imported from `constants/httpStatus.js`.
 - **Error Pipeline**: Controllers must never respond directly to caught exceptions. Errors must be forwarded to Express error handling via `next(error)`. Validation errors (HTTP 422) must include `details: [{ field, message }]`.
 
-#### 1.4.7 Build & Verification Protocol
+#### 1.4.7 Mongoose ClientSession & Atomic Transaction Architectural Law
+- **Mandatory Multi-Document Transaction Boundary**: Every write operation involving two or more database documents or dependent collections must execute within an explicit Mongoose `ClientSession` using `session.withTransaction(async () => { ... })`.
+- **Session Propagation Invariant**: Every Mongoose write method inside a transaction (`save()`, `create()`, `updateOne()`, `updateMany()`, `deleteOne()`, `deleteMany()`) must explicitly receive `{ session }`. Read-only endpoints never open database sessions.
+- **Model.create() Array Syntax Mandate**: Calling `Model.create(doc, { session })` erroneously treats `{ session }` as a second document to insert. All session-aware document creation must strictly use array syntax: `await Model.create([docPayload], { session })`.
+- **Document Middleware Session Awareness**: Document middleware hooks (`pre('save')`, `pre('validate')`) access the active session via `this.$session()`. Any database query executed inside middleware must explicitly chain `.session(this.$session())` to prevent stale reads or transaction deadlocks.
+- **Direct Query Update Prohibition for Reports**: Direct query updates (`Report.updateOne()`, `Report.findOneAndUpdate()`) bypass Mongoose document middleware (`pre('save')`), causing silent failures of visit sorting, primary branch validation, and shift boundary synchronization. All report mutations across controllers and agent tools are strictly mandated to follow the **Retrieve $\rightarrow$ Mutate $\rightarrow$ `report.save({ session })`** pattern.
+
+#### 1.4.8 Build & Verification Protocol
 - **Backend Verification**: Every code modification must be verified by running `node --check` against the modified backend files.
 - **Client Verification**: Every client change must execute `npx vite build` ensuring 0 compilation errors, followed immediately by deleting the generated `dist/` directory.
 - **Git Branching Rules**: Feature branches must strictly follow the `phase-N-description` naming standard. Commits must never be made directly to `main`, and feature branches must never be merged without explicit instructions.
@@ -240,7 +252,7 @@ To prevent architectural drift and eliminate unneeded complexity, the following 
 - **Single-User Scope & Architectural Enforcement**:
   - The platform implements a self-service, single-user security architecture.
   - The concept of `role` is strictly prohibited throughout models, DTOs, tokens, and controllers. No `role` or `roles` property may exist anywhere in the codebase.
-  - Every application collection except `User` (`Branch`, `Report`, `Chat`, `RefreshToken`, `Preset`, `Glossary`) carries a mandatory `user` field (`type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true`).
+  - Every application collection except `User` (`Branch`, `Report`, `Chat`, `RefreshToken`, `Preset`) carries a mandatory `user` field (`type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true`).
   - All controller handlers and service methods scope database queries, mutations, and aggregations strictly to `req.user._id.toString()`.
 - **Mongoose `User` Schema Specification**:
   ```javascript
@@ -528,15 +540,15 @@ const refreshTokenSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: [true, 'Refresh token must belong to a user'],
     },
     tokenHash: {
       type: String,
-      required: true,
+      required: [true, 'Token hash is required'],
     },
     family: {
       type: String,
-      required: true,
+      required: [true, 'Token family identifier is required'],
     },
     isRevoked: {
       type: Boolean,
@@ -548,7 +560,7 @@ const refreshTokenSchema = new mongoose.Schema(
     },
     expiresAt: {
       type: Date,
-      required: true,
+      required: [true, 'Expiration timestamp is required'],
     },
     userAgent: {
       type: String,
@@ -562,6 +574,24 @@ const refreshTokenSchema = new mongoose.Schema(
   {
     timestamps: true,
     strict: true,
+    toJSON: {
+      virtuals: true,
+      transform: (doc, ret) => {
+        delete ret.__v;
+        delete ret.id;
+        delete ret.tokenHash;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (doc, ret) => {
+        delete ret.__v;
+        delete ret.id;
+        delete ret.tokenHash;
+        return ret;
+      },
+    },
   }
 );
 
@@ -580,28 +610,49 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 4. **Theft & Reuse Detection**:
    - If `tokenDoc` exists AND `tokenDoc.replacedByTokenHash !== null`:
      - A previously used refresh token was presented again—indicating a token replay attack or stolen cookie.
-     - The server immediately invalidates the **entire token family**:
-       `await RefreshToken.updateMany({ family: tokenDoc.family }, { isRevoked: true })`.
+     - The server immediately invalidates the **entire token family** within an atomic transaction:
+       ```javascript
+       const session = await mongoose.startSession();
+       try {
+         await session.withTransaction(async () => {
+           await RefreshToken.updateMany({ family: tokenDoc.family }, { isRevoked: true }, { session });
+         });
+       } finally {
+         session.endSession();
+       }
+       ```
      - Clears `accessToken` and `refreshToken` cookies on the response.
      - Returns HTTP 401 `UNAUTHORIZED` (`"Session invalidated due to suspicious activity. Please log in again."`).
 5. **Revocation & Expiration Check**:
    - If `!tokenDoc`, OR `tokenDoc.isRevoked === true`, OR `tokenDoc.expiresAt < new Date()`:
      - Clears auth cookies.
      - Returns HTTP 401 `UNAUTHORIZED` (`"Invalid or expired refresh token"`).
-6. **Successful Rotation**:
+6. **Successful Rotation (Atomic Session Transaction)**:
    - Generates new `rawAccessToken` (15m) and new `rawRefreshToken` (7d).
    - Computes `newTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex')`.
-   - Updates old session row: `tokenDoc.isRevoked = true; tokenDoc.replacedByTokenHash = newTokenHash; await tokenDoc.save();`.
-   - Creates new session row with the **same** `family`:
+   - Executes atomic rotation inside `session.withTransaction(...)`:
      ```javascript
-     await RefreshToken.create({
-       user: tokenDoc.user,
-       tokenHash: newTokenHash,
-       family: tokenDoc.family,
-       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-       userAgent: req.headers['user-agent'] || 'Unknown',
-       ipAddress: req.ip || 'Unknown',
-     });
+     const session = await mongoose.startSession();
+     try {
+       await session.withTransaction(async () => {
+         // 1. Mark current token as revoked and record successor hash
+         tokenDoc.isRevoked = true;
+         tokenDoc.replacedByTokenHash = newTokenHash;
+         await tokenDoc.save({ session });
+
+         // 2. Insert rotated token row using array syntax for session propagation
+         await RefreshToken.create([{
+           user: tokenDoc.user,
+           tokenHash: newTokenHash,
+           family: tokenDoc.family,
+           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+           userAgent: req.headers['user-agent'] || 'Unknown',
+           ipAddress: req.ip || 'Unknown',
+         }], { session });
+       });
+     } finally {
+       session.endSession();
+     }
      ```
    - Sets updated `accessToken` and `refreshToken` httpOnly cookies.
    - Returns HTTP 200 `OK` with refreshed user DTO.
@@ -613,16 +664,81 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 - **Multi-Device Support**: Only the active device's session row is revoked. Other devices belonging to the user maintain distinct token families and remain logged in.
 - Returns HTTP 200 `OK` (`{ success: true, message: "Logged out successfully", data: null }`).
 
-#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue
-- Implemented inside `client/src/features/apiSlice.js` using a custom RTK Query base query wrapper.
-- When an API request returns HTTP 401:
-  1. The base query pauses outbound requests and triggers **exactly one** refresh attempt: `POST /api/v1/auth/refresh`.
-  2. If the refresh call succeeds:
-     - Outbound requests are re-executed with the newly refreshed session cookies.
-  3. If the refresh call fails (HTTP 401/403):
-     - Clears user memory state in Redux `authSlice`.
-     - Redirects the browser to `/login`.
-  4. **Zero Toast Notification**: 401 responses are handled silently by the interceptor and must **never** trigger toast alert popups (`showToast`).
+#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue (`client/src/redux/features/apiSlice.js`)
+- Implemented inside `client/src/redux/features/apiSlice.js` using a custom RTK Query base query wrapper:
+  ```javascript
+  import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+  import { Mutex } from 'async-mutex';
+  import { logout } from './authSlice';
+
+  const mutex = new Mutex();
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+
+  const baseFetch = fetchBaseQuery({
+    baseUrl: API_BASE_URL,
+    credentials: 'include', // Guarantees httpOnly cookie transmission
+  });
+
+  const normalizeResult = (result) => {
+    // Normalizes standard { success, message, data } backend envelope
+    return result;
+  };
+
+  const baseQueryWithReauth = async (args, api, extraOptions = {}) => {
+    // 1. Wait until any pending refresh unlock completes
+    await mutex.waitForUnlock();
+    let result = await baseFetch(args, api, extraOptions);
+
+    if (result.error && result.error.status === 401) {
+      // 2. Infinite Loop Defense: If the failed request was already /auth/refresh, fail immediately
+      const requestUrl = typeof args === 'string' ? args : args.url;
+      if (requestUrl.includes('/auth/refresh')) {
+        api.dispatch(logout());
+        api.dispatch(apiSlice.util.resetApiState());
+        window.location.replace('/login');
+        return normalizeResult(result);
+      }
+
+      // 3. Acquire Mutex to prevent multiple parallel refresh storms from tripping RFC 6819 token family reuse alarms
+      if (!mutex.isLocked()) {
+        const release = await mutex.acquire();
+        try {
+          const refreshResult = await baseFetch(
+            { url: '/auth/refresh', method: 'POST' },
+            api,
+            extraOptions
+          );
+
+          if (refreshResult.data && refreshResult.data.success) {
+            // 4. Retry initial failed query with newly rotated access token cookie
+            result = await baseFetch(args, api, extraOptions);
+          } else {
+            // 5. Refresh token expired, revoked, or compromised: purge state and redirect to /login
+            api.dispatch(logout());
+            api.dispatch(apiSlice.util.resetApiState());
+            window.location.replace('/login');
+          }
+        } finally {
+          release();
+        }
+      } else {
+        // 6. Mutex was already locked by a concurrent in-flight request: wait for unlock and retry
+        await mutex.waitForUnlock();
+        result = await baseFetch(args, api, extraOptions);
+      }
+    }
+
+    return normalizeResult(result);
+  };
+
+  export const apiSlice = createApi({
+    reducerPath: 'api',
+    baseQuery: baseQueryWithReauth,
+    tagTypes: ['User', 'Branch', 'Report', 'Chat', 'Preset'],
+    endpoints: () => ({}),
+  });
+  ```
+- **Zero Toast Notification**: 401 responses and automatic session refreshes are handled silently by the interceptor and must **never** trigger toast alert popups (`showToast`). If refresh fails, the user is redirected immediately to the `/login` view without showing flash error toasts.
 
 ---
 
@@ -708,11 +824,57 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
   - If `user.avatar` is a local file path, verifies file existence and streams the file using `res.sendFile()` with appropriate `Content-Type` headers.
   - If `user.avatar` is null, returns a standard fallback or HTTP 404.
 
-#### 2.5.4 Forbidden Endpoints Registry
+#### 2.5.4 User Account Self-Service Deletion Protocol (`DELETE /api/v1/users/me`)
+- **Route**: `DELETE /api/v1/users/me` (Protected).
+- **Location**: Triggered from the "Delete Account" tab in `/settings`, requiring confirmation of the user's password and a confirmation dialog (`MuiConfirmDialog`).
+- **Atomic 7-Collection Cascade Transaction**:
+  - The deletion of an account must permanently purge all associated resources across the entire database without leaving orphaned records.
+  - The operation executes within `session.withTransaction(...)`:
+    ```javascript
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const userId = req.user._id;
+
+        // 1. Fetch user's chat IDs to cascade delete messages
+        const userChats = await Chat.find({ user: userId }).select('_id').session(session);
+        const chatIds = userChats.map(c => c._id);
+
+        // 2. Cascade delete all messages across all user chats
+        await Message.deleteMany({ chat: { $in: chatIds } }, { session });
+
+        // 3. Delete all chats (Report chats and General chats)
+        await Chat.deleteMany({ user: userId }, { session });
+
+        // 4. Delete all operational reports
+        await Report.deleteMany({ user: userId }, { session });
+
+        // 5. Delete all user-created branches
+        await Branch.deleteMany({ user: userId }, { session });
+
+        // 6. Delete all custom user presets
+        await Preset.deleteMany({ user: userId }, { session });
+
+        // 7. Revoke and purge all refresh token session families
+        await RefreshToken.deleteMany({ user: userId }, { session });
+
+        // 8. Permanently delete the User document
+        await User.deleteOne({ _id: userId }, { session });
+      });
+    } finally {
+      session.endSession();
+    }
+    ```
+- **Post-Commit Cleanup**:
+  - Unlinks all physical files from disk (`uploads/audio/*` and `uploads/avatars/*`) associated with the user's purged reports and user document.
+  - Clears `accessToken` and `refreshToken` httpOnly cookies on the response.
+  - Returns HTTP 200 `OK` (`{ success: true, message: "Account deleted successfully", data: null }`).
+
+#### 2.5.5 Forbidden Endpoints Registry
 To strictly uphold security boundaries, the following endpoints are permanently prohibited and must never be declared or implemented:
 - `GET /api/v1/auth/me`: Redundant; user state is returned upon login/refresh and fetched via `GET /api/v1/auth/profile`.
 - `GET /api/v1/auth/sessions` & `DELETE /api/v1/auth/sessions`: No session management interfaces exist.
-- `DELETE /api/v1/auth/user` or generic user deletion endpoints outside of authenticated self-service account deletion in Settings.
+- `DELETE /api/v1/auth/user` or generic user deletion endpoints outside of authenticated self-service account deletion in Settings (`DELETE /api/v1/users/me`).
 - Any administrative user management endpoints (`/api/v1/users/*`).
 
 ---
@@ -770,7 +932,7 @@ When the supervisor visits a single branch (`visits[]` is empty, null, or has le
 ```
 
 #### 3.2.2 Multi-Branch Report Layout (With Visits)
-When the supervisor visits two or more branches (`visits[]` contains 1 or more visit intervals):
+When the supervisor visits two or more branches (`type === 'multi'`, defined as `visits[]` containing 1 or more visit intervals):
 ```text
 ቀን: [DD-MM-YY]
 ብራንች: [የመጀመሪያ ብራንች]፣ [ሁለተኛ ብራንች] እና [ሶስተኛ ብራንች]
@@ -792,6 +954,8 @@ When the supervisor visits two or more branches (`visits[]` contains 1 or more v
 
 ከስራ የወጣሁበት ሰዓት: [HH:mm]
 ```
+> [!NOTE]
+> **Format-Only Distinction**: When `type === 'multi'` (`visits.length > 0`), the report body (`የተሰሩ ስራዎች`, `መፍትሄ የሚፈልጉ ጉዳዮች`, `አጠቃላይ አስተያየት`) remains **structurally 100% identical** to a single-branch report. Only the header block changes: the `ብራንች:` header joins all visited branch names with Amharic conjunctions (`፣` and `እና`), and the chronological visit timeline lines are rendered directly beneath `ስራ የገባሁበት ሰዓት:`.
 
 ---
 
@@ -806,21 +970,33 @@ When the supervisor visits two or more branches (`visits[]` contains 1 or more v
    - *Single Branch Visit*: `ብራንች: <primaryBranchName>` (e.g., `ብራንች: ቦሌ`).
    - *Multiple Branch Visits*: Formatted by joining the primary branch and all visited branch names using standard Amharic punctuation (`፣`) and conjunction (`እና`):
      - Two branches: `ብራንች: ቦሌ እና ሳርቤት`
-     - Three or more branches: `ብራንች: ፒያሳ፣ ቦሌ እና መገናኛ`
+     - Three or more branches: `ብራንች: ሄድ ኦፊስ፣ ቦሌ እና ሳርቤት`
 3. **Supervisor Name Line (`ስም: <fullName>`)**:
    - Outputs the supervisor's `fullName` snapshot stored at report creation: `ስም: በዛ ሀይሌ`.
 4. **Workday Entry Time Line (`ስራ የገባሁበት ሰዓት: HH:mm`)**:
    - Outputs the 24-hour time string stored in `report.clockIn` (e.g., `ስራ የገባሁበት ሰዓት: 08:30`).
+   - **Shift Boundary Invariant**: In multi-branch reports, `report.clockIn` is strictly synchronized with the arrival time of the very first visit: `report.clockIn === visits[0].clockIn`.
 5. **Per-Visit Intervals Block**:
    - Rendered **if and only if** `report.visits` exists and `report.visits.length > 0`.
    - Placed directly beneath `ስራ የገባሁበት ሰዓት:` on consecutive lines without intervening blank lines.
    - Syntax per line: `ከ HH:mm – HH:mm (<branchName> ብራንች)` utilizing an en-dash `–`.
-   - Example:
-     ```text
-     ከ 09:00 – 12:30 (ቦሌ ብራንች)
-     ከ 13:15 – 16:45 (ሳርቤት ብራንች)
-     ```
-   - If `report.visits` is empty, this block is **entirely omitted**.
+   - **Strict Chronological Sequence**:
+     - `visits[]` is ordered strictly by arrival time (`clockIn`):
+       `visits[0].clockIn < visits[1].clockIn < ... < visits[n-1].clockIn`.
+   - **Primary Branch Membership Invariant (Any Index $k$)**:
+     - The report's primary subject branch (`report.branch` / `report.branchName`) is **one of the visited branches**, but is **not restricted to index 0**.
+     - *Real-World Example*: If the supervisor starts with a morning meeting at Head Office (08:30 – 10:30), travels, and conducts their main inspection at Bole branch (11:00 – 16:30) for which the report is filed:
+       - `visits[0]`: Head Office (`08:30 – 10:30`)
+       - `visits[1]`: Bole branch (`11:00 – 16:30`) $\leftarrow$ Primary report branch (`report.branch`)
+       - Rendered Output:
+         ```text
+         ከ 08:30 – 10:30 (ሄድ ኦፊስ ብራንች)
+         ከ 11:00 – 16:30 (ቦሌ ብራንች)
+         ```
+   - **Daily Shift Conclusion Synchronization**:
+     - The report footer `ከስራ የወጣሁበት ሰዓት` is strictly synchronized with the departure time of the final visit:
+       `report.clockOut === visits[visits.length - 1].clockOut`.
+   - If `report.visits` is empty (`type === 'single'`), this block is **entirely omitted**.
 
 #### 3.3.2 Body Block & Bullet Formatting
 1. **Activities Section (`የተሰሩ ስራዎች:`)**:
@@ -1006,6 +1182,15 @@ const userSchema = new Schema({
       delete ret.id; // Enforces strict _id convention
       return ret;
     }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.password;
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
   }
 });
 
@@ -1062,7 +1247,7 @@ const branchSchema = new Schema({
   },
   normalizedName: {
     type: String,
-    required: true,
+    required: [true, 'Normalized branch name is required'],
     lowercase: true,
     trim: true // Used for case-insensitive unique constraint per user
   },
@@ -1093,6 +1278,14 @@ const branchSchema = new Schema({
       delete ret.id;
       return ret;
     }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
   }
 });
 
@@ -1117,30 +1310,30 @@ The central domain aggregate storing shift hours, operational bullets, audio att
 import mongoose, { Schema } from 'mongoose';
 import mongoosePaginate from 'mongoose-paginate-v2';
 
-const visitSubdocumentSchema = new Schema({
+const visitSchema = new Schema({
   branch: {
     type: Schema.Types.ObjectId,
     ref: 'Branch',
-    required: true
+    required: [true, 'Visited branch reference is required']
   },
   branchName: {
     type: String,
-    required: true,
+    required: [true, 'Visited branch name snapshot is required'],
     trim: true // Historical snapshot
   },
   clockIn: {
     type: String,
-    required: true,
+    required: [true, 'Visit clock-in time is required'],
     match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Branch visit clock-in must follow HH:mm 24-hour format']
   },
   clockOut: {
     type: String,
-    required: true,
+    required: [true, 'Visit clock-out time is required'],
     match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Branch visit clock-out must follow HH:mm 24-hour format']
   }
 }, { _id: true });
 
-const activitySubdocumentSchema = new Schema({
+const activitySchema = new Schema({
   text: {
     type: String,
     required: [true, 'Activity description is required'],
@@ -1153,7 +1346,7 @@ const activitySubdocumentSchema = new Schema({
   }
 }, { _id: true });
 
-const issueSubdocumentSchema = new Schema({
+const issueSchema = new Schema({
   text: {
     type: String,
     required: [true, 'Issue description is required'],
@@ -1166,21 +1359,31 @@ const issueSubdocumentSchema = new Schema({
   }
 }, { _id: true });
 
-const commentSubdocumentSchema = new Schema({
-  text: {
+const audioSchema = new Schema({
+  originalName: {
     type: String,
-    required: [true, 'Comment text is required'],
-    trim: true
+    required: [true, 'Original audio file name is required']
+  },
+  fileName: {
+    type: String,
+    required: [true, 'Stored audio file name is required']
+  },
+  path: {
+    type: String,
+    required: [true, 'Audio file path is required'] // e.g., 'uploads/audio/<filename>'
+  },
+  mimeType: {
+    type: String,
+    required: [true, 'Audio MIME type is required']
+  },
+  size: {
+    type: Number,
+    required: [true, 'Audio file size is required'] // bytes
+  },
+  duration: {
+    type: Number,
+    default: 0 // seconds
   }
-}, { _id: true });
-
-const audioFileSubdocumentSchema = new Schema({
-  originalName: { type: String, required: true },
-  fileName: { type: String, required: true },
-  path: { type: String, required: true }, // e.g., 'uploads/audio/<filename>'
-  mimeType: { type: String, required: true },
-  size: { type: Number, required: true }, // bytes
-  duration: { type: Number, default: 0 } // seconds
 }, { _id: true });
 
 const reportSchema = new Schema({
@@ -1188,6 +1391,12 @@ const reportSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: [true, 'Report must belong to a user']
+  },
+  type: {
+    type: String,
+    enum: ['single', 'multi'],
+    default: 'single',
+    required: [true, 'Report type is required']
   },
   branch: {
     type: Schema.Types.ObjectId,
@@ -1199,19 +1408,14 @@ const reportSchema = new Schema({
     required: [true, 'Primary branch name snapshot is required'],
     trim: true
   },
-  date: {
-    type: Date,
-    required: [true, 'Report calendar date is required'] // Stored at UTC midnight
-  },
-  ethiopianDate: {
-    type: String,
-    required: [true, 'Ethiopian date string is required'],
-    match: [/^\d{2}-\d{2}-\d{2}$/, 'Ethiopian date must follow DD-MM-YY format']
-  },
   supervisorName: {
     type: String,
     required: [true, 'Supervisor name snapshot is required'],
     trim: true
+  },
+  date: {
+    type: Date,
+    required: [true, 'Report calendar date is required'] // Stored at UTC midnight
   },
   clockIn: {
     type: String,
@@ -1223,46 +1427,63 @@ const reportSchema = new Schema({
     required: [true, 'Shift clock-out time is required'],
     match: [/^([01]\d|2[0-3]):([0-5]\d)$/, 'Shift clock-out must follow HH:mm 24-hour format']
   },
-  visits: [visitSubdocumentSchema],
-  activities: [activitySubdocumentSchema],
-  issues: [issueSubdocumentSchema],
-  comments: [commentSubdocumentSchema],
+  visits: [visitSchema],
+  activities: [activitySchema],
+  issues: [issueSchema],
+  comments: [{
+    type: String,
+    trim: true
+  }],
   generated: {
     type: String,
     default: '' // Locked plain-text Amharic output rendered by utils/reportRenderer.js
   },
-  rawTranscript: {
+  transcription: {
     type: String,
     default: '' // Concatenated raw Addis AI STT output from initial narration
   },
-  audioFiles: [audioFileSubdocumentSchema],
+  audioFiles: [audioSchema],
   chat: {
     type: Schema.Types.ObjectId,
     ref: 'Chat',
     default: null // 1-to-1 link to conversational refinement thread
   },
+  preset: {
+    type: Schema.Types.ObjectId,
+    ref: 'Preset',
+    default: null // Preset used for initial synthesis
+  },
   aiMetadata: {
     provider: {
       type: String,
       enum: ['addis', 'google', 'nvidia'],
-      required: true // Dynamically injected from runtime execution (no hardcoded default)
+      required: [true, 'AI provider is required']
     },
     model: {
       type: String,
-      required: true // Dynamically injected from runtime execution (no hardcoded default)
+      required: [true, 'AI model is required']
+    },
+    language: {
+      type: String,
+      enum: ['am', 'en'],
+      default: 'am'
     },
     reasoning: {
       type: String,
       default: null // Thinking trace for reasoning-enabled models
     },
-    durationMs: {
+    duration: {
       type: Number,
-      default: 0
+      default: 0 // Synthesis duration in milliseconds
     },
     tokensUsed: {
       promptTokens: { type: Number, default: 0 },
       completionTokens: { type: Number, default: 0 },
       totalTokens: { type: Number, default: 0 }
+    },
+    providerMetadata: {
+      type: Schema.Types.Mixed,
+      default: null
     }
   },
   isArchived: {
@@ -1282,14 +1503,54 @@ const reportSchema = new Schema({
       delete ret.id;
       return ret;
     }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
   }
+});
+
+// Dynamic Ethiopian Date Virtual (zero dual-state drift)
+reportSchema.virtual('ethiopianDate').get(function() {
+  return gregorianToEthiopian(this.date);
+});
+
+// Pre-save lifecycle hook: Visit chronological sorting & shift boundary synchronization
+// NOTE: In document middleware, `this.$session()` provides direct access to the active Mongoose ClientSession.
+// In-memory property mutations mutate `this` prior to write execution, automatically participating in the caller's session.
+// Any asynchronous database queries executed within hooks MUST explicitly pass `.session(this.$session())`.
+// CRITICAL: Direct query updates (Report.updateOne, Report.findOneAndUpdate) bypass document middleware!
+// All report mutations across controllers and agent tools MUST execute via the Retrieve -> Mutate -> report.save({ session }) pattern.
+reportSchema.pre('save', function(next) {
+  if (this.visits && this.visits.length > 0) {
+    this.type = 'multi';
+    // 1. Sort visits chronologically by arrival time
+    this.visits.sort((a, b) => a.clockIn.localeCompare(b.clockIn));
+    // 2. Synchronize shift boundaries with visit timeline extremes
+    this.clockIn = this.visits[0].clockIn;
+    this.clockOut = this.visits[this.visits.length - 1].clockOut;
+    // 3. Verify primary branch membership in visited list
+    const hasPrimary = this.visits.some(v => v.branch.toString() === this.branch.toString());
+    if (!hasPrimary) {
+      return next(new Error('The primary report branch must be included in the visited branches itinerary'));
+    }
+  } else {
+    this.type = 'single';
+  }
+  next();
 });
 
 // Schema-level composite & query indexes
 reportSchema.index({ user: 1, date: -1 });
 reportSchema.index({ user: 1, branch: 1, date: -1 });
+reportSchema.index({ user: 1, type: 1, date: -1 });
 reportSchema.index({ user: 1, isArchived: 1 });
 reportSchema.index({ chat: 1 });
+reportSchema.index({ 'issues.status': 1 });
 
 reportSchema.plugin(mongoosePaginate);
 
@@ -1311,15 +1572,15 @@ const refreshTokenSchema = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: [true, 'Refresh token must belong to a user']
   },
   tokenHash: {
     type: String,
-    required: true // SHA-256 digest of the raw refresh token string
+    required: [true, 'Token hash is required'] // SHA-256 digest of the raw refresh token string
   },
   family: {
     type: String,
-    required: true // Cryptographic family identifier for reuse/theft detection
+    required: [true, 'Token family identifier is required'] // Cryptographic family identifier for reuse/theft detection
   },
   isRevoked: {
     type: Boolean,
@@ -1327,11 +1588,19 @@ const refreshTokenSchema = new Schema({
   },
   expiresAt: {
     type: Date,
-    required: true // Set to exactly 7 days from creation
+    required: [true, 'Expiration timestamp is required'] // Set to exactly 7 days from creation
   }
 }, {
   timestamps: true,
   toJSON: {
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      delete ret.tokenHash;
+      return ret;
+    }
+  },
+  toObject: {
     transform: (doc, ret) => {
       delete ret.__v;
       delete ret.id;
@@ -1367,24 +1636,29 @@ const chatSchema = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: [true, 'Chat must belong to a user']
   },
   report: {
     type: Schema.Types.ObjectId,
     ref: 'Report',
-    default: null // Associated report when type === 'report'
+    default: null // Associated report when type === 'report'; strictly null when type === 'general'
   },
   title: {
     type: String,
-    required: true,
+    required: [true, 'Chat title is required'],
     trim: true,
+    maxlength: [100, 'Chat title cannot exceed 100 characters'],
     default: 'New Chat'
   },
   type: {
     type: String,
     enum: ['report', 'general'],
-    default: 'report',
-    required: true
+    default: 'general',
+    required: [true, 'Chat type is required']
+  },
+  isPinned: {
+    type: Boolean,
+    default: false // Powers Sidebar Recent Chats pin/unpin action
   },
   preset: {
     type: Schema.Types.ObjectId,
@@ -1425,6 +1699,14 @@ const chatSchema = new Schema({
       delete ret.id;
       return ret;
     }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
   }
 });
 
@@ -1437,8 +1719,8 @@ chatSchema.index(
     partialFilterExpression: { report: { $type: 'objectId' } }
   }
 );
-chatSchema.index({ user: 1, isArchived: 1, updatedAt: -1 });
-chatSchema.index({ user: 1 });
+// High-performance compound index for Sidebar Recent Chats (pinned first, descending time)
+chatSchema.index({ user: 1, isArchived: 1, isPinned: -1, updatedAt: -1 });
 
 chatSchema.plugin(mongoosePaginate);
 
@@ -1447,12 +1729,17 @@ export const Chat = mongoose.model('Chat', chatSchema);
 
 ##### Title Derivation Rules for `Chat`:
 1. **Report Chats (`type === 'report'`)**:
-   - Title is generated deterministically upon report association:
-     `Report - <branchName> - <DD-MM-YY>` (e.g., `"Report - Bole - 08-01-17"`).
+   - **Single Branch**: `Report - <branchName> - <DD-MM-YY>` (e.g., `"Report - Bole - 08-01-17"`).
+   - **Multi-Branch Visits**: `Report - <primaryBranchName> (+<extraVisitsCount>) - <DD-MM-YY>` (e.g., `"Report - Bole (+2) - 08-01-17"`).
+   - **Dynamic Synchronization**: If `report.branchName` or `report.date` is modified via direct edit or AI mutation, the linked Chat title automatically updates to reflect the new snapshot.
+   - **System Managed**: Report chat titles are strictly managed by the system to maintain 1:1 parity with the underlying report.
 2. **General Chats (`type === 'general'`)**:
-   - Initial placeholder title on creation is `"New Chat"`.
-   - **Auto-Generated from User Input**: Upon receiving the supervisor's **first message**, the title is automatically updated to the first 35 characters of the prompt (or a concise 3–5 word AI summary).
-   - Supervisors may manually rename the chat at any time via `PATCH /api/v1/chats/:chatId`.
+   - **Creation Placeholder**: Initial title on creation is `"New Chat"`.
+   - **Deterministic Auto-Derivation**: Upon receiving the supervisor's **first message**:
+     - If `text.length <= 35`: Set title to `text.trim()`.
+     - If `text.length > 35`: Truncate at the nearest word boundary $\le 35$ characters and append `"..."` (e.g., `"የፎይል አቅርቦት እና ስቶር እጥረት..."`).
+     - Executed synchronously in 0ms with zero extra LLM API calls or token expenditure.
+   - **Manual Renaming**: Supervisors may manually rename the chat at any time via `PATCH /api/v1/chats/:chatId` (`{ title }`), validated between 1 and 100 characters.
 
 ---
 
@@ -1469,21 +1756,22 @@ const messageSchema = new Schema({
   chat: {
     type: Schema.Types.ObjectId,
     ref: 'Chat',
-    required: true
+    required: [true, 'Message must belong to a chat']
   },
   user: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: [true, 'Message must belong to a user']
   },
   sender: {
     type: String,
     enum: ['user', 'agent'],
-    required: true
+    required: [true, 'Message sender is required']
   },
   text: {
     type: String,
-    required: [true, 'Message text content is required']
+    required: [true, 'Message text content is required'],
+    trim: true
   },
   audio: {
     originalName: { type: String, default: null },
@@ -1492,35 +1780,55 @@ const messageSchema = new Schema({
     duration: { type: Number, default: 0 },
     mimeType: { type: String, default: null }
   },
-  rawTranscription: {
+  transcription: {
     type: String,
     default: null // Addis AI STT output if message originated as a voice note
   },
-  provider: {
-    type: String,
-    enum: ['addis', 'google', 'nvidia'],
-    required: true // Dynamically injected from runtime execution (no hardcoded default)
-  },
-  model: {
-    type: String,
-    required: true // Dynamically injected from runtime execution (no hardcoded default)
-  },
-  language: {
-    type: String,
-    required: true // e.g., 'am' or 'en' from active session config
-  },
-  reasoning: {
-    type: String,
-    default: null // Chain-of-thought/thinking content extracted from provider response
-  },
-  tokensUsed: {
-    promptTokens: { type: Number, default: 0 },
-    completionTokens: { type: Number, default: 0 },
-    totalTokens: { type: Number, default: 0 }
+  aiMetadata: {
+    provider: {
+      type: String,
+      enum: ['addis', 'google', 'nvidia'],
+      default: null
+    },
+    model: {
+      type: String,
+      default: null // e.g., 'gemini-2.5-flash', 'addis-1-alef'
+    },
+    language: {
+      type: String,
+      enum: ['am', 'en'],
+      default: 'am'
+    },
+    reasoning: {
+      type: String,
+      default: null // Chain-of-thought/thinking trace extracted from provider response
+    },
+    duration: {
+      type: Number,
+      default: 0 // Duration in milliseconds
+    },
+    tokensUsed: {
+      promptTokens: { type: Number, default: 0 },
+      completionTokens: { type: Number, default: 0 },
+      totalTokens: { type: Number, default: 0 }
+    },
+    providerMetadata: {
+      type: Schema.Types.Mixed,
+      default: null // Extensible bucket for provider-specific response details (finishReason, safetyRatings, etc.)
+    }
   }
 }, {
   timestamps: true,
   toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
     transform: (doc, ret) => {
       delete ret.__v;
       delete ret.id;
@@ -1552,7 +1860,7 @@ const presetSchema = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: [true, 'Preset must belong to a user']
   },
   name: {
     type: String,
@@ -1564,10 +1872,28 @@ const presetSchema = new Schema({
     required: [true, 'Persona definition is required'],
     trim: true // e.g., 'You are an experienced, detail-oriented F&B Area Supervisor with strict food safety, sanitation, and cash reconciliation standards.'
   },
-  systemPrompt: {
+  system: {
     type: String,
     required: [true, 'Operational guidelines / system prompt is required'],
     trim: true // e.g., 'Verify store sanitation, inspect POS register closing discrepancy, expand shorthand into SOP documentation, and ensure all issues detail problem, financial impact, and resolution.'
+  },
+  provider: {
+    type: String,
+    enum: ['addis', 'google', 'nvidia'],
+    default: 'google'
+  },
+  model: {
+    type: String,
+    default: 'gemini-2.5-flash'
+  },
+  language: {
+    type: String,
+    enum: ['am', 'en'],
+    default: 'am'
+  },
+  reasoning: {
+    type: Boolean,
+    default: false
   },
   isDefault: {
     type: Boolean,
@@ -1584,6 +1910,15 @@ const presetSchema = new Schema({
 }, {
   timestamps: true,
   toJSON: {
+    virtuals: true,
+    transform: (doc, ret) => {
+      delete ret.__v;
+      delete ret.id;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
     transform: (doc, ret) => {
       delete ret.__v;
       delete ret.id;
@@ -1599,59 +1934,6 @@ presetSchema.index({ user: 1, isArchived: 1 });
 presetSchema.plugin(mongoosePaginate);
 
 export const Preset = mongoose.model('Preset', presetSchema);
-```
-
----
-
-#### 4.2.8 `Glossary` Model (`models/Glossary.js`)
-Maintains per-user English-to-Ge'ez workplace phonetic transliterations.
-```javascript
-/**
- * @module models/Glossary
- * @description Workplace transliteration vocabulary mapping English technical terms to natural Ge'ez script phonetics.
- */
-import mongoose, { Schema } from 'mongoose';
-import mongoosePaginate from 'mongoose-paginate-v2';
-
-const glossarySchema = new Schema({
-  user: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  englishTerm: {
-    type: String,
-    required: [true, 'English technical term is required'],
-    trim: true // e.g., 'Deep Fryer', 'POS Machine'
-  },
-  amharicPhonetic: {
-    type: String,
-    required: [true, 'Amharic Ge\'ez transliteration is required'],
-    trim: true // e.g., 'ዲፕ ፍራየር', 'ፒኦኤስ ማሽን'
-  },
-  category: {
-    type: String,
-    enum: ['equipment', 'ingredient', 'role', 'general'],
-    default: 'general'
-  }
-}, {
-  timestamps: true,
-  toJSON: {
-    transform: (doc, ret) => {
-      delete ret.__v;
-      delete ret.id;
-      return ret;
-    }
-  }
-});
-
-// Schema-level indexes
-glossarySchema.index({ user: 1, englishTerm: 1 }, { unique: true });
-glossarySchema.index({ user: 1 });
-
-glossarySchema.plugin(mongoosePaginate);
-
-export const Glossary = mongoose.model('Glossary', glossarySchema);
 ```
 
 ---
@@ -1679,15 +1961,16 @@ flowchart TD
   entity.archivedAt = new Date();
   await entity.save();
   ```
+- **Report & Chat Archive Cascading Invariant**: When soft-archiving a `Report`, its linked `Chat` document must be simultaneously marked `isArchived: true, archivedAt: new Date()` within a shared database transaction to maintain 1:1 state synchronization.
 - **Query Scoping**: All normal service queries automatically include `{ isArchived: false }` unless the client explicitly passes the query parameter `?archived=true`.
-- **Restoration**: Users can restore any archived entity within the 30-day grace window via `PATCH /api/v1/<resource>/:id/restore`, which resets `isArchived: false` and `archivedAt: null`.
+- **Restoration**: Users can restore any archived entity within the 30-day grace window via `PATCH /api/v1/<resource>/:id/restore`, which atomically resets `isArchived: false` and `archivedAt: null` across the entity and any linked conversation node.
 
 #### 4.3.2 Tier 2: Physical Purge Sweeper Engine (`jobs/sweeperJob.js`)
-- A background scheduler executed via `node-cron` runs once daily at midnight (`0 0 * * *`):
+- A background scheduler executed via `node-cron` runs once daily at midnight (`0 0 * * *`), wrapping all multi-document purges in atomic Mongoose sessions:
   ```javascript
   /**
    * @function runArchiveSweeper
-   * @description Permanently deletes entities soft-archived for more than 30 consecutive days.
+   * @description Permanently deletes entities soft-archived for more than 30 consecutive days within atomic transactions.
    */
   export const runArchiveSweeper = async () => {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -1695,29 +1978,46 @@ flowchart TD
     // 1. Identify and purge eligible archived Reports
     const expiredReports = await Report.find({ isArchived: true, archivedAt: { $lte: thirtyDaysAgo } });
     for (const report of expiredReports) {
-      // Unlink physical audio files from uploads/audio/
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          // Cascade delete linked Chat and Messages atomically
+          if (report.chat) {
+            await Message.deleteMany({ chat: report.chat }, { session });
+            await Chat.deleteOne({ _id: report.chat }, { session });
+          }
+          await Report.deleteOne({ _id: report._id }, { session });
+        });
+      } finally {
+        session.endSession();
+      }
+
+      // Unlink physical audio files from uploads/audio/ post-commit
       for (const audio of report.audioFiles) {
         await fs.promises.unlink(audio.path).catch(() => {});
       }
-      // Cascade delete linked Chat and Messages
-      if (report.chat) {
-        await Message.deleteMany({ chat: report.chat });
-        await Chat.deleteOne({ _id: report.chat });
-      }
-      await Report.deleteOne({ _id: report._id });
     }
 
     // 2. Purge eligible archived general Chats and unlinked Messages
     const expiredChats = await Chat.find({ isArchived: true, archivedAt: { $lte: thirtyDaysAgo } });
     for (const chat of expiredChats) {
       const messages = await Message.find({ chat: chat._id });
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await Message.deleteMany({ chat: chat._id }, { session });
+          await Chat.deleteOne({ _id: chat._id }, { session });
+        });
+      } finally {
+        session.endSession();
+      }
+
+      // Unlink general chat audio files post-commit
       for (const msg of messages) {
         if (msg.audio?.path) {
           await fs.promises.unlink(msg.audio.path).catch(() => {});
         }
       }
-      await Message.deleteMany({ chat: chat._id });
-      await Chat.deleteOne({ _id: chat._id });
     }
 
     // 3. Purge eligible archived Branches
@@ -1744,8 +2044,7 @@ Validation occurs at two distinct application boundaries:
 | **Branch** | `name` (trimmed, 1–100 chars); `phone` (optional, valid format); `address` (optional, max 250 chars). | `normalizedName` lowercase, compound unique `{ user: 1, normalizedName: 1 }`. |
 | **Report Creation** | `branch` (isMongoId); `date` (isISO8601); `clockIn`, `clockOut` (regex `^([01]\d\|2[0-3]):([0-5]\d)$`); `visits` (valid array of time intervals). | `supervisorName`, `branchName` snapshots required; subdocument validators for activities and issues. |
 | **Chat Message** | `text` (required string unless audio file present); `audio` (Multer MIME validation). | `sender` enum, compound index on `{ chat: 1, createdAt: 1 }`. |
-| **Preset** | `name` (1–100 chars); `persona` (required text); `systemPrompt` (required text). | Compound unique `{ user: 1, name: 1 }`. |
-| **Glossary** | `englishTerm` (trimmed, required); `amharicPhonetic` (trimmed, required); `category` (enum). | Compound unique `{ user: 1, englishTerm: 1 }`. |
+| **Preset** | `name` (1–100 chars); `persona` (required text); `system` (required text). | Compound unique `{ user: 1, name: 1 }`. |
 
 ---
 
@@ -1804,7 +2103,7 @@ flowchart TD
   - `export_to_google_sheet`: Exports current report activities/issues to a live Google Sheet.
   - `list_branches`: Lists user branches for name validation.
   - `create_branch`: Adds a new branch location if the supervisor mentions an unlisted store.
-  - `get_glossary`: Retrieves workplace transliteration mappings.
+  - *(Note: Workplace transliteration & technical terminology are injected directly into the LLM system prompt via dynamic few-shot learning from the user's last 3–5 approved reports, completely eliminating static database glossary tables and runtime dictionary queries).*
 
 #### 5.1.2 General Chat (`type: 'general'`) — Universal Operations Analyst & Personal Assistant
 - **Scope & Persona**: The agent operates as a universal operations analyst, business writing co-pilot, and versatile personal assistant. It is decoupled from any single report (`report: null`), enabling supervisors to query cross-branch historical data, generate Google Sheets across date ranges, draft formal management escalations, review SOP compliance, and perform general inquiries outside company boundaries.
@@ -1881,13 +2180,14 @@ Immediate operational decision support while on-site:
 2. **Visit Route Optimization**:
    - *"I need to inspect Bole, Sarbet, and Megnagna tomorrow between 08:30 and 17:00. Considering lunchtime traffic and rush hours, suggest an optimal visit sequence and time allocation."*
 
-#### 5.2.6 Workplace Transliteration & Glossary Management (`manage_glossary`)
-1. **Phonetic Terminology Lookup**:
+#### 5.2.6 Workplace Transliteration & In-Context Phonetic Guidance
+1. **Phonetic Terminology Lookup & Guidance**:
    - *"What is the standard Amharic Ge'ez transliteration for 'soft serve machine' or 'grease trap'?"*
-2. **Glossary Enrichment Tool**:
-   - Prompt: *"Add 'grease trap' -> 'ግሪስ ትራፕ' to my equipment glossary under the equipment category."*
-   - Tool Execution: `manage_glossary({ action: 'add', englishTerm: 'Grease Trap', amharicPhonetic: 'ግሪስ ትራፕ', category: 'equipment' })`.
-   - Creates or updates `Glossary` document in MongoDB.
+   - The agent responds directly in natural Amharic providing canonical workplace Ge'ez transliterations (e.g., `ሶፍት ሰርቭ ማሽን`, `ግሪስ ትራፕ`) adhering to corporate phonetic standards.
+2. **Dynamic In-Context Few-Shot Learning**:
+   - Rather than maintaining a separate MongoDB `Glossary` collection and performing manual CRUD, the backend dynamically queries the supervisor's last 3–5 approved reports at prompt compilation time.
+   - The verified transliterations and equipment names from those historical reports are injected directly into the LLM system prompt as concrete few-shot examples.
+   - This ensures continuous, self-reinforcing vocabulary consistency across operational shifts with zero administrative overhead.
 
 #### 5.2.7 Open-Ended Personal Productivity & Executive Advisory
 Because General Chat operates as an unconstrained personal assistant:
@@ -1941,15 +2241,26 @@ The supervisor can adjust four core execution parameters per chat session:
 
 ---
 
-### 5.4 The Three Universal Navigation Entry Points
+### 5.4 Universal Navigation Entry Points, Permanent Sidebar "New Chat" & Outlet Layout
 
-The application provides three persistent entry points ensuring supervisors can instantly access conversations from anywhere in the platform:
+The application provides persistent entry points and layout rules ensuring supervisors can seamlessly initiate or resume conversations from anywhere in the platform:
 
 | Entry Point | UI Location | Trigger Mechanism | Target Route & Behavior |
 |---|---|---|---|
-| **1. Sidebar Recent Chats** | AppShell mini/temporary drawer | Clicking any chat item in the recent chats list | Navigates directly to `/chats/:chatId`. List is paginated, auto-refreshes on `updatedAt: -1`, and displays a badge indicating `Report` vs `General`. |
-| **2. Reports Card/List View** | `/reports` (Card / List layout) | Clicking `"Refine with AI / Open Chat"` button on report card | Invokes idempotent resolution `POST /api/v1/reports/:reportId/chat` (retrieves existing chat or creates new linked node) and redirects to `/chats/:chatId`. |
-| **3. Reports DataGrid View** | `/reports` (MuiDataGrid layout) | Clicking Chat icon button in the row action column | Invokes idempotent resolution `POST /api/v1/reports/:reportId/chat` and navigates to `/chats/:chatId`. |
+| **1. Permanent Sidebar "New Chat"** | Top of Sidebar (above Recent Chats) | Clicking `[ + New Chat ]` button (or compact icon in mini-rail) | Navigates directly to `/chat`, resetting conversation state and presenting a fresh, empty composer ready for general inquiry or new report synthesis. |
+| **2. Sidebar Recent Chats List** | AppShell drawer (recent list) | Clicking any chat item in the recent chats list | Navigates directly to `/chat/:chatId`. List is paginated, auto-refreshes on `updatedAt: -1`, and displays an icon badge indicating `Report` vs `General`. |
+| **3. Reports Card/List View** | `/reports` (Card / List layout) | Clicking `"Refine with AI / Open Chat"` button on report card | Invokes idempotent resolution `POST /api/v1/reports/:reportId/chat` (retrieves existing chat or creates new linked node) and redirects to `/chat/:chatId`. |
+| **4. Reports DataGrid View** | `/reports` (MuiDataGrid layout) | Clicking Chat icon button in the row action column | Invokes idempotent resolution `POST /api/v1/reports/:reportId/chat` and navigates to `/chat/:chatId`. |
+
+#### 5.4.1 Permanent Sidebar "New Chat" Button & Mini-Rail Adaptation
+- **Expanded Drawer State**: A full-width, high-visibility button (`[ + New Chat ]`) rendered with Material-UI `Button` (variant `contained`, startIcon `AddIcon`).
+- **Collapsed Mini-Rail State (64px width)**: When the sidebar collapses to the compact icon rail on desktop, the button automatically transforms into an icon-only button wrapped in a Material-UI `Tooltip` (`title="New Chat"`, `placement="right"`).
+- **Universal Availability**: The button remains anchored at the top of the sidebar across all views (`/reports`, `/branches`, `/settings`, `/chat/:chatId`), giving the supervisor instant 1-click access to a new conversation without navigating through intermediate screens.
+
+#### 5.4.2 Chat View Outlet Architecture & Zero Inner Chat Header
+- **Single Header Invariant**: The Chat View rendered via React Router `<Outlet />` inside `AppShell` deliberately possesses **zero inner chat header**.
+- **No Duplicate Toolbars**: The top application bar is provided exclusively by `AppShell`'s sticky `MuiAppbar` (displaying application branding, breadcrumb title, theme toggle, and user avatar).
+- **Maximized Vertical Viewport**: By removing redundant nested headers inside the outlet, 100% of the outlet's vertical space is dedicated to the chronological message timeline and the pinned bottom composer. Message cards scroll smoothly underneath the global sticky app bar.
 
 ---
 
@@ -1970,14 +2281,16 @@ sequenceDiagram
     UI->>User: Displays inline MuiTextField + Update / Cancel
     User->>UI: Modifies prompt text & clicks Update
     UI->>API: PUT /api/v1/chats/:chatId/messages/:messageId { text: newText }
-    API->>DB: deleteMany({ chat: chatId, createdAt: { $gt: targetMessage.createdAt } })
-    API->>DB: updateOne({ _id: messageId }, { text: newText })
+    Note over API, DB: Atomic Transaction Boundary (session.withTransaction)
+    API->>DB: deleteMany({ chat: chatId, createdAt: { $gt: targetMessage.createdAt } }, { session })
+    API->>DB: updateOne({ _id: messageId }, { text: newText }, { session })
     API-->>UI: Initiates SSE stream for revised Agent response (turn k+1)
 
     Note over User, DB: Flow 2: User Retries Agent Response at Turn k
     User->>UI: Clicks Retry icon on Agent Message (turn k)
     UI->>API: POST /api/v1/chats/:chatId/messages/:messageId/retry
-    API->>DB: deleteMany({ chat: chatId, createdAt: { $gte: targetMessage.createdAt } })
+    Note over API, DB: Atomic Transaction Boundary (session.withTransaction)
+    API->>DB: deleteMany({ chat: chatId, createdAt: { $gte: targetMessage.createdAt } }, { session })
     API-->>UI: Re-runs generation on prior user prompt & streams via SSE
 ```
 
@@ -1985,39 +2298,57 @@ sequenceDiagram
 1. **Copy Prompt**: Copies user message text to clipboard.
 2. **Edit Prompt**:
    - Replaces the message bubble with an inline `MuiTextField` editor equipped with "Update" and "Cancel" buttons.
-   - **Linear Downstream Truncation**: Clicking Update causes the backend to permanently delete all messages in MongoDB where `chat: chatId` and `createdAt > targetMessage.createdAt`.
-   - The target message's `text` is updated to the new prompt, and the server immediately begins streaming the new agent response.
+   - **Linear Downstream Truncation (Atomic Session Transaction)**: Clicking Update causes the backend to permanently delete all messages in MongoDB where `chat: chatId` and `createdAt > targetMessage.createdAt`, and update the target message text within a single atomic `session.withTransaction(async () => { ... })` passing `{ session }` to both operations.
+   - Once the transaction successfully commits, the server immediately begins streaming the new agent response from that fork point forward.
 
 #### 5.5.2 Agent Message Action Icons
 1. **Copy Response**: Copies generated response text or plain-text report directly to clipboard.
 2. **Retry Generation**:
-   - Clicking Retry permanently deletes the target agent response and any subsequent messages where `chat: chatId` and `createdAt >= targetMessage.createdAt`.
+   - Clicking Retry permanently deletes the target agent response and any subsequent messages where `chat: chatId` and `createdAt >= targetMessage.createdAt` within an atomic transaction passing `{ session }`.
    - Re-executes LLM generation on the immediately preceding user prompt and streams the fresh response.
 
 ---
 
-### 5.6 Multi-Modal Audio Payloads (Mode 3 Ephemeral Voice Notes)
+### 5.6 Multi-Modal Audio Dictation Flow (Mode 3 Ephemeral Voice Notes)
 
-Supervisors can narrate instructions or corrections directly into the chat composer via ephemeral audio voice notes:
+To eliminate typing fatigue, supervisors can narrate instructions, report updates, or conversational queries directly into the chat composer using the pulsating Audio Orb:
 
-1. **Client Recording**:
-   - Handled via browser `MediaRecorder` API recording audio into `audio/webm;codecs=opus` (with MP4 fallback).
-   - Shows live recording timer and waveform / visualizer.
-2. **Multer Audio Ingestion (`POST /api/v1/chats/:chatId/messages/audio`)**:
-   - Ingests single audio file under field name `audio` with maximum file size of 25MB.
-   - MIME validation allowlist: `audio/webm`, `audio/wav`, `audio/mp3`, `audio/mpeg`, `audio/m4a`, `audio/ogg`, `audio/aac`.
-3. **FFmpeg Audio Normalization**:
-   - The server converts uploaded audio to mono 16-bit 16kHz PCM WAV format via `fluent-ffmpeg`.
-4. **Synchronous Addis AI STT Transcription**:
-   - Sends normalized audio to Addis AI STT API (`addisai` SDK).
-   - Retrieves exact Amharic transcription text.
-5. **Message Creation & Immediate Streaming**:
-   - Creates a `Message` document:
-     - `sender: 'user'`
-     - `text`: Transcribed Amharic text
-     - `audio`: `{ originalName, fileName, path, duration, mimeType }`
-     - `rawTranscription`: Transcribed Amharic text
-   - Automatically triggers upstream LLM streaming response for the transcribed prompt.
+```mermaid
+flowchart TD
+    A["Supervisor taps Audio Orb in ChatComposerToolbar"] --> B["MediaRecorder captures audio (WebM/Opus)"]
+    B --> C["Audio Orb pulses with live audio waveform"]
+    C -->|"Supervisor taps Stop / Checkmark"| D["POST /api/v1/audio/transcribe-ephemeral"]
+    D --> E["Multer validates MIME (max 25MB)"]
+    E --> F["FFmpeg converts to mono 16-bit 16kHz PCM WAV"]
+    F --> G["Addis AI STT transcribes synchronously"]
+    G --> H["Server unlinks temp audio file in finally block"]
+    H --> I["Transcribed Amharic text returned to client"]
+    I --> J["Injected directly into ChatComposerTextArea"]
+    J --> K["Supervisor inspects / edits / appends text"]
+    K --> L["Clicks Send -> Standard Text Message Flow"]
+```
+
+#### 5.6.1 The In-Composer Dictation Lifecycle
+1. **Audio Capture**: Handled via browser `MediaRecorder` API recording into `audio/webm;codecs=opus` (with MP4 fallback for iOS Safari).
+2. **Ephemeral Upload (`POST /api/v1/audio/transcribe-ephemeral`)**: Single audio file uploaded under field name `audio`.
+3. **FFmpeg Normalization**: Converted to mono 16-bit 16kHz PCM WAV format via `fluent-ffmpeg`.
+4. **Synchronous Addis AI STT**: Transcribed via official `addisai` SDK bounded by `AI_TIMEOUT_MS`.
+5. **Zero Persistence Invariant**: Ephemeral voice notes are **never saved to MongoDB** and **never persisted in physical storage**. The uploaded file is unlinked immediately in an Express `finally` block.
+6. **In-Composer Inspection**: The transcribed Amharic text is injected directly into `ChatComposerTextArea`. The supervisor can review the Ge'ez text, make minor edits, or append additional comments via keyboard before submitting.
+7. **Submission**: Submitting sends a standard `POST /api/v1/chats/:chatId/messages` text payload, initiating token-by-token LLM generation.
+
+#### 5.6.2 The 9-Point Edge-Case Defense Matrix for Voice Dictation
+| # | Edge Case | Mitigation & Architectural Defense |
+|---|---|---|
+| **1** | **Microphone Permission Denied / Revoked** | Caught via `navigator.mediaDevices.getUserMedia()` error handler. Displays inline `MuiAlert` explaining how to allow microphone access in browser settings; composer seamlessly falls back to keyboard input. |
+| **2** | **Zero Acoustic Input / Absolute Silence** | A Web Audio API `AnalyserNode` monitors real-time RMS power. If acoustic energy remains below threshold throughout recording, upload is cancelled with a toast: `"No speech detected. Please speak into your microphone."`, conserving STT API quota. |
+| **3** | **Tab Switch / Background Sleep** | A `document.addEventListener('visibilitychange')` listener automatically finalizes and stops recording if the user switches browser tabs, preventing corrupted audio buffers. |
+| **4** | **Network Drop During Upload** | The audio Blob is cached in memory. If upload fails, an inline retry chip appears on the composer: `[ 🔄 Retry Transcription ]`, ensuring the user never loses spoken narration. |
+| **5** | **STT Timeout / Provider 5xx Outage** | Bounded strictly by `AI_TIMEOUT_MS`. Upon timeout or provider failure, the UI displays an error toast with options to retry or proceed with keyboard entry. |
+| **6** | **Interleaving Voice & Typing** | Voice dictation appends text at the current textarea cursor position (`selectionStart`), preserving previously typed text without destructive replacement. |
+| **7** | **Duration Hard-Cap Guardrail** | Maximum 120 seconds per voice note. A visual countdown timer warns the user at 100 seconds and auto-stops cleanly at 120 seconds. |
+| **8** | **Acoustic Quality Gate** | If Addis AI STT returns an empty string or low-confidence noise tokens, the composer displays a gentle prompt: `"ድምፅዎ በደንብ አልተሰማም። እባክዎ በድጋሚ ይናገሩ"` without polluting the textarea. |
+| **9** | **Zero Orphaned Disk Leaks** | Backend Multer disk files are strictly cleaned up inside a `finally` block on the Express route, guaranteeing zero orphaned `.wav` files on disk even during process crashes or aborts. |
 
 ---
 
@@ -2037,5 +2368,20 @@ To prevent duplicate requests, race conditions, and corrupted database states ca
    - Clicking invokes `POST /api/v1/chats/:chatId/abort`:
      - The server looks up `activeChatStreams.get(chatId)` and invokes `.abort()`.
      - Upstream LLM connection is severed, the active SSE stream is cleanly terminated, the partial generated text is saved to MongoDB, and the chat lock is released.
+
+---
+
+### 5.8 Typing Performance Guarantee & Input Fluidity
+
+To ensure effortless, zero-latency interaction during intensive operational reporting:
+
+1. **Strict Sub-5ms Input Render Budget**:
+   - Keystrokes in `ChatComposerTextArea` must render within $< 5$ms to sustain a guaranteed 60fps typing experience.
+2. **Component Memoization & Tree Isolation**:
+   - The `ChatComposer` component is decoupled from the historical message list via strict `React.memo` boundaries and localized state.
+   - Keystroke events never trigger re-renders of previous message cards, tool execution chips, or preview drawers.
+3. **GPU-Accelerated CSS Animations**:
+   - Audio Orb pulsing, wave visualizers, and streaming cursors run exclusively on GPU-composited CSS properties (`transform: scale(...)`, `opacity`).
+   - Animations bypass the JavaScript thread entirely, preventing layout recalculation (`reflow`) and eliminating typing jank even in threads with 50+ messages.
 
 

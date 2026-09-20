@@ -113,12 +113,57 @@ Use this file as the chronological record of work performed, files created, git 
   - `task_plan.md`
   - `progress.md`
 
+## Session: 2026-09-20
+
+### Section 4 & Section 5 Specification Refinement & Harmonization
+- **Status:** complete
+- **Started:** 2026-09-20T01:42:00+03:00
+- **Completed:** 2026-09-20T02:30:00+03:00
+- Actions taken:
+  - Harmonized Section 4 Domain Data Models:
+    - Added universal `toObject: { virtuals: true, transform: ... }` with `toJSON` across all schemas.
+    - Standardized `Report.date` to UTC midnight `Date` with dynamic `ethiopianDate` Mongoose virtual (`gregorianToEthiopian(this.date)`).
+    - Preserved single user-provided `name` + `normalizedName` on `Branch` (no `amharicName`).
+    - Completely removed static `Glossary` Mongoose collection and CRUD; replaced with dynamic in-context few-shot learning (retrieving user's last 3–5 approved reports).
+    - Preserved dedicated `RefreshToken` collection for RFC 6819 token family rotation, multi-device tracking, and native TTL cleanup.
+    - Updated `Report` subdocument naming (`visitSchema`, `audioSchema`, `transcription`), compound index `{ user: 1, type: 1, date: -1 }`, and error tuples.
+    - Updated `Chat` model with `isPinned: Boolean`, compound index `{ user: 1, isArchived: 1, isPinned: -1, updatedAt: -1 }`, deterministic 35-char word-wrapped title auto-derivation, and multi-branch titling.
+    - Refactored `Message` schema with normalized `aiMetadata` subdocument (`durationMs`, `providerMetadata: Mixed`).
+    - Added AI runtime execution parameters (`provider`, `model`, `language`, `reasoning`) to `Preset` schema.
+  - Harmonized Section 5 Chat Architecture:
+    - Added permanent Sidebar `[ + New Chat ]` button with 64px mini-rail adaptation.
+    - Specified Chat View outlet layout with zero inner chat header, ensuring single header invariant under `AppShell`'s `MuiAppbar`.
+    - Formulated Mode 3 Audio Orb dictation flow with in-composer inspection (Amharic text injected directly into `ChatComposerTextArea` for review/editing) and zero audio persistence.
+    - Formulated complete 9-Point Edge-Case Defense Matrix for voice dictation.
+  - Integrated 8 Active Review Refinements:
+    - Added Centralized Constants Architecture mandate to Section 1.4 (`backend/utils/constants.js` and `client/src/utils/constants.js`).
+    - Synchronized Section 2.3 `refreshTokenSchema` with descriptive error tuples, fields (`replacedByTokenHash`, `userAgent`, `ipAddress`), and `toObject`/`toJSON` transforms.
+    - Specified RTK Query `baseQueryWithReauth` in `client/src/redux/features/apiSlice.js` with `credentials: 'include'`, async-mutex concurrency protection, infinite loop prevention on `/auth/refresh`, state purging, and direct redirect to `/login`.
+    - Formalized multi-branch itinerary rules in Section 3 and Section 4.2.3: `visits[]` sorted chronologically by `clockIn`, primary branch membership without forced index 0, and shift boundary synchronization `report.clockIn === visits[0].clockIn`, `report.clockOut === visits[visits.length - 1].clockOut`.
+    - Added pre-save lifecycle hook to `reportSchema` for automatic chronological visit sorting, primary branch validation, and shift clockIn/clockOut sync.
+    - Standardized unified field naming: `Message.transcription`, `Message.aiMetadata.duration`, `Report.aiMetadata.duration`, and `Preset.system`.
+    - Standardized symmetrical report detail route `/reports/:reportId/details` alongside `/reports/:reportId/edit`.
+    - Integrated Mongoose ClientSession & Atomic Transaction Protocol across the specification:
+      - Added Section 1.4.7 "Mongoose ClientSession & Atomic Transaction Architectural Law" mandating multi-document session boundaries, `{ session }` propagation, array syntax for `Model.create([payload], { session })`, middleware session inheritance via `this.$session()`, and prohibition of direct query updates (`Report.updateOne`, `Report.findOneAndUpdate`) in favor of Retrieve -> Mutate -> `report.save({ session })`.
+      - Wrapped Section 1.2 dual document creation (Report + Chat) in `session.withTransaction(...)` to eliminate orphaned reports.
+      - Updated Section 2.4.3 refresh token rotation and family revocation to execute within atomic transactions with array syntax.
+      - Added Section 2.5.4 User Account Self-Service Deletion Protocol (`DELETE /api/v1/users/me`) specifying atomic 7-collection cascade deletion with `{ session }`.
+      - Enhanced Section 4.2.3 `reportSchema.pre('save')` with session awareness documentation, `.session(this.$session())` requirement for async lookups, and retrieve-and-save invariant.
+      - Updated Section 4.3 with cascading soft archive/restore and wrapped `sweeperJob.js` physical purge cascades in per-report atomic transactions.
+      - Updated Section 5.5 downstream message truncation to execute within atomic transactions with `{ session }`.
+    - Preserved and synchronized complete `implementation_plan.md` artifact.
+- Files created/modified:
+  - `docs/specifications/master_specification.md`
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Phase 5 complete on branch `phase-0-specification`. Ready for Section 6 in Plan Mode. |
-| Where am I going? | Switch to Plan Mode for Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine. |
-| What's the goal? | Complete, exhaustive 14-section master specification for MERN Stack Agentic AI Report Builder. |
-| What have I learned? | Dual chat taxonomy, General Chat 7-archetype catalog, Google Sheets export, mid-chat preset/AI config switching, and linear truncation locked into specification. |
-| What have I done? | Authored, reviewed, committed, and pushed Sections 1, 2, 3, 4, and 5. |
+| Where am I? | All 9 review points, including the comprehensive Mongoose ClientSession & Transaction Protocol, fully applied to `master_specification.md` and `implementation_plan.md` on branch `phase-0-specification`. |
+| Where am I going? | Presenting complete verification summary to user for authorization to stage and commit to `phase-0-specification`. |
+| What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder. |
+| What have I learned? | Mongoose document middleware accesses the session via `this.$session()`, in-memory mutations commit automatically with the document's session, any DB queries in hooks must pass `.session(this.$session())`, `Model.create` requires array syntax with sessions, and `doc.save({ session })` must be used over `Model.updateOne` to prevent bypassing `pre('save')`. |
+| What have I done? | Applied all 9 review points and Mongoose session protocols cleanly without a single error; verified via git status and diff. Ready for user commit authorization. |

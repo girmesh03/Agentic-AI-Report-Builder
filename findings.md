@@ -68,7 +68,7 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Zero-Lookup Historical Snapshots | `Report` stores immutable snapshots of `branchName`, `supervisorName`, and per-visit `branchName` to guarantee rendering resilience even if branches are purged. |
 | Multi-Provider AI Metadata | Tracked on `Message` and `Report`: `provider` ('addis', 'google', 'nvidia'), `model`, `language`, `reasoning` trace, `tokensUsed`. |
 | Chat Title Dynamics | `type: 'report'` titled `Report - <branchName> - <DD-MM-YY>`; `type: 'general'` auto-generated from first user message prompt. |
-| Preset Persona/System Decoupling | Cleanly separates `persona` (agent persona/tone) from `systemPrompt` (SOP checklists, operational rules). |
+| Preset Persona/System Decoupling | Cleanly separates `persona` (agent persona/tone) from `system` (SOP checklists, operational rules). |
 | Two-Tier Deletion & 30-Day Sweeper | Soft archive (`isArchived`, `archivedAt`) with 30-day grace period; daily midnight `node-cron` (`0 0 * * *`) physically purges documents and unlinks audio files. |
 | Schema-Level Indexing Mandate | All single-field, compound, unique, sparse, and TTL indexes declared strictly via `schema.index(...)`. Zero inline field-level indexes allowed across entire codebase. |
 | Dual Clock-In/Out Hierarchy | `report.clockIn`/`report.clockOut` for overall daily shift; `visit.clockIn`/`visit.clockOut` for per-branch arrival and departure intervals. |
@@ -78,6 +78,22 @@ Use this file as the durable knowledge base for requirements, discoveries, techn
 | Live Google Sheet Generation | Tool `export_to_google_sheet` creates Google Spreadsheet via `drive.file` OAuth scope and streams clickable direct link in Amharic chat. |
 | Mid-Chat Dynamic Configuration | User can switch preset, provider (`addis`, `google`, `nvidia`), model, language, and reasoning at inception or mid-chat; changes apply to future messages while past turns freeze executed params. |
 | Per-Chat Stream Concurrency Lock | In-memory `activeChatStreams` map rejects concurrent requests with HTTP 409 Conflict; supports clean client abort via `POST /chats/:chatId/abort`. |
+| Universal `toObject` with Virtuals | Every schema implements `toObject: { virtuals: true, transform: ... }` alongside `toJSON` for consistent serialization in programmatic object access. |
+| Branch Naming (Single Name + Normalized) | Retained single user-provided `name` + lowercase `normalizedName`. No separate `amharicName` field. |
+| Report Date as Dynamic Virtual | `Report.date` stored exclusively as UTC midnight `Date`. `ethiopianDate` is a dynamic Mongoose virtual (`gregorianToEthiopian(this.date)`), eliminating dual-state sync drift. |
+| Elimination of Glossary Collection | Removed static `Glossary` Mongoose model/CRUD. Replaced with dynamic in-context few-shot learning (retrieving user's last 3–5 approved reports) injected directly into LLM prompts. |
+| RefreshToken as Dedicated Collection | Retained separate `RefreshToken` collection for RFC 6819 token family rotation, multi-device tracking, reuse/theft detection, and native MongoDB TTL cleanup. |
+| Dedicated Report Edit Page (`/reports/:reportId/edit`) | Replaced cramped modal with a dedicated 2-column, click-first GUI edit page featuring time pickers, 1-click status chips, and sticky live Amharic preview. |
+| Mode 3 Audio Orb Dictation Flow | Ephemeral voice notes recorded via Audio Orb are transcribed via Addis AI STT and injected directly into `ChatComposerTextArea` for user review/editing before sending; backed by a 9-point edge-case defense matrix. |
+| Permanent Sidebar "New Chat" Button | Anchored permanently at the top of the Sidebar across all views; transforms into a compact icon button with tooltip in 64px collapsed mini-rail mode. |
+| Zero Inner Chat Header | Chat View outlet has zero inner chat header; top bar is exclusively provided by `AppShell`'s sticky `MuiAppbar`, eliminating duplicate stacked headers. |
+| Typing Performance Guarantee | Input render budget $< 5$ms per keystroke (60fps), `React.memo` isolation between composer and message stream tree, and GPU-accelerated CSS animations for Audio Orb. |
+| RTK Query `baseQueryWithReauth` | Intercepts 401, acquires async mutex to prevent parallel refresh token collisions, rotates token, and clears state/redirects directly to `/login` on failure. |
+| Symmetrical Report Detail/Edit Routes | Symmetrical route pair `/reports/:reportId/details` and `/reports/:reportId/edit` (with `/reports/:reportId` redirecting to `/details`). |
+| Centralized Constants Files | Zero magic strings/numbers; all enums, regexes, standard phrases, limits, and quotas defined exclusively in `backend/utils/constants.js` and `client/src/utils/constants.js`. |
+| Multi-Branch Visit Sorting & Invariants | `visits[]` sorted chronologically by `clockIn`; primary branch can be at any index $k$; shift boundaries sync automatically (`report.clockIn = visits[0].clockIn`, `report.clockOut = visits[n-1].clockOut`). |
+| Unified Schema Naming (`transcription`, `duration`, `system`) | Normalized `Message.transcription` (symmetrical with `Report`), `aiMetadata.duration` (in ms), and `Preset.system`. |
+| Mongoose ClientSession & Transaction Protocol | Multi-document writes wrapped in `session.withTransaction(async () => { ... })`; `Model.create([payload], { session })` array syntax; document middleware accesses session via `this.$session()` and attaches `.session(this.$session())` to DB queries; direct query updates (`updateOne`, `findOneAndUpdate`) prohibited for `Report` to protect `pre('save')` hooks. |
 
 ## Locked Package Manifest
 

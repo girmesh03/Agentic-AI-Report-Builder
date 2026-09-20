@@ -19,6 +19,8 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 ### Phase 1: Section 1 - System Vision, Operational Architecture & Constraints Registry
 - [x] Detail product philosophy, supervisor workflow, Amharic-first domain, and delivery model
 - [x] Document strict scope boundaries and architecture constraints
+- [x] Detail Section 1.4.7 Mongoose ClientSession & Atomic Transaction Architectural Law
+- [x] Detail dual document instantiation (Report + Chat) inside atomic transaction session
 - [x] Write complete Section 1 to `docs/specifications/master_specification.md`
 - [x] User review and confirmation of Section 1
 - [x] Commit Section 1 to `phase-0-specification`
@@ -28,6 +30,10 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 - [x] Detail Email+Password and Google OAuth raw flow (state + PKCE)
 - [x] Detail User entity, automatic name derivation from email, and virtuals
 - [x] Detail dual JWT httpOnly cookie architecture, RefreshToken rotation, reuse detection, and session rules
+- [x] Detail RefreshToken rotation and family revocation inside atomic transaction session with array syntax `RefreshToken.create([{ ... }], { session })`
+- [x] Detail User Account Self-Service Deletion (`DELETE /api/v1/users/me`) with 7-collection atomic transaction cascade
+- [x] Detail client-side RTK Query `baseQueryWithReauth` with async-mutex concurrency protection, auto-logout, and redirect to `/login`
+- [x] Detail synchronized `refreshTokenSchema` with descriptive error tuples and `toObject`/`toJSON` transforms
 - [x] Write complete Section 2 to `docs/specifications/master_specification.md`
 - [x] User review and confirmation of Section 2
 - [x] Commit Section 2 to `phase-0-specification`
@@ -36,6 +42,7 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 ### Phase 3: Section 3 - Locked Plain-Text Amharic Report Engine & Formatting Rules
 - [x] Detail exact Amharic plain-text layout for single-branch and multi-branch visits
 - [x] Detail Ethiopian date (`DD-MM-YY`), 24h times (`HH:mm`), headers, bullets, and footer lines
+- [x] Detail multi-branch itinerary chronological sorting, primary branch position flexibility, and shift boundary synchronization (`report.clockIn = visits[0].clockIn`, `report.clockOut = visits[n-1].clockOut`)
 - [x] Detail rule for `no_issue` bullet and hidden internal statuses
 - [x] Detail the six linguistic guardrails (acoustic quality gate, first-person activities, impact-and-solution issues, comments fallback, shorthand expansion, no_issue)
 - [x] Write complete Section 3 to `docs/specifications/master_specification.md`
@@ -44,9 +51,14 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 - **Status:** complete
 
 ### Phase 4: Section 4 - Domain Data Models, Schemas & Lifecycle Management
-- [x] Detail User, Branch, Report, RefreshToken, Chat, Message, Preset, and Glossary Mongoose schemas
-- [x] Detail indexes, compound uniqueness, validations, virtuals, JSON transforms (stripping `id` and `__v`)
-- [x] Detail soft-delete lifecycle (`isArchived`, `archivedAt`) and 30-day cron sweeper with audio unlinking
+- [x] Detail User, Branch, Report, RefreshToken, Chat, Message, and Preset Mongoose schemas (eliminated separate Glossary table)
+- [x] Detail indexes, compound uniqueness, validations, virtuals, JSON/Object transforms (`toObject` with `virtuals: true`, stripping `id` and `__v`)
+- [x] Detail Report date as UTC Date + dynamic Ethiopian virtual; Branch single name + normalizedName
+- [x] Detail Report pre-save hook for chronological visit sorting, primary branch validation, and shift clockIn/clockOut sync
+- [x] Detail `reportSchema.pre('save')` session awareness via `this.$session()`, `.session(this.$session())` for DB queries, and retrieve-and-save requirement
+- [x] Detail unified schema field names: `Message.transcription`, `aiMetadata.duration`, and `Preset.system`
+- [x] Detail soft-delete lifecycle (`isArchived`, `archivedAt`) with cascading Report-Chat archive in transactions
+- [x] Detail 30-day cron sweeper (`sweeperJob.js`) with atomic per-report transaction purges and post-commit audio unlinking
 - [x] Review in Plan Mode with user
 - [x] Write complete Section 4 to `docs/specifications/master_specification.md`
 - [x] User review and confirmation of Section 4
@@ -57,9 +69,11 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 - [x] Detail Report Chat (1-to-1 co-pilot with mutation tools) vs General Chat (operations analyst & personal assistant)
 - [x] Detail General Chat 7-archetype request catalog and Google Sheets export pipeline (`export_to_google_sheet`)
 - [x] Detail mid-chat dynamic preset selection/creation and AI configuration (`addis`, `google`, `nvidia`, model, language, reasoning)
-- [x] Detail 3 navigation entry points (Sidebar Recent, Reports Card/List, Reports DataGrid)
-- [x] Detail linear downstream truncation mechanics on prompt Edit and agent Retry
-- [x] Detail multi-modal voice notes and in-memory per-chat stream locking (409 Conflict + abort)
+- [x] Detail permanent Sidebar "+ New Chat" button (with 64px mini-rail adaptation) and zero inner chat header outlet architecture
+- [x] Detail linear downstream truncation mechanics on prompt Edit and agent Retry within atomic `session.withTransaction(...)`
+- [x] Detail Mode 3 Audio Orb dictation flow with in-composer inspection and 9-point edge-case defense matrix
+- [x] Detail sub-5ms typing performance guarantee (60fps), React.memo isolation, and GPU-accelerated CSS animations
+- [x] Detail symmetrical detail/edit routes `/reports/:reportId/details` and `/reports/:reportId/edit`
 - [x] Write complete Section 5 to `docs/specifications/master_specification.md`
 - [x] User review and confirmation of Section 5
 - [x] Commit Section 5 to `phase-0-specification`
@@ -77,7 +91,7 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 
 ### Phase 7: Section 7 - Agentic Reasoning, Multi-Tier Fallback & Gemini Runtime
 - [ ] Detail prompt architecture (System, Persona, zero-shot/few-shot in Amharic)
-- [ ] Detail server-executed tool contracts (`get_report_context`, `update_report`, `list_branches`, `create_branch`, `get_glossary`)
+- [ ] Detail server-executed tool contracts (`get_report_context`, `update_report`, `list_branches`, `create_branch`, `export_report_to_google_docs`, `export_to_google_sheet`)
 - [ ] Detail streaming token-by-token loop with per-chat concurrency lock
 - [ ] Detail fallback chain: addis -> gemini -> nvidia with exponential backoff and 502 exhaustion
 - [ ] Detail Presets model and per-user daily AI quota tracking
@@ -85,8 +99,8 @@ Phase 6: Section 6 - Audio Pipeline, FFmpeg Preprocessing & Addis AI STT Engine
 - [ ] Output specification content in Build Mode and commit
 - **Status:** pending
 
-### Phase 8: Section 8 - Workplace Transliteration Engine & Per-User Glossary
-- [ ] Detail Glossary schema and default seeded restaurant/technical equipment terms
+### Phase 8: Section 8 - Workplace Transliteration Engine & In-Context Phonetic Guidance
+- [ ] Detail dynamic few-shot learning from last 3–5 approved reports (zero static glossary tables)
 - [ ] Detail phonetic Ge'ez transliteration rules (e.g. `deep fryer` -> `ዲፕ ፍራየር`)
 - [ ] Detail agent prompt enforcement (zero raw Latin in report body)
 - [ ] Review in Plan Mode with user
