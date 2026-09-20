@@ -403,15 +403,227 @@ Use this file as the chronological record of work performed, files created, git 
   - `findings.md`
   - `progress.md`
 
+### Phase 1: Foundation, Monorepo Scaffolding & Option A Landing Page
+- **Status:** awaiting_user_approval (Step 4)
+- **Started:** 2026-09-20T22:30:00+03:00
+- **Completed (Step 3):** 2026-09-20T23:25:00+03:00
+- Actions taken:
+  - Step 1 (Pre-Git): Verified clean working tree on `main`, pulled latest from `origin/main`, created and checked out feature branch `phase-1-foundation-scaffolding`.
+  - Step 2 (Deep Codebase Analysis): Analyzed Section 14 monorepo requirements, Option A Landing Page layout, pre-scaffolded client assets (`hero.png`, `notFound_404.svg`, `favicon.svg`), and backend 11-step middleware pipeline.
+  - Step 3 (Execution & Validation):
+    - Created root `package.json` with npm workspaces (`backend`, `client`), `concurrently` dev runner, and `.npmrc` (`legacy-peer-deps=true`).
+    - Configured `backend/package.json` with locked dependencies (`addisai@^0.2.0`, `winston`, `mongoose`, `express`, etc.).
+    - Implemented `backend/scripts/verifyCodebase.js` (parallel `node --check` static syntax runner) and `backend/scripts/killPort.js` (ports 4000 & 3000).
+    - Built backend core infrastructure: `server.js` (boot lifecycle & graceful shutdown), `app.js` (11-step immutable Express pipeline), `config/env.js` (deeply frozen backend env), `config/db.js` (Mongoose connection manager with exponential backoff algorithm), `config/logger.js` (Winston daily rotation), `config/httpStatus.js` (deeply frozen HTTP status dictionary), `errors/CustomError.js`, `errors/index.js`, `middlewares/errorHandler.js`, `middlewares/requestLogger.js` (Morgan + dev console + PII masking), `middlewares/rateLimiter.js`, `services/sweeperService.js`, and `routes/index.js` (`/health` & `/api/v1`).
+    - Updated `client/package.json` with locked dependencies (`@mui/material@^6.4.0`, `react@^18.3.1`, `@mui/x-chat@^9.0.0-alpha.18`).
+    - Eliminated duplicate React version conflict in `client/node_modules/` by pruning local modules and unifying on root React 18.3.1.
+    - Implemented frontend core architecture: `client/vite.config.js` (`port: 3000`, `strictPort: true`), `client/scripts/cleanDist.js`, `client/index.html` (Title: Report Builder, `/favicon.svg`), `client/src/config/env.js` (frozen env), `client/src/theme/typography.js` (Noto Sans Ethiopic 17px, lineHeight 1.75), `client/src/theme/AppTheme.jsx` (Context theme provider + Ethiopic font integration), `client/src/components/reusable/Logo.jsx`, `client/src/components/reusable/MuiButton.jsx` (`React.forwardRef` wrapper with loading state, tooltip, and `xs` iconification), `client/src/layouts/PublicLayout.jsx` (sticky AppBar with Theme toggle, Login, and Sign Up buttons + `<Outlet />`), `client/src/pages/Landing.jsx` (Option A Landing page with `hero.png`, 3 highlight cards, and responsive typography), `client/src/pages/Login.jsx`, `client/src/pages/Register.jsx`, `client/src/pages/NotFound.jsx` (with `notFound_404.svg`), and `client/src/routes/router.jsx`.
+    - Executed backend static verification: `npm run verify --workspace=backend` (100% passed, 13/13 files in 1332ms).
+    - Executed frontend production build verification: `npm run verify --workspace=client` (Vite build passed, `dist/` cleaned up).
+    - Verified live health check: `GET http://localhost:4000/health` (`{"status":"up","database":"connected"}`).
+    - Conducted automated browser control audit via Chrome DevTools Protocol across Desktop (1440x900), Tablet (768x1024), Mobile (375x812), and Dark Mode. DevTools console audit verified **0 errors, 0 unhandled rejections, 0 React warnings**.
+    - User feedback: Harmonized all MUI components and icons across the frontend to enforce `size="small"` and `fontSize="small"` universally, configured `defaultProps: { size: 'small' }` across 26+ components in `AppTheme.jsx`, updated `Logo.jsx` default size to small, updated `PublicLayout.jsx`, `Landing.jsx`, `Login.jsx`, `Register.jsx`, and `NotFound.jsx`. Verified with `npm run verify --workspace=client` (11.38s build, 0 errors).
+- Files created/modified:
+  - `package.json`
+  - `.npmrc`
+  - `backend/package.json`
+  - `backend/scripts/verifyCodebase.js`
+  - `backend/scripts/killPort.js`
+  - `backend/src/server.js`
+  - `backend/src/app.js`
+  - `backend/src/config/env.js`
+  - `backend/src/config/db.js`
+  - `backend/src/config/logger.js`
+  - `backend/src/config/httpStatus.js`
+  - `backend/src/errors/CustomError.js`
+  - `backend/src/errors/index.js`
+  - `backend/src/middlewares/errorHandler.js`
+  - `backend/src/middlewares/requestLogger.js`
+  - `backend/src/middlewares/rateLimiter.js`
+  - `backend/src/services/sweeperService.js`
+  - `backend/src/routes/index.js`
+  - `client/package.json`
+  - `client/vite.config.js`
+  - `client/index.html`
+  - `client/scripts/cleanDist.js`
+  - `client/src/config/env.js`
+  - `client/src/theme/typography.js`
+  - `client/src/theme/AppTheme.jsx`
+  - `client/src/components/reusable/Logo.jsx`
+  - `client/src/components/reusable/MuiButton.jsx`
+  - `client/src/layouts/PublicLayout.jsx`
+  - `client/src/pages/Landing.jsx`
+  - `client/src/pages/Login.jsx`
+  - `client/src/pages/Register.jsx`
+  - `client/src/pages/NotFound.jsx`
+  - `client/src/routes/router.jsx`
+  - `client/src/App.jsx`
+  - `client/src/main.jsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
+### Quality Gate Remediation: 7 Critical Invariants Addressed
+- **Status:** complete
+- **Started:** 2026-09-21T00:15:00+03:00
+- **Completed:** 2026-09-21T00:23:00+03:00
+- Actions taken:
+  1. *Zero Bare `React` Imports*: Removed `import React from 'react'` across all client files (`App.jsx`, `main.jsx`, `AppTheme.jsx`, `Logo.jsx`, `MuiButton.jsx`, `PublicLayout.jsx`, `Landing.jsx`, `Login.jsx`, `Register.jsx`, `NotFound.jsx`, `router.jsx`). Replaced with named imports (`createRoot`, `StrictMode`, `forwardRef`, etc.) matching modern React 18+ JSX transform standard.
+  2. *Comprehensive JSDoc Across All Files*: Added exhaustive JSDoc `@module`, `@function`, `@component`, `@param`, `@returns`, `@type`, and `@typedef` annotations to all backend and frontend components, config objects, hooks, and utilities.
+  3. *Proper Utilization of `client/src/assets/notFound_404.svg`*: Integrated `notFound_404.svg` into `NotFound.jsx` with responsive sizing, theme drop-shadows, and return CTA, nested inside `PublicLayout` catch-all route.
+  4. *Eliminated Unused Imports*: Removed unused `CustomError` import in `backend/src/middlewares/errorHandler.js` and confirmed zero unused imports across the monorepo.
+  5. *Deleted `.npmrc`*: Removed `.npmrc` completely from workspace root.
+  6. *Cleaned Up Background Tasks*: Terminated ephemeral task-671 (Chrome CDP helper); currently only task-439 (`npm run dev`) remains active.
+  7. *Inscribed 7 Strict Invariants in Planning Files*: Documented all 7 invariants permanently in `findings.md` and `task_plan.md` never to be repeated.
+  - Verification: `npm run verify --workspace=backend` passed (100% in 1327ms); `npm run verify --workspace=client` passed (Vite build 10.51s, 0 errors, dist purged).
+
+### Port Conflict & Shutdown Remediation: EADDRINUSE & ERR_SERVER_NOT_RUNNING
+- **Status:** complete
+- **Started:** 2026-09-21T00:24:00+03:00
+- **Completed:** 2026-09-21T00:27:00+03:00
+- Root Cause Analysis:
+  1. *EADDRINUSE on 4000 & 3000*: An internal background daemon (`task-439`) had been left running by the agent, occupying ports 4000 and 3000 when the user attempted to run `npm run dev` in their host terminal.
+  2. *ERR_SERVER_NOT_RUNNING in server.js*: During boot failure caused by `EADDRINUSE`, `handleGracefulShutdown` blindly called `server.close()`, which throws `ERR_SERVER_NOT_RUNNING` when the HTTP server was never actively listening.
+- Actions Taken:
+  1. Terminated `task-439` immediately via `manage_task` kill; verified 0 running background tasks in Antigravity.
+  2. Enhanced `backend/scripts/killPort.js` to automatically terminate occupying processes on both ports 4000 and 3000 by default.
+  3. Integrated automated pre-dev port freeing into `package.json` across root (`"dev": "node backend/scripts/killPort.js && ..."`), backend (`"dev": "node scripts/killPort.js 4000 && ..."`), and client (`"dev": "node ../backend/scripts/killPort.js 3000 && ..."`). Added `"kill-ports"` root script.
+  4. Guarded `server.close()` in `backend/src/server.js` with `if (server.listening)` before closing, preventing `ERR_SERVER_NOT_RUNNING` on boot-time port collisions.
+  5. Tested `node backend/scripts/killPort.js`: freed lingering PID 8888, verified both ports 4000 and 3000 completely open and available.
+  6. Inscribed Invariant 8 permanently into `findings.md`, `task_plan.md`, and `progress.md`.
+
+
+### Theme Architecture Alignment & Bug Remediation
+- **Status:** complete
+- **Started:** 2026-09-21T00:32:00+03:00
+- **Completed:** 2026-09-21T00:53:00+03:00
+- Actions taken:
+  1. *Exhaustive Theme Analysis*: Analyzed all 11 files in `client/src/theme/*` (`AppTheme.jsx`, `themePrimitives.js`, and `customizations/` for inputs, dataDisplay, feedback, navigation, surfaces, charts, dataGrid, datePickers, index).
+  2. *Remediated `datePickers.js` Syntax/Export Bug*: Replaced non-existent `pickerDayClasses` with `pickersDayClasses` from `@mui/x-date-pickers/PickersDay`; resolved non-existent `yearCalendarClasses.selected` by standardizing on `'&.Mui-selected'` across MonthCalendar, YearCalendar, and PickersDay.
+  3. *Remediated `charts.js` Sub-Path Imports*: Updated `axisClasses`, `legendClasses`, and `chartsGridClasses` to import from their respective sub-paths in `@mui/x-charts/*`.
+  4. *Enforced Universal MUI `size="small"` & `fontSize="small"`*: Added `defaultProps: { size: 'small' }` to `MuiButton`, `MuiIconButton`, `MuiOutlinedInput`, `MuiTextField`, `MuiFormControl`, `MuiFormHelperText`, and `MuiSelect`; added `defaultProps: { fontSize: 'small' }` to `MuiSvgIcon` in `dataDisplay.js`.
+  5. *Bilingual Typography & Google Fonts*: Updated `themePrimitives.js` font family to `'Inter', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` and added font preconnect/stylesheets to `client/index.html`.
+  6. *MUI v6 CSS Variables & Theme Hook*: Added `<CssBaseline enableColorScheme />` to `AppTheme.jsx` and exported `useThemeMode` hook bridging MUI v6's `useColorScheme()` with `{ mode, toggleTheme, setMode }`.
+  7. *Comprehensive JSDoc Documentation Standard*: Added exhaustive `@module`, `@component`, and type annotations across all 11 theme files.
+  8. *Aligned Shell Layouts & Pages*: Updated `PublicLayout.jsx` sticky AppBar with theme paper & divider tokens; updated `Landing.jsx` and `NotFound.jsx` to use `theme.applyStyles('dark', { ... })` for CSS variable transitions.
+  9. *Static & Browser Verification*:
+     - `npm run verify --workspace=backend`: 100% passed (13 files in 1370ms).
+     - `npm run verify --workspace=client`: 100% passed (1,410 modules transformed, built in 12.26s, dist purged).
+     - Chrome DevTools Live Audit: Navigated to `http://localhost:3000/`, verified dark mode, clicked theme toggle to switch to light mode, inspected 404 page with `notFound_404.svg`. Exactly 0 errors, 0 unhandled rejections, 0 warnings in DevTools console.
+
+### Domain Decomposition, LoadingSpinner & Isolated Scroll Architecture
+- **Status:** complete
+- **Started:** 2026-09-21T00:54:00+03:00
+- **Completed:** 2026-09-21T01:03:00+03:00
+- Actions taken:
+  1. *Domain Component Decomposition (`client/src/components/landing/*`)*:
+     - Created `client/src/components/landing/HeroSection.jsx`: Extracted Hero section with `hero.png`, Amharic-first badge, responsive CTAs, and full JSDoc.
+     - Created `client/src/components/landing/FeatureHighlights.jsx`: Extracted 3 feature cards (Spoken Amharic Narration, Locked Corporate Report Engine, Universal Multi-Branch Oversight) and header typography with full JSDoc.
+     - Created `client/src/components/landing/LandingFooter.jsx`: Extracted copyright, `v1.0.0` version chip, and legal links with full JSDoc.
+     - Refactored `client/src/pages/Landing.jsx` into a lean orchestrator (< 35 lines) cleanly importing and composing `HeroSection`, `FeatureHighlights`, and `LandingFooter`.
+  2. *Standardized Reusable `LoadingSpinner`*:
+     - Created `client/src/components/reusable/LoadingSpinner.jsx` with `message` (default: `'Loading...'`), `height` (default: `'100%'`), `size` (default: `'small'`), and full JSDoc.
+  3. *Fixed-Header Isolated Scroll Architecture in Layout Shells*:
+     - Updated `client/src/layouts/PublicLayout.jsx`:
+       - Outer wrapper locked to `height: '100vh', maxHeight: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: 'background.default'`.
+       - AppBar pinned with `flexShrink: 0; position: sticky`, strictly excluded from page scrolling.
+       - Inner main container `<Box component="main" sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>` set as sole scrollable area.
+       - Wrapped `<Outlet />` with React Router's `useNavigation()`:
+         ```jsx
+         {navigation.state === "loading" ? (
+           <LoadingSpinner message="Navigating..." height="100%" />
+         ) : (
+           <Outlet />
+         )}
+         ```
+  4. *Master Specification Alignment*:
+     - Updated Section 10.2.1: Formalized Viewport Scroll Isolation Architectural Law and `useNavigation` `LoadingSpinner` wrap.
+     - Updated Section 10.2.2: Documented Domain Component Architecture Law and domain decomposition under `client/src/components/landing/*`.
+     - Updated Section 10.8: Updated `LoadingSpinner` row with full prop interfaces and layout usage.
+     - Updated Section 10.10: Inscribed Domain Component Decomposition, Fixed-Header Isolated Scroll Architecture, and Reusable LoadingSpinner Route Wrap into the Invariants Table.
+     - Strictly touched only relevant sections (10.2.1, 10.2.2, 10.8, 10.10).
+  5. *Inscribed Invariants 9, 10, 11 in Planning Working Files*:
+     - Recorded Invariants 9, 10, and 11 permanently into `task_plan.md`, `findings.md`, and `progress.md`.
+  6. *Static Verification*:
+     - `npm run verify` passed 100%:
+       - Backend: 13 files checked in 1226ms (0 syntax errors).
+       - Client: 1,414 modules transformed, built cleanly in 28.58s, `dist/` wiped immediately.
+     - Background task cleanly completed, leaving 0 background tasks active.
+
+### Fontsource Inter Package Integration
+- **Status:** complete
+- **Started:** 2026-09-21T01:04:00+03:00
+- **Completed:** 2026-09-21T01:08:00+03:00
+- Actions taken:
+  1. Installed `@fontsource/inter` (`^5.3.0`) in the client workspace via `npm install @fontsource/inter --workspace=client`.
+  2. Imported font weights 300, 400, 500, 600, and 700 directly into `client/src/main.jsx`:
+     - `import "@fontsource/inter/300.css";`
+     - `import "@fontsource/inter/400.css";`
+     - `import "@fontsource/inter/500.css";`
+     - `import "@fontsource/inter/600.css";`
+     - `import "@fontsource/inter/700.css";`
+  3. Executed static verification: `npm run verify` passed 100% (Backend: 13 files in 1418ms; Client: 1,397 modules built in 6.09s, `dist/` cleaned).
+  4. Verified 0 running background tasks.
+
+### Section 10.1.1 Flat Router Map Specification Correction
+- **Status:** complete
+- **Started:** 2026-09-21T01:12:00+03:00
+- **Completed:** 2026-09-21T01:15:00+03:00
+- Actions taken:
+  1. *Remediated Section 10.1.1 Flat Router Map in `docs/specifications/master_specification.md`*:
+     - Replaced fictitious nested directory imports (`./pages/Landing/Landing`, `./pages/Auth/Login`, `./pages/Auth/Register`, `./pages/Dashboard/Dashboard`, `./pages/Chat/Chat`, `./pages/Reports/ReportsList`, `./pages/Reports/ReportDetails`, `./pages/Reports/ReportEdit`, `./pages/Branches/BranchesList`, `./pages/Branches/BranchDetails`, `./pages/Profile/Profile`) with canonical relative paths:
+       - `import("../pages/Landing.jsx")`
+       - `import("../pages/Login.jsx")`
+       - `import("../pages/Register.jsx")`
+       - `import("../pages/Dashboard.jsx")`
+       - `import("../pages/Chat.jsx")`
+       - `import("../pages/Reports.jsx")`
+       - `import("../pages/ReportDetail.jsx")`
+       - `import("../pages/ReportEdit.jsx")`
+       - `import("../pages/Branches.jsx")`
+       - `import("../pages/BranchDetail.jsx")`
+       - `import("../pages/Profile.jsx")`
+     - Replaced non-existent `NotFoundPage` with canonical `NotFound` from `client/src/pages/NotFound.jsx` for both `ErrorBoundary` and wildcard `{ path: "*", Component: NotFound }`.
+  2. *Synchronized Section 14.3.4 Directory Tree*:
+     - Added `ReportEdit.jsx` to the `pages/` tree in Section 14.3.4 for 100% cross-specification alignment with Section 10.1.1 and Section 10.6.4.
+  3. *Inscribed Invariant 12 in Planning Working Files*:
+     - Recorded Invariant 12 (Canonical Route Import Path Standard) into `task_plan.md`, `findings.md`, and `progress.md`.
+  4. *Verified Compilation & Background Tasks*:
+     - Checked codebase with `npm run verify` (100% pass, 0 errors).
+     - Confirmed 0 active background tasks.
+
+### Phase 1: Step 5 - Post-Git Merge & Cleanup
+- **Status:** complete
+- **Started:** 2026-09-21T01:17:00+03:00
+- **Completed:** 2026-09-21T01:19:00+03:00
+- Actions taken:
+  1. Staged all Phase 1 implementation files (`git add .`).
+  2. Committed with semantic commit message: `feat: phase 1 foundation monorepo scaffolding and option a landing page`.
+  3. Pushed feature branch `phase-1-foundation-scaffolding` to origin.
+  4. Switched to `main` branch and pulled latest from origin (`git checkout main; git pull origin main`).
+  5. Merged `phase-1-foundation-scaffolding` into `main` cleanly without conflicts.
+  6. Pushed updated `main` to origin (`git push origin main`).
+  7. Deleted local feature branch (`git branch -d phase-1-foundation-scaffolding`) and remote branch (`git push origin --delete phase-1-foundation-scaffolding`).
+  8. Verified clean working tree on `main` and synced state (`git status`, `git branch -vv`).
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Phase 0 Master Technical Specification is 100% complete across all 14 sections. User pre-scaffolded `client/*` structure, configuration, and visual assets (`hero.png`, `notFound_404.svg`, `favicon.svg`) registered in planning files. All changes left uncommitted in working directory per explicit user command ("don't commit"). |
-| Where am I going? | Awaiting user final review of Section 14 and explicit authorization to commit Section 14 on `phase-0-specification`, completing Phase 0 Specification. |
-| What's the goal? | Complete, defect-free 14-section master specification for MERN Stack Agentic AI Report Builder on branch `phase-0-specification` with zero unstated assumptions, ready for autonomous end-to-end implementation. |
-| What have I learned? | User has initialized `client/` containing port 3000 configuration, `.env`, and production assets (`hero.png` for Landing Hero, `notFound_404.svg` for 404 page); Phase 1 will directly adopt and integrate these assets into the frontend views. |
-| What have I done? | Formulated and appended Section 14 to `master_specification.md` (9,010 total lines); registered user's `client/*` foundation in `task_plan.md`, `findings.md`, and `progress.md`; preserved working tree uncommitted per user command. |
+| Where am I? | Phase 2 Step 1 (Pre-Git). Phase 1 fully merged into `main` and cleaned up. Ready to create and checkout `phase-2-authentication-session-profile`. |
+| Where am I going? | Phase 2 Step 2: Deep Codebase Analysis of Section 2 & Section 10/11 auth, sessions, cookies, and profile specifications. |
+| What's the goal? | Implement Phase 2: Authentication, Session Security & Consolidated Profile adhering strictly to Master Specification and all 12 quality invariants. |
+| What have I learned? | Phase 1 foundation is complete, locked, verified, and merged. Monorepo workspaces, core Express pipeline, MUI theme, LoadingSpinner, and Option A landing page are on main. |
+| What have I done? | Executed Step 5 merge and cleanup for Phase 1, pushed to origin/main, deleted feature branch. |
+
+
+
+
+
+
+
+
+
 
 
 

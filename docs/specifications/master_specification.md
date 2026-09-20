@@ -5273,7 +5273,7 @@ const router = createBrowserRouter([
   {
     path: "/",
     Component: App,
-    ErrorBoundary: NotFoundPage,
+    ErrorBoundary: NotFound,
     children: [
       // 1. PUBLIC ROUTES (Guarded by PublicRoute)
       {
@@ -5282,9 +5282,9 @@ const router = createBrowserRouter([
           {
             Component: PublicLayout,
             children: [
-              { index: true, lazy: async () => ({ Component: (await import("./pages/Landing/Landing")).default }) },
-              { path: "login", lazy: async () => ({ Component: (await import("./pages/Auth/Login")).default }) },
-              { path: "register", lazy: async () => ({ Component: (await import("./pages/Auth/Register")).default }) },
+              { index: true, lazy: async () => ({ Component: (await import("../pages/Landing.jsx")).default }) },
+              { path: "login", lazy: async () => ({ Component: (await import("../pages/Login.jsx")).default }) },
+              { path: "register", lazy: async () => ({ Component: (await import("../pages/Register.jsx")).default }) },
             ],
           },
         ],
@@ -5296,21 +5296,21 @@ const router = createBrowserRouter([
           {
             Component: AppShell,
             children: [
-              { path: "dashboard", lazy: async () => ({ Component: (await import("./pages/Dashboard/Dashboard")).default }) },
-              { path: "chat", lazy: async () => ({ Component: (await import("./pages/Chat/Chat")).default }) },
-              { path: "chat/:chatId", lazy: async () => ({ Component: (await import("./pages/Chat/Chat")).default }) },
-              { path: "reports", lazy: async () => ({ Component: (await import("./pages/Reports/ReportsList")).default }) },
-              { path: "reports/:reportId/details", lazy: async () => ({ Component: (await import("./pages/Reports/ReportDetails")).default }) },
-              { path: "reports/:reportId/edit", lazy: async () => ({ Component: (await import("./pages/Reports/ReportEdit")).default }) },
-              { path: "branches", lazy: async () => ({ Component: (await import("./pages/Branches/BranchesList")).default }) },
-              { path: "branches/:branchId/details", lazy: async () => ({ Component: (await import("./pages/Branches/BranchDetails")).default }) },
-              { path: "profile", lazy: async () => ({ Component: (await import("./pages/Profile/Profile")).default }) },
+              { path: "dashboard", lazy: async () => ({ Component: (await import("../pages/Dashboard.jsx")).default }) },
+              { path: "chat", lazy: async () => ({ Component: (await import("../pages/Chat.jsx")).default }) },
+              { path: "chat/:chatId", lazy: async () => ({ Component: (await import("../pages/Chat.jsx")).default }) },
+              { path: "reports", lazy: async () => ({ Component: (await import("../pages/Reports.jsx")).default }) },
+              { path: "reports/:reportId/details", lazy: async () => ({ Component: (await import("../pages/ReportDetail.jsx")).default }) },
+              { path: "reports/:reportId/edit", lazy: async () => ({ Component: (await import("../pages/ReportEdit.jsx")).default }) },
+              { path: "branches", lazy: async () => ({ Component: (await import("../pages/Branches.jsx")).default }) },
+              { path: "branches/:branchId/details", lazy: async () => ({ Component: (await import("../pages/BranchDetail.jsx")).default }) },
+              { path: "profile", lazy: async () => ({ Component: (await import("../pages/Profile.jsx")).default }) },
             ],
           },
         ],
       },
       // 3. WILDCARD CATCH-ALL
-      { path: "*", Component: NotFoundPage },
+      { path: "*", Component: NotFound },
     ],
   },
 ]);
@@ -5339,28 +5339,48 @@ const router = createBrowserRouter([
 
 ### 10.2 Public Shell Layout & Landing Page Specification (`PublicLayout.jsx` & `Landing.jsx`)
 
-#### 10.2.1 `PublicLayout` Architecture
-- **Fixed `MuiAppbar`**: Content-padding driven height (zero hardcoded height strings).
-  - **Left Section**: `Logo.jsx` (clickable vector icon + brand title, navigates to `/`).
-  - **Right Section**:
-    1. Theme Toggle button `[ 🌓 ]` (toggles light/dark theme in `themeSlice`).
-    2. `[ Login ]` button (`MuiButton`, `size="small"`, `variant="outlined"`, navigates to `/login`).
-    3. `[ Sign Up ]` button (`MuiButton`, `size="small"`, `variant="contained"`, navigates to `/register`).
-- **Sibling Container**: `<Outlet />` renders full-width beneath the AppBar with smooth route transitions.
+#### 10.2.1 `PublicLayout` Architecture & Fixed-Header Isolated Scroll
+- **Viewport Scroll Isolation Architectural Law**:
+  - The outer layout container is strictly locked to the viewport: `height: '100vh', maxHeight: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', bgcolor: 'background.default'`. Global body or HTML document scrolling is strictly prohibited.
+  - **Fixed `MuiAppbar`**: Pinned rigidly at the top with `flexShrink: 0` and `position: sticky`. The AppBar is strictly excluded from page scrolling and never pushed off-screen.
+    - **Left Section**: `Logo.jsx` (clickable vector icon + brand title, `size="small"`, navigates to `/`).
+    - **Right Section**:
+      1. Theme Toggle button `[ 🌓 ]` (`IconButton`, `size="small"`, toggles light/dark mode via `useThemeMode()`).
+      2. `[ Login ]` button (`MuiButton`, `size="small"`, `variant="outlined"`, navigates to `/login`).
+      3. `[ Sign Up ]` button (`MuiButton`, `size="small"`, `variant="contained"`, navigates to `/register`).
+- **Main Content Container (Sole Scrollable Area)**:
+  - Container: `<Box component="main" sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>`.
+  - Only the inner main content area scrolls when page content exceeds the viewport height.
+- **Reusable `LoadingSpinner` Route Transition Wrap**:
+  - The child `<Outlet />` is wrapped using React Router's `useNavigation()` hook:
+    ```jsx
+    {navigation.state === "loading" ? (
+      <LoadingSpinner message="Navigating..." height="100%" />
+    ) : (
+      <Outlet />
+    )}
+    ```
 
-#### 10.2.2 Option A Product Landing Page Specification (`Landing.jsx`)
-Organized into three dedicated, highly professional marketing sections:
-1. **Hero Section**:
-   - **Headline**: *"Standardized Daily Amharic Reporting for Multi-Branch Operations"*.
-   - **Subheadline**: *"Speak naturally in Amharic during branch audits. Automatically compile locked, company-ready daily reports with zero mechanical typing fatigue."*
-   - **Primary Action CTAs**:
-     - `[ Get Started Free ]` (`MuiButton`, `size="medium"`, `variant="contained"`, navigates to `/register`).
-     - `[ Sign In ]` (`MuiButton`, `size="medium"`, `variant="outlined"`, navigates to `/login`).
-2. **Feature Highlights (3 Cards)**:
-   - **Card 1: Spoken Amharic Narration**: Real-time acoustic capture powered by Addis AI speech recognition; spoken workplace technical terms naturally transliterated to Ge'ez (`ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`).
-   - **Card 2: Locked Corporate Report Engine**: Immutable Ethiopian dates (`DD-MM-YY`), 24-hour shift times, first-person active voice, and guaranteed clean plain-text delivery.
-   - **Card 3: Universal Multi-Branch Oversight**: Chronological visit itineraries, cross-branch issue matrices, and Google Docs/Sheets automated exports.
-3. **Footer**: Clean copyright notice, system version tag (`v1.0.0`), and privacy/terms statement.
+#### 10.2.2 Option A Product Landing Page Specification (`Landing.jsx`) & Domain Decomposition
+- **Domain Component Architecture Law**:
+  - `Landing.jsx` is strictly a lean page orchestrator (< 35 lines) that never houses flooded presentation markup.
+  - UI sections are cleanly decomposed into domain subdirectories under `client/src/components/landing/*` and imported into `Landing.jsx`:
+    1. **Hero Section (`client/src/components/landing/HeroSection.jsx`)**:
+       - **Headline**: *"Standardized Daily Amharic Reporting for Multi-Branch Operations"*.
+       - **Subheadline**: *"Speak naturally in Amharic during branch audits. Automatically compile locked, company-ready daily reports with zero mechanical typing fatigue."*
+       - **Badge**: *"Amharic-First Field Operations"* (`Chip`, `size="small"`, `variant="outlined"`).
+       - **Primary Action CTAs**:
+         - `[ Get Started Free ]` (`MuiButton`, `size="small"`, `variant="contained"`, navigates to `/register`).
+         - `[ Sign In ]` (`MuiButton`, `size="small"`, `variant="outlined"`, navigates to `/login`).
+       - **Visual Asset**: Prominently displays the dedicated pre-scaffolded `client/src/assets/hero.png` graphic with responsive max-height and theme-aware drop shadows.
+    2. **Feature Highlights (`client/src/components/landing/FeatureHighlights.jsx`)**:
+       - Header: *"Engineered for Real Field Supervisors"* with descriptive sub-title.
+       - Responsive 3-card grid (`xs: '1fr'`, `md: 'repeat(3, 1fr)'`) with hover elevation:
+         - **Card 1: Spoken Amharic Narration**: Real-time acoustic capture powered by Addis AI speech recognition; spoken workplace technical terms naturally transliterated to Ge'ez (`ዲፕ ፍራየር`, `ፒኦኤስ ማሽን`).
+         - **Card 2: Locked Corporate Report Engine**: Immutable Ethiopian dates (`DD-MM-YY`), 24-hour shift times, first-person active voice, and guaranteed clean plain-text delivery with zero markdown syntax.
+         - **Card 3: Universal Multi-Branch Oversight**: Chronological visit itineraries, cross-branch issue matrices, and Google Docs/Sheets automated exports.
+    3. **Landing Footer (`client/src/components/landing/LandingFooter.jsx`)**:
+       - Standardized footer with dynamic year copyright notice, version chip (`v1.0.0`, `size="small"`), and interactive Privacy Policy / Terms of Service links.
 
 ---
 
@@ -5554,7 +5574,7 @@ Complete catalog of the 13 standardized UI component wrappers:
 | **`MuiTextField`** | `reusable/MuiTextField.jsx` | Input wrapper with mandatory Start contextual icon and End clear icon `[ ✕ ]` / password visibility toggle `[ 👁️ ]`, plus inline red `helperText`. |
 | **`MuiDataGrid`** | `reusable/MuiDataGrid.jsx` | Wrapped `@mui/x-data-grid` configured with flex columns, empty state fallbacks, and row action menus. |
 | **`MuiRecorder`** | `reusable/MuiRecorder.jsx` | Web Audio API live recording orb with 120s timer countdown, frequency visualizer, and stop/cancel actions. |
-| **`LoadingSpinner`** | `reusable/LoadingSpinner.jsx` | Standardized centered loading spinner for async transitions and lazy-loaded routes. |
+| **`LoadingSpinner`** | `reusable/LoadingSpinner.jsx` | Standardized reusable loading indicator with `message` (default: `'Loading...'`), `height` (default: `'100%'`), and `size` (`'small'` [24px], `'medium'` [36px], `'large'` [48px]) props. Integrated into `PublicLayout` and `AppShell` navigation state wraps (`navigation.state === 'loading' ? <LoadingSpinner message="Navigating..." height="100%" /> : <Outlet />`). |
 | **`MuiDialog`** | `reusable/MuiDialog.jsx` | Accessible modal wrapper with standardized header (title + close button), scrollable `DialogContent`, and standardized `DialogActions` buttons with loading/disabled states. |
 | **`MuiSelect`** | `reusable/MuiSelect.jsx` | Dropdown select component with Start icon adornment, dropdown chevron, and inline `helperText`. |
 | **`MuiAutocomplete`** | `reusable/MuiAutocomplete.jsx` | Free-solo autocomplete with Start contextual icon, clear End adornment, and async search loading. |
@@ -5613,6 +5633,9 @@ client/src/
 | **Universal Start & End Adornments** | All input wrappers (`MuiTextField`, `MuiSelect`, `MuiAutocomplete`) feature contextual Start icons and functional End clear/toggle icons. |
 | **Standardized Dialog Actions** | `MuiDialog` provides standardized action buttons (`[ Cancel ]` and `[ Confirm/Save ]`) with loading and disabled states. |
 | **Domain-Based Architecture** | Features segregated into `features/auth`, `features/dashboard`, `features/reports`, `features/branches`, `features/chats`, and `features/theme`. |
+| **Domain Component Decomposition** | Page files (`client/src/pages/*`) are lean orchestrators (< 35 lines) that never house flooded presentation markup; decomposed into domain folders under `client/src/components/<domain>/*`. |
+| **Fixed-Header Isolated Scroll Architecture** | In both public (`PublicLayout`) and protected (`AppShell`) shells, the scrollable section is strictly confined to the main content container (`<Box component="main" sx={{ flexGrow: 1, overflowY: 'auto' }}>`). The `AppBar` must be rigid (`flexShrink: 0`) and never scroll with the page; the layout wrap must be locked (`height: 100vh; overflow: hidden`). |
+| **Reusable LoadingSpinner Route Wrap** | All shell layouts must wrap child `<Outlet />` instances with React Router's `useNavigation()`, displaying `<LoadingSpinner message="Navigating..." height="100%" />` during `loading` state transitions. |
 
 ---
 
@@ -8784,6 +8807,7 @@ Agentic-AI-Report-Builder/
         │   ├── BranchDetail.jsx                    <-- Single branch metrics & reports
         │   ├── Reports.jsx                         <-- Reports ledger, DataGrid & Filter Drawer
         │   ├── ReportDetail.jsx                    <-- Plain-text report view & 4 export channels
+        │   ├── ReportEdit.jsx                      <-- Dedicated 2-column report editor
         │   ├── Chat.jsx                            <-- Conversational agent & in-canvas 10-row form
         │   ├── Profile.jsx                         <-- Consolidated profile, security & preferences
         │   └── NotFound.jsx                        <-- 404 fallback page

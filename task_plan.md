@@ -8,15 +8,89 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Phase 0 Master Specification Complete. Awaiting user final review and commit authorization of Section 14 on `phase-0-specification` before project implementation kickoff.
+Execute Step 5 Post-Git Merge & Cleanup for Phase 1, then proceed to Phase 2 (Authentication, Session Security & Consolidated Profile).
 
 ## Current Phase
 
-Phase 14: Section 14 - Deployment, Environment Variables, Locked Dependencies & Execution Roadmap (Complete)
+Implementation Phase 2: Authentication, Session Security & Consolidated Profile (in_progress)
 
-## Phases
+## Implementation Phases (9 Full-Stack Vertical Slices)
 
-### Phase 1: Section 1 - System Vision, Operational Architecture & Constraints Registry
+### Phase 1: Foundation, Monorepo Scaffolding & Option A Landing Page
+- [x] Step 1 (Pre-Git): Verify clean tree on main, check branch tracking, pull main, checkout `phase-1-foundation-scaffolding`
+- [x] Step 2 (Deep Codebase Analysis): Review Section 14 monorepo architecture, pre-scaffolded client assets, dependencies, and backend pipeline
+- [x] Step 3 (Execution & Validation):
+  - [x] Create root `package.json` with npm workspaces (`backend`, `client`) and `concurrently`
+  - [x] Initialize `backend/package.json` with locked dependencies
+  - [x] Initialize `backend/scripts/verifyCodebase.js` and `backend/scripts/killPort.js`
+  - [x] Implement backend core infrastructure: `server.js`, `app.js` (11-step pipeline), `config/env.js` (frozen), `config/db.js` (exponential backoff), `config/logger.js` (Winston 30d), `config/httpStatus.js` (frozen)
+  - [x] Implement backend error hierarchy: `errors/CustomError.js`, `errors/index.js`, `middlewares/errorHandler.js`
+  - [x] Implement backend middleware: `middlewares/requestLogger.js` (Morgan/Winston), `middlewares/rateLimiter.js`
+  - [x] Implement initial health route: `routes/index.js` (`GET /health`, `GET /api/v1/health`)
+  - [x] Install backend dependencies via npm
+  - [x] Update `client/package.json` with locked dependencies
+  - [x] Create `client/scripts/cleanDist.js`
+  - [x] Update `client/vite.config.js` (`strictPort: true`)
+  - [x] Install client dependencies via npm
+  - [x] Implement `client/src/config/env.js` (frozen)
+  - [x] Implement `client/src/theme/typography.js` (Noto Sans Ethiopic 17px, 1.75 line-height) and `client/src/theme/AppTheme.jsx`
+  - [x] Implement `client/src/components/reusable/Logo.jsx` and `client/src/components/reusable/MuiButton.jsx`
+  - [x] Implement `client/src/layouts/PublicLayout.jsx` with AppBar (Theme toggle, Login, Sign Up) and `<Outlet />`
+  - [x] Implement Option A `client/src/pages/Landing.jsx` with Hero section (using `hero.png`), 3 highlight cards, and responsive typography
+  - [x] Configure `client/src/routes/router.jsx` and `client/src/App.jsx`
+  - [x] Verify backend: `node scripts/verifyCodebase.js`
+  - [x] Verify client build & cleanup: `npm run verify --workspace=client`
+  - [x] Launch application and conduct Mandatory Browser Control Session (audit visual polish, responsive `xs`/`sm`/`md+`, 0 console errors)
+  - [x] Align entire `client/src/*` with newly introduced `client/src/theme/*` setup (remediate datePickers & charts import bugs, enforce universal small sizing & JSDoc, update layouts & pages)
+- [x] Step 4 (User Review & Approval): Present walkthrough, update planning files, user confirmed and commanded merge to main
+- [x] Step 5 (Post-Git Merge & Cleanup): Stage, commit, push, merge to main, delete feature branch
+- **Status:** complete
+
+### Phase 2: Authentication, Session Security & Consolidated Profile
+- [ ] Backend: User & RefreshToken models, auth controller/services, dual httpOnly cookies, token rotation, `testAuth.js`
+- [ ] Frontend: `authSlice.js`, `apiSlice.js`, `Login.jsx`, `Register.jsx`, `PublicRoute`, `ProtectedRoute`, `AppShell.jsx`, `Profile.jsx`
+- **Status:** pending
+
+### Phase 3: Branch Management & Reusable BranchDialog
+- [ ] Backend: Branch schema, CRUD endpoints, soft-archive & restore, `testBranches.js`
+- [ ] Frontend: `branchSlice.js`, `Branches.jsx`, `BranchDialog.jsx`, `BranchDetail.jsx`
+- **Status:** pending
+
+### Phase 4: Amharic Report Engine & In-Canvas 10-Row Form
+- [ ] Backend: Report schema, `reportFormatter.js`, `transliterationEngine.js`, `testReports.js`
+- [ ] Frontend: `/chat` view with centered composer, in-canvas 10-row form, live Amharic preview
+- **Status:** pending
+
+### Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation
+- [ ] Backend: FFmpeg mono 16kHz WAV pipeline, `addisai` SDK, audio clip upload, ephemeral transcription
+- [ ] Frontend: Web Audio API recording orb, 120s timer, in-memory Blob player `MuiAudioPlayer.jsx`
+- **Status:** pending
+
+### Phase 6: Conversational Agent, Gemini Multi-Tier Fallback & SSE Streaming
+- [ ] Backend: `agentService.js`, 11-tool execution loop, SSE endpoint, abort protocol, `testChats.js`
+- [ ] Frontend: `<ChatBox>` canvas, SSE adapter, Model Selector Popover, Preset Selector Dialog
+- **Status:** pending
+
+### Phase 7: Reports Ledger, Details View & Multi-Channel Export Actions
+- [ ] Backend: Reports listing, pagination, filters, Google Docs export via Drive API
+- [ ] Frontend: `Reports.jsx`, `ReportDetail.jsx`, clipboard copy, .txt download, print-PDF, Google Docs export
+- **Status:** pending
+
+### Phase 8: Dashboard Visual Analytics & Multi-Entity Global Search Dialog
+- [ ] Backend: Dashboard KPI aggregations, 4 chart pipelines, global search, `testDashboard.js`, `testSearch.js`
+- [ ] Frontend: `Dashboard.jsx` (KPI cards, 4 charts), `GlobalSearchDialog.jsx`
+- **Status:** pending
+
+### Phase 9: Background Sweepers, Quality Gates & Project Handover
+- [ ] Backend: `sweeperService.js` (daily 00:00 UTC purge), master test runner `testAll.js`
+- [ ] Frontend: Final build verification, multi-viewport audit, zero console error gate
+- **Status:** pending
+
+---
+
+## Historical Phase 0: Master Technical Specification Phases (Completed)
+
+### Phase 0.1: Section 1 - System Vision, Operational Architecture & Constraints Registry
 - [x] Detail product philosophy, supervisor workflow, Amharic-first domain, and delivery model
 - [x] Document strict scope boundaries and architecture constraints
 - [x] Detail Section 1.4.7 Mongoose ClientSession & Atomic Transaction Architectural Law
@@ -232,4 +306,19 @@ Phase 14: Section 14 - Deployment, Environment Variables, Locked Dependencies & 
 - Each section is detailed in Plan Mode until user confirmation, then output in Build Mode and committed.
 - Never commit directly to `main` and never merge.
 - `client/*` is pre-created by the user with existing assets (`hero.png`, `notFound_404.svg`, `favicon.svg`) and `.env` (`VITE_API_BASE_URL`, `VITE_APP_NAME`); Phase 1 implementation will incorporate these assets directly.
+- **12 Strict Quality & Architectural Invariants (Never To Be Repeated)**:
+  1. *Zero Bare React Imports*: Modern React (Vite JSX transform) does not need `import React from 'react'`. Use named imports only.
+  2. *Comprehensive JSDoc Everywhere*: Every file must have `@module`; every component, function, hook, typedef, middleware, and route handler must have full JSDoc tags (`@param`, `@returns`, `@type`, `@typedef`).
+  3. *Mandatory Asset Integration*: Dedicated pre-scaffolded visual assets (`client/src/assets/notFound_404.svg`, `hero.png`) must be styled, responsive, and prominently mounted in dedicated views (`NotFound.jsx` in `PublicLayout`).
+  4. *Zero Unused Imports*: No unconsumed imported symbols (e.g. `CustomError` in `errorHandler.js`).
+  5. *Zero `.npmrc` Policy*: Never generate `.npmrc` in the repository. Handle dependencies natively.
+  6. *Background Task Discipline*: Cleanly terminate all background server and daemon processes when handing control to user. Keep running tasks at 0 so ports are completely available.
+  7. *Zero Commit Communication Invariant*: Never prompt for commits, never ask about committing, and never commit unless explicitly commanded by user.
+  8. *Automated Pre-Dev Port Freeing & Defensive Shutdown*: Automatically run `killPort.js` in all `dev` scripts to guarantee clean port acquisition on 4000 & 3000, and guard `server.close()` with `if (server.listening)` to prevent `ERR_SERVER_NOT_RUNNING`.
+  9. *Domain Component Decomposition*: Never flood `client/src/pages/*` with UI code. Pages act strictly as lean orchestrators (< 35 lines) that import cleanly decomposed domain components from `client/src/components/<domain>/*`.
+  10. *Reusable LoadingSpinner Navigation Wrap*: Standardize `LoadingSpinner.jsx` in `client/src/components/reusable/LoadingSpinner.jsx` (`message`, `height`, `size` props) and wrap `<Outlet />` in all layouts using `useNavigation()`: `{navigation.state === "loading" ? <LoadingSpinner message="Navigating..." height="100%" /> : <Outlet />}`.
+  11. *Fixed-Header Isolated Scroll Architecture*: In both public and protected shells, only the inner main content area (`<Box component="main" sx={{ flexGrow: 1, overflowY: 'auto' }}>`) scrolls. The `AppBar` must remain rigid (`flexShrink: 0; position: sticky`) and the outer layout locked (`height: 100vh; maxHeight: 100vh; overflow: hidden; display: flex; flex-direction: column`). The AppBar must never scroll with the page.
+  12. *Canonical Route Import Path Standard*: All route definitions in `router.jsx` and Section 10.1.1 must use exact canonical relative paths (`../pages/<Name>.jsx`). Never use fictitious nested directories (e.g. `./pages/Landing/Landing`, `./pages/Auth/Login`). Wildcard error boundary is `NotFound` from `client/src/pages/NotFound.jsx` (not `NotFoundPage`).
+
+
 

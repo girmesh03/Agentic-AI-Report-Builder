@@ -224,10 +224,64 @@ The user has pre-initialized the `client/` workspace containing core configurati
   - Locked frontend dependencies from Section 14.3.2 will be installed into `client/package.json`.
   - `hero.png` and `notFound_404.svg` will be directly imported into `Landing.jsx` and `NotFound.jsx` respectively.
 
+## Phase 1 Implementation Findings & Technical Resolutions
+
+- **`addisai` Package Version**: `addisai@^1.0.0` in the preliminary manifest does not exist on npm (published versions are `0.1.1`, `0.1.2`, and `0.2.0`). Locked to `addisai@^0.2.0` in `backend/package.json`.
+- **`@mui/x-chat` Alpha & Peer Dependency Resolution**: `@mui/x-chat@^0.1.0` does not exist on npm; latest is `@mui/x-chat@^9.0.0-alpha.18`, which specifies peer dependencies of `@mui/material@^7.3.0 || ^9.0.0`. Configured root `.npmrc` with `legacy-peer-deps=true` to enable clean monorepo installation alongside `@mui/material@^6.4.0`.
+- **Dual React Version Conflict Resolution**: The user's pre-scaffolded `client/node_modules/` contained React `19.3.0`, while root workspaces required React `18.3.1`. This caused an `Invalid hook call (Cannot read properties of null reading 'useContext')` in `react-router`. Completely removed `client/node_modules/` and `client/package-lock.json`, standardizing on unified React `18.3.1` across the monorepo root.
+- **Chrome Headless Sandbox on Windows**: Automated browser audit script requires `--no-sandbox` when running on Windows to prevent `0x5 Access is denied` errors when writing visual verification artifacts.
+- **Port Allocation**: Port 3000 (Vite client) and Port 4000 (Express backend) are canonical. Port 51585 is an ephemeral Chrome DevTools Protocol socket generated on-the-fly during headless browser audits, not an application service.
+- **Universal MUI `size='small'` & Icon Sizing Law**: Every MUI component that accepts a `size` prop (Buttons, IconButtons, Inputs, Selects, Chips, Switches, Checkboxes, Radios, Tables, Pagination, etc.) must be configured with `defaultProps: { size: 'small' }` at the theme level (`AppTheme.jsx`) and explicitly use `size="small"` and `fontSize="small"` across all UI components and icons.
+
+## Strict Quality & Architectural Invariants (Never To Be Repeated)
+
+1. **Zero Bare `React` Import Invariant**:
+   Modern React (React 18+ with Vite JSX transform) does NOT require `import React from 'react'`. Bare `React` imports are strictly prohibited across all frontend files. Only explicitly used named hooks and utilities (e.g. `import { useState, useEffect, useMemo, forwardRef } from 'react'`) may be imported.
+2. **Comprehensive JSDoc Documentation Standard**:
+   JSDoc must be applied thoroughly and rigorously across 100% of the codebase without exception:
+   - Every file requires a `@module` header with description.
+   - Every component, hook, utility, middleware, route handler, and configuration export requires complete JSDoc annotations including `@function` / `@component`, `@param`, `@returns`, `@type`, and `@typedef`.
+3. **Mandatory Pre-Scaffolded Asset Integration**:
+   Dedicated assets provided in the repository (such as `client/src/assets/notFound_404.svg` and `hero.png`) must be prominently styled, responsive, properly framed, and actively integrated into their dedicated views (`NotFound.jsx` nested within `PublicLayout` catch-all route).
+4. **Zero Unused Imports Invariant**:
+   Every imported identifier must be actively referenced and consumed within the file. Unused imports (such as importing `CustomError` in `errorHandler.js` without using it) are strictly prohibited.
+5. **Prohibition of `.npmrc` Overrides**:
+   Never generate or commit an `.npmrc` file in the workspace. All dependency management, workspaces, and configurations must be defined natively in `package.json`.
+6. **Rigorous Background Task Lifecycle Management**:
+   Never leave background daemon or helper scripts (such as CDP connection wrappers, dev servers, or temp processes) running in the background after their immediate task is complete. Terminate all ephemeral helper tasks immediately. When handing control to the user, ensure all background tasks are cleanly stopped so local ports (3000, 4000, 9222) are 100% free for the user's terminal commands.
+7. **Commit Communication Invariant**:
+   Never prompt the user about committing, never ask if changes should be committed, and never execute git commit operations unless the user explicitly and directly instructs to do so.
+8. **Automated Port Conflict Pre-Termination & Defensive Shutdown**:
+   - Every `dev` script in root, backend, and client `package.json` runs `killPort.js` before booting servers to guarantee clean port acquisition on 4000 and 3000.
+   - `server.js` must guard `server.close()` with `if (server.listening)` before invoking shutdown, preventing Node.js `ERR_SERVER_NOT_RUNNING` exceptions if port binding fails during boot.
+9. **Domain Component Decomposition Invariant**:
+   - Never flood `client/src/pages/*` with UI presentation markup or heavy JSX.
+   - Pages must remain lean orchestrators (< 35 lines) that import cleanly decomposed domain components from `client/src/components/<domain>/*` (e.g. `client/src/components/landing/HeroSection.jsx`, `FeatureHighlights.jsx`, `LandingFooter.jsx`).
+10. **Reusable LoadingSpinner Navigation Invariant**:
+   - Create and standardize `LoadingSpinner.jsx` in `client/src/components/reusable/LoadingSpinner.jsx` (`message`, `height`, `size` props) with full JSDoc.
+   - All layout shells (`PublicLayout`, `AppShell`) must wrap `<Outlet />` using React Router's `useNavigation()` state:
+     ```jsx
+     {navigation.state === "loading" ? (
+       <LoadingSpinner message="Navigating..." height="100%" />
+     ) : (
+       <Outlet />
+     )}
+     ```
+11. **Fixed-Header Isolated Scroll Architecture Invariant**:
+   - In both public and protected layout shells, the page header (`AppBar`) must be rigid (`flexShrink: 0`, `position: sticky`) and strictly excluded from scrolling.
+   - The outer layout wrap must be locked (`height: 100vh; maxHeight: 100vh; overflow: hidden; display: flex; flex-direction: column`).
+   - The scrollable viewport is strictly confined to the inner main content area (`<Box component="main" sx={{ flexGrow: 1, overflowY: 'auto' }}>`). The AppBar must never scroll off-screen with the page.
+12. **Canonical Route Import Path Standard**:
+   - All route definitions in `client/src/routes/router.jsx` and Section 10.1.1 must import page components using their exact canonical relative paths (`../pages/<Name>.jsx`, e.g. `../pages/Landing.jsx`, `../pages/Login.jsx`, `../pages/Register.jsx`, `../pages/Dashboard.jsx`, `../pages/Branches.jsx`, `../pages/BranchDetail.jsx`, `../pages/Reports.jsx`, `../pages/ReportDetail.jsx`, `../pages/ReportEdit.jsx`, `../pages/Chat.jsx`, `../pages/Profile.jsx`, `../pages/NotFound.jsx`).
+   - Never use non-existent nested page subdirectories (e.g. `./pages/Landing/Landing`, `./pages/Auth/Login`, `./pages/Reports/ReportsList`, `./pages/Branches/BranchesList`).
+   - The wildcard fallback and error boundary component is named `NotFound` from `client/src/pages/NotFound.jsx` (never `NotFoundPage`).
+
 ## Resources & Reference Paths
 
 - Local `.env`: `backend/.env` (pre-configured with Mongo URI, Addis AI, Gemini, Nvidia, FFmpeg paths).
 - Client `.env`: `client/.env` (`VITE_API_BASE_URL`, `VITE_APP_NAME`).
 - Addis AI SDK: `https://www.npmjs.com/package/addisai` and `https://docs.addisassistant.com/docs/get-started/introduction`.
+
+
 
 
