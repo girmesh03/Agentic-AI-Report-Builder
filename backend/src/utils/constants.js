@@ -80,6 +80,20 @@ export const ACCOUNT_DELETION_SENTINEL = 'DELETE';
  */
 export const ETHIOPIAN_PHONE_REGEX = /^\+251[0-9]{9}$/;
 
+/**
+ * Branch validation and pagination constraints.
+ * @constant {object}
+ */
+export const BRANCH_CONFIG = Object.freeze({
+  NAME_MIN_LENGTH: 1,
+  NAME_MAX_LENGTH: 100,
+  ADDRESS_MAX_LENGTH: 250,
+  DEFAULT_PAGE: 1,
+  DEFAULT_LIMIT: 10,
+  MAX_LIMIT: 100,
+  ALLOWED_SORTS: Object.freeze(['name', '-name', 'createdAt', '-createdAt']),
+});
+
 export default {
   BCRYPT_CONFIG,
   TOKEN_EXPIRIES,
@@ -89,4 +103,5 @@ export default {
   USER_ROLES,
   ACCOUNT_DELETION_SENTINEL,
   ETHIOPIAN_PHONE_REGEX,
+  BRANCH_CONFIG,
 };

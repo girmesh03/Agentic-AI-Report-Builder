@@ -8,6 +8,7 @@ import { HTTP_STATUS } from '../config/httpStatus.js';
 
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
+import branchRoutes from './branchRoutes.js';
 
 export const apiRouter = Router();
 
@@ -31,4 +32,5 @@ const healthHandler = (req, res) => {
 apiRouter.get('/health', healthHandler);
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/users', userRoutes);
+apiRouter.use('/branches', branchRoutes);
 

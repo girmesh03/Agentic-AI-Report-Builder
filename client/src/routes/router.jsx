@@ -73,6 +73,18 @@ export const router = createBrowserRouter([
                 }),
               },
               {
+                path: 'branches/:branchId/details',
+                lazy: async () => ({
+                  Component: (await import('../pages/BranchDetail.jsx')).default,
+                }),
+              },
+              {
+                path: 'branches/:branchId',
+                lazy: async () => ({
+                  Component: (await import('../pages/BranchDetail.jsx')).default,
+                }),
+              },
+              {
                 path: 'reports',
                 lazy: async () => ({
                   Component: (await import('../pages/Reports.jsx')).default,
