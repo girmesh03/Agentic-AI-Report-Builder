@@ -16,7 +16,7 @@ import { Outlet, useNavigate, useNavigation } from 'react-router';
 import Logo from '../components/reusable/Logo.jsx';
 import MuiButton from '../components/reusable/MuiButton.jsx';
 import LoadingSpinner from '../components/reusable/LoadingSpinner.jsx';
-import { useThemeMode } from '../theme/AppTheme.jsx';
+import { useThemeMode } from '../theme/useThemeMode.js';
 
 /**
  * Public Layout component framing unauthenticated marketing and auth views.

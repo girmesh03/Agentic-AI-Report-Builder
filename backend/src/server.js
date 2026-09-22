@@ -5,18 +5,23 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import app from './app.js';
 import { env } from './config/env.js';
 import { connectDB } from './config/db.js';
 import { logger } from './config/logger.js';
 import { initSweeperTasks } from './services/sweeperService.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const backendRoot = path.resolve(__dirname, '..');
+
 // Phase 1: Defensive Pre-boot Directory Initialization
 const requiredDirectories = [
-  path.resolve('logs'),
-  path.resolve('uploads', 'avatars'),
-  path.resolve('uploads', 'audio'),
-  path.resolve('uploads', 'temp'),
+  path.resolve(backendRoot, 'logs'),
+  path.resolve(backendRoot, 'uploads', 'avatars'),
+  path.resolve(backendRoot, 'uploads', 'audio'),
+  path.resolve(backendRoot, 'uploads', 'temp'),
 ];
 
 requiredDirectories.forEach((dir) => {

@@ -6,6 +6,9 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { HTTP_STATUS } from '../config/httpStatus.js';
 
+import authRoutes from './authRoutes.js';
+import userRoutes from './userRoutes.js';
+
 export const apiRouter = Router();
 
 /**
@@ -26,3 +29,6 @@ const healthHandler = (req, res) => {
 };
 
 apiRouter.get('/health', healthHandler);
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/users', userRoutes);
+

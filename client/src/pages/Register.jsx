@@ -1,40 +1,24 @@
 /**
  * @module pages/Register
- * @description Register page placeholder for Phase 1 (full implementation in Phase 2).
+ * @description Lean orchestrator page rendering the RegisterForm domain component.
  */
-import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import { useNavigate } from 'react-router';
-import MuiButton from '../components/reusable/MuiButton.jsx';
+import Box from '@mui/material/Box';
+import RegisterForm from '../components/auth/RegisterForm.jsx';
 
 /**
- * Sign Up page view placeholder for Phase 1.
- * Will host new user registration, validation, and session generation in Phase 2.
+ * Registration page orchestrator hosting the decomposed RegisterForm.
+ * Remains a lean page shell (< 35 lines) per Invariant 9.
  *
  * @function Register
- * @returns {JSX.Element} The rendered registration placeholder card view.
+ * @returns {JSX.Element} The rendered registration page view.
  */
 export const Register = () => {
-  const navigate = useNavigate();
-
   return (
-    <Container maxWidth="xs" sx={{ py: 8 }}>
-      <Card>
-        <CardContent sx={{ p: 4, textAlign: 'center' }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 2 }}>
-            Sign Up
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            User registration and profile creation will be fully activated in Phase 2.
-          </Typography>
-          <MuiButton variant="outlined" size="small" onClick={() => navigate('/')}>
-            Back to Home
-          </MuiButton>
-        </CardContent>
-      </Card>
+    <Container maxWidth="sm" sx={{ py: { xs: 4, sm: 8 } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+        <RegisterForm />
+      </Box>
     </Container>
   );
 };

@@ -2,7 +2,10 @@
  * @module config/env
  * @description Centralized, immutable backend environment configuration.
  */
+import path from 'node:path';
 import dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(process.cwd(), 'backend/.env') });
 dotenv.config();
 
 const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;

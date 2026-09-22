@@ -111,12 +111,16 @@ export const colorSchemes = {
       },
       text: {
         primary: "#0f172a",
-        secondary: gray[500],
+        secondary: gray[600],
         warning: orange[500],
+        disabled: alpha("#0f172a", 0.6),
       },
       action: {
         hover: alpha(gray[200], 0.5),
         selected: alpha(gray[200], 0.6),
+        disabled: alpha("#0f172a", 0.6),
+        disabledBackground: alpha(gray[300], 0.6),
+        disabledOpacity: 0.65,
       },
       baseShadow:
         "rgba(0, 0, 0, 0.05) 0px 4px 16px 0px, rgba(0, 0, 0, 0.05) 0px 8px 16px -5px",
@@ -162,10 +166,14 @@ export const colorSchemes = {
       text: {
         primary: "#ffffff",
         secondary: "#92a4c9",
+        disabled: alpha("#ffffff", 0.65),
       },
       action: {
         hover: alpha(gray[700], 0.4),
         selected: alpha(gray[700], 0.5),
+        disabled: alpha("#ffffff", 0.65),
+        disabledBackground: alpha(gray[700], 0.6),
+        disabledOpacity: 0.65,
       },
       baseShadow:
         "rgba(0, 0, 0, 0.4) 0px 4px 16px 0px, rgba(0, 0, 0, 0.5) 0px 8px 16px -5px",

@@ -664,8 +664,8 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 - **Multi-Device Support**: Only the active device's session row is revoked. Other devices belonging to the user maintain distinct token families and remain logged in.
 - Returns HTTP 200 `OK` (`{ success: true, message: "Logged out successfully", data: null }`).
 
-#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue (`client/src/features/api/apiSlice.js`)
-- Implemented inside `client/src/features/api/apiSlice.js` using a custom RTK Query base query wrapper:
+#### 2.4.5 Client-Side 401 Interceptor & Refresh Queue (`client/src/redux/features/api/apiSlice.js`)
+- Implemented inside `client/src/redux/features/api/apiSlice.js` using a custom RTK Query base query wrapper:
   ```javascript
   import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
   import { Mutex } from 'async-mutex';
@@ -5582,35 +5582,36 @@ Complete catalog of the 13 standardized UI component wrappers:
 
 ---
 
-### 10.9 Domain-Based Redux Architecture (`client/src/features/*`)
+### 10.9 Domain-Based Redux Architecture (`client/src/redux/*`)
 
 State management follows a clean feature-based architecture powered by `@reduxjs/toolkit` and RTK Query:
 
 ```
 client/src/
-├── app/
-│   ├── store.js                   # Configures Redux store with root reducer & redux-persist
-│   └── rootReducer.js             # Combines all domain feature slices
-└── features/
-    ├── api/
-    │   └── apiSlice.js            # Base RTK Query slice with baseQueryWithReauth & async-mutex
-    ├── auth/
-    │   ├── authSlice.js           # User state, token status
-    │   └── authApi.js             # Login, register, logout, profile endpoints
-    ├── dashboard/
-    │   ├── dashboardSlice.js      # Dashboard filter dates, active metric views
-    │   └── dashboardApi.js        # KPI cards and 4 @mui/x-charts metrics endpoints
-    ├── reports/
-    │   ├── reportsSlice.js        # Filter parameters, active report draft
-    │   └── reportsApi.js          # Report CRUD, compilation, PDF print, Google Docs export
-    ├── branches/
-    │   ├── branchesSlice.js       # View mode (grid/card), active branch filters
-    │   └── branchesApi.js         # Branch CRUD endpoints
-    ├── chats/
-    │   ├── chatsSlice.js          # Active thread ID, SSE stream status, abort controller
-    │   └── chatsApi.js            # Chat threads, messages, stream connection, abort
-    └── theme/
-        └── themeSlice.js          # Theme mode (light/dark)
+└── redux/
+    ├── app/
+    │   ├── store.js                   # Configures Redux store with root reducer & redux-persist
+    │   └── rootReducer.js             # Combines all domain feature slices
+    └── features/
+        ├── api/
+        │   └── apiSlice.js            # Base RTK Query slice with baseQueryWithReauth & async-mutex
+        ├── auth/
+        │   ├── authSlice.js           # User state, token status
+        │   └── authApi.js             # Login, register, logout, profile endpoints
+        ├── dashboard/
+        │   ├── dashboardSlice.js      # Dashboard filter dates, active metric views
+        │   └── dashboardApi.js        # KPI cards and 4 @mui/x-charts metrics endpoints
+        ├── reports/
+        │   ├── reportsSlice.js        # Filter parameters, active report draft
+        │   └── reportsApi.js          # Report CRUD, compilation, PDF print, Google Docs export
+        ├── branches/
+        │   ├── branchesSlice.js       # View mode (grid/card), active branch filters
+        │   └── branchesApi.js         # Branch CRUD endpoints
+        ├── chats/
+        │   ├── chatsSlice.js          # Active thread ID, SSE stream status, abort controller
+        │   └── chatsApi.js            # Chat threads, messages, stream connection, abort
+        └── theme/
+            └── themeSlice.js          # Theme mode (light/dark)
 ```
 
 ---
@@ -5632,7 +5633,7 @@ client/src/
 | **Universal `xs` Control Iconification** | All text-labeled buttons and compound controls collapse into compact icon-only buttons with tooltips on `xs` (<600px). |
 | **Universal Start & End Adornments** | All input wrappers (`MuiTextField`, `MuiSelect`, `MuiAutocomplete`) feature contextual Start icons and functional End clear/toggle icons. |
 | **Standardized Dialog Actions** | `MuiDialog` provides standardized action buttons (`[ Cancel ]` and `[ Confirm/Save ]`) with loading and disabled states. |
-| **Domain-Based Architecture** | Features segregated into `features/auth`, `features/dashboard`, `features/reports`, `features/branches`, `features/chats`, and `features/theme`. |
+| **Domain-Based Architecture** | Features segregated into `client/src/redux/features/*` (auth, dashboard, reports, branches, chats, and theme) and store in `client/src/redux/app/*`. |
 | **Domain Component Decomposition** | Page files (`client/src/pages/*`) are lean orchestrators (< 35 lines) that never house flooded presentation markup; decomposed into domain folders under `client/src/components/<domain>/*`. |
 | **Fixed-Header Isolated Scroll Architecture** | In both public (`PublicLayout`) and protected (`AppShell`) shells, the scrollable section is strictly confined to the main content container (`<Box component="main" sx={{ flexGrow: 1, overflowY: 'auto' }}>`). The `AppBar` must be rigid (`flexShrink: 0`) and never scroll with the page; the layout wrap must be locked (`height: 100vh; overflow: hidden`). |
 | **Reusable LoadingSpinner Route Wrap** | All shell layouts must wrap child `<Outlet />` instances with React Router's `useNavigation()`, displaying `<LoadingSpinner message="Navigating..." height="100%" />` during `loading` state transitions. |
@@ -7812,7 +7813,7 @@ export const initSweeperTasks = () => {
 
 ---
 
-### 12.11 Client-Side RTK Query Re-Auth & Native Fetch Client (`client/src/features/api/apiSlice.js`)
+### 12.11 Client-Side RTK Query Re-Auth & Native Fetch Client (`client/src/redux/features/api/apiSlice.js`)
 
 Client-server communication is handled via a customized RTK Query base query wrapper that handles transparent JWT token refresh with concurrency protection via `async-mutex`.
 
@@ -7825,7 +7826,7 @@ When a protected request receives an HTTP 401 response:
 5. **Infinite Loop Prevention**: If `/api/v1/auth/refresh` itself returns 401, re-auth is immediately aborted and the user is logged out without retry.
 
 ```javascript
-// client/src/features/api/apiSlice.js
+// client/src/redux/features/api/apiSlice.js
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import { Mutex } from 'async-mutex';
 import { env } from '../../config/env.js';
@@ -7936,7 +7937,7 @@ export const apiClient = async (endpoint, options = {}) => {
 | **Universal Form Fields `React.forwardRef`** | Reusable input components wrapped in `React.forwardRef` with explicit `displayName` for `react-hook-form` ref integration. |
 | **Domain `CustomError` Hierarchy** | All operational errors inherit from `CustomError` and format into `{ success: false, message, data: null, details }`. |
 | **Daily 00:00 UTC 30-Day Sweeper** | `node-cron` job (`0 0 * * *`) purges soft-archived reports, cascades clips in a transaction, and deletes disk files. |
-| **Mutex-Locked 401 Token Refresh** | `client/src/features/api/apiSlice.js` queues concurrent queries via `async-mutex` during token refresh; zero toast on 401. |
+| **Mutex-Locked 401 Token Refresh** | `client/src/redux/features/api/apiSlice.js` queues concurrent queries via `async-mutex` during token refresh; zero toast on 401. |
 | **Zero Orphaned Files Guarantee** | Pre-boot defensive directory checks and automated 24-hour temporary upload directory cleanups. |
 
 ---
@@ -8665,8 +8666,15 @@ The application relies strictly on locked, approved dependencies. **Installing a
     "react-toastify": "^11.0.3"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.7"
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
+    "globals": "^17.11.0",
+    "vite": "^8.2.2"
   }
 }
 ```
@@ -8811,29 +8819,33 @@ Agentic-AI-Report-Builder/
         │   ├── Chat.jsx                            <-- Conversational agent & in-canvas 10-row form
         │   ├── Profile.jsx                         <-- Consolidated profile, security & preferences
         │   └── NotFound.jsx                        <-- 404 fallback page
-        ├── features/
-        │   ├── api/
-        │   │   └── apiSlice.js                     <-- RTK Query baseQueryWithReauth with async-mutex
-        │   ├── auth/
-        │   │   ├── authSlice.js                    <-- Auth state & session reducers
-        │   │   └── authApi.js                      <-- Auth RTK Query endpoints
-        │   ├── dashboard/
-        │   │   ├── dashboardSlice.js               <-- Dashboard state slice
-        │   │   └── dashboardApi.js                 <-- Dashboard RTK Query endpoints
-        │   ├── branches/
-        │   │   ├── branchSlice.js                  <-- Branches state slice
-        │   │   └── branchApi.js                    <-- Branches RTK Query endpoints
-        │   ├── reports/
-        │   │   ├── reportSlice.js                  <-- Reports state slice
-        │   │   └── reportApi.js                    <-- Reports RTK Query endpoints
-        │   ├── chats/
-        │   │   ├── chatSlice.js                    <-- Chats & streaming state slice
-        │   │   └── chatApi.js                      <-- Chats RTK Query endpoints
-        │   ├── presets/
-        │   │   ├── presetSlice.js                  <-- Presets state slice
-        │   │   └── presetApi.js                    <-- Presets RTK Query endpoints
-        │   └── theme/
-        │       └── themeSlice.js                   <-- Theme mode & font size delta state
+        ├── redux/
+        │   ├── app/
+        │   │   ├── store.js                        <-- Redux store with root reducer & persist
+        │   │   └── rootReducer.js                  <-- Combines all domain feature slices
+        │   └── features/
+        │       ├── api/
+        │       │   └── apiSlice.js                 <-- RTK Query baseQueryWithReauth with async-mutex
+        │       ├── auth/
+        │       │   ├── authSlice.js                <-- Auth state & session reducers
+        │       │   └── authApi.js                  <-- Auth RTK Query endpoints
+        │       ├── dashboard/
+        │       │   ├── dashboardSlice.js           <-- Dashboard state slice
+        │       │   └── dashboardApi.js             <-- Dashboard RTK Query endpoints
+        │       ├── branches/
+        │       │   ├── branchSlice.js              <-- Branches state slice
+        │       │   └── branchApi.js                <-- Branches RTK Query endpoints
+        │       ├── reports/
+        │       │   ├── reportSlice.js              <-- Reports state slice
+        │       │   └── reportApi.js                <-- Reports RTK Query endpoints
+        │       ├── chats/
+        │       │   ├── chatSlice.js                <-- Chats & streaming state slice
+        │       │   └── chatApi.js                  <-- Chats RTK Query endpoints
+        │       ├── presets/
+        │       │   ├── presetSlice.js              <-- Presets state slice
+        │       │   └── presetApi.js                <-- Presets RTK Query endpoints
+        │       └── theme/
+        │           └── themeSlice.js               <-- Theme mode & font size delta state
         ├── routes/
         │   ├── router.jsx                          <-- createBrowserRouter flat route definitions
         │   ├── ProtectedRoute.jsx                  <-- Unauthenticated lockout (redirects to /login)
@@ -8873,13 +8885,13 @@ To ensure that progress is directly visualizable in the browser after every phas
 
 #### Phase 2: Authentication, Session Security & Consolidated Profile
 - **Backend Deliverables**: User & RefreshToken schemas (with TTL index), raw Google OAuth PKCE exchange, dual httpOnly JWT cookies (`accessToken` 15m, `refreshToken` 7d), token family reuse detection, logout, self-service account deletion cascade (`DELETE /users/me`), `backend/scripts/testAuth.js`.
-- **Frontend Deliverables**: `features/auth/authSlice.js`, `apiSlice.js` (`baseQueryWithReauth` with `async-mutex`), `Login.jsx`, `Register.jsx` (redirects to `/login`), `PublicRoute`, `ProtectedRoute`, `AppShell.jsx` scaffolding, and consolidated `Profile.jsx` (Profile info, avatar upload via Sharp, password change, preferences, Danger Zone account deletion).
+- **Frontend Deliverables**: `redux/features/auth/authSlice.js`, `redux/features/api/apiSlice.js` (`baseQueryWithReauth` with `async-mutex`), `Login.jsx`, `Register.jsx` (redirects to `/login`), `PublicRoute`, `ProtectedRoute`, `AppShell.jsx` scaffolding, and consolidated `Profile.jsx` (Profile info, avatar upload via Sharp, password change, preferences, Danger Zone account deletion).
 - **Visual Verification**: User registers a new account, logs in, is redirected to `/dashboard`, visits `/profile`, updates profile details, changes password, uploads avatar, and logs out.
 - **Quality Gates**: `testAuth.js` passes; Chrome DevTools console: 0 errors; browser control audit on mobile `xs` and desktop `md+`.
 
 #### Phase 3: Branch Management & Reusable BranchDialog
 - **Backend Deliverables**: Branch schema, CRUD endpoints (`GET`, `POST`, `GET :id`, `PUT :id`, `DELETE :id` soft-archive, `PATCH :id/restore`), `backend/scripts/testBranches.js`.
-- **Frontend Deliverables**: `features/branches/branchSlice.js`, `Branches.jsx` with `MuiDataGrid` (flex columns) and mobile card view, reusable `BranchDialog.jsx` (`MuiDialog` with standardized action buttons for Create and Edit modes), `BranchDetail.jsx`.
+- **Frontend Deliverables**: `redux/features/branches/branchSlice.js`, `Branches.jsx` with `MuiDataGrid` (flex columns) and mobile card view, reusable `BranchDialog.jsx` (`MuiDialog` with standardized action buttons for Create and Edit modes), `BranchDetail.jsx`.
 - **Visual Verification**: User navigates to `/branches`, clicks `[ + Add Branch ]`, fills `BranchDialog` (fullscreen on `xs`, modal on `sm+`), submits, sees branch in table, edits branch, soft-archives, filters by archived, and restores branch.
 - **Quality Gates**: `testBranches.js` passes; browser control validates zero horizontal overflow on mobile `xs`.
 

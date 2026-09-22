@@ -44,12 +44,86 @@ Implementation Phase 2: Authentication, Session Security & Consolidated Profile 
   - [x] Align entire `client/src/*` with newly introduced `client/src/theme/*` setup (remediate datePickers & charts import bugs, enforce universal small sizing & JSDoc, update layouts & pages)
 - [x] Step 4 (User Review & Approval): Present walkthrough, update planning files, user confirmed and commanded merge to main
 - [x] Step 5 (Post-Git Merge & Cleanup): Stage, commit, push, merge to main, delete feature branch
+- [x] Post-Merge Invariant 13 & Vite/Rolldown Remediation: Restored user's 9 devDependencies in `client/package.json`, resolved `Missing field moduleType` pre-transform error by terminating orphaned Vite 6 process (PID 5020) and hoisting Vite 8, eliminated shadowed `react@19` from `client/node_modules/`, resolved fast-refresh component export boundary in `theme/useThemeMode.js`, verified clean ESLint and `npm run verify` pass
 - **Status:** complete
 
 ### Phase 2: Authentication, Session Security & Consolidated Profile
-- [ ] Backend: User & RefreshToken models, auth controller/services, dual httpOnly cookies, token rotation, `testAuth.js`
-- [ ] Frontend: `authSlice.js`, `apiSlice.js`, `Login.jsx`, `Register.jsx`, `PublicRoute`, `ProtectedRoute`, `AppShell.jsx`, `Profile.jsx`
-- **Status:** pending
+- [x] Step 1 (Pre-Git): Clean tree check, checkout `phase-2-authentication-session-profile`
+- [x] Step 2 (Deep Codebase Analysis): Review Sections 2, 4, 10, 11, 14 requirements, session rotation, dual cookies, and profile tabs
+- [x] Step 3 (Phase Execution & Validation):
+  - [x] Backend: User & RefreshToken models, auth/user services & controllers, dual httpOnly cookies, family token rotation with theft detection, account cascade deletion, 13/13 native integration tests passed (`testAuth.js`)
+  - [x] Frontend: Redux store, `apiSlice.js` (with mutex reauth), `authSlice.js`, `authApi.js`, `PublicRoute`, `ProtectedRoute`, `LoginForm.jsx`, `RegisterForm.jsx`, `Login.jsx` (< 35 lines), `Register.jsx` (< 35 lines), `Sidebar.jsx`, `MuiAppbar.jsx`, `AppShell.jsx` (isolated scroll), `WelcomeBanner.jsx`, `Dashboard.jsx` (< 35 lines), `ProfileInfoTab.jsx`, `SecurityTab.jsx`, `PreferencesTab.jsx`, `DangerZoneTab.jsx`, `Profile.jsx` (< 35 lines), router.jsx, App.jsx
+  - [x] Codebase-Wide 12-Point Remediation:
+    - [x] 1. Root logs/uploads elimination via `fileURLToPath(import.meta.url)` absolute anchoring and updated `.gitignore`
+    - [x] 2. Redux architecture consolidation to `client/src/redux/app/*` and `client/src/redux/features/*`, aligning all imports and Master Spec sections 2.4.5, 10.9, 10.10, 12.11, 14.4, 14.5
+    - [x] 3. `normalizeResult(result)` returning result directly in `apiSlice.js` conforming to Section 2.7 / Section 12.11.1
+    - [x] 4. `'Dashboard'` tag added to `apiSlice.js` and invalidation added to `authApi.js`
+    - [x] 5. Modern MUI v6 `slotProps={{ paper: ... }}` and `slotProps={{ input: ..., formHelperText: ... }}` in `MuiConfirmDialog.jsx` and `MuiTextField.jsx`
+    - [x] 6. `MuiButton.jsx` overhaul: `disabled={disabled || loading}`, consistent loading spinner, zero layout shift or icon jumping, span wrap for Tooltip
+    - [x] 7. Centralized `backend/src/utils/constants.js` and `client/src/utils/constants.js` with full JSDoc and zero magic strings
+    - [x] 8. Accessibility enhancements: `disableEnforceFocus` & `disableRestoreFocus` on modals and menus
+    - [x] 9. User profile menu parity in `Sidebar.jsx` footer matching `MuiAppbar.jsx`
+    - [x] 10. `MuiAppbar.jsx` sidebar hamburger toggle visible only on `< md` (`xs`, `sm`)
+    - [x] 11. Tooltip disabled child bug resolved codebase-wide with `<Box component="span" sx={{ display: 'inline-flex' }}>`
+    - [x] 12. Dedicated `RootHydrateFallback.jsx` integrated into `router.jsx` satisfying React Router v7 and `react-refresh/only-export-components`
+  - [x] Token Refresh & Session Bootstrapping Resolution:
+    - [x] Eliminated `resetApiState()` from `baseQueryWithReauth` in `client/src/redux/features/api/apiSlice.js` (per Spec 12.11.1), eliminating RTK Query mounted query hook subscription wipe re-trigger loop
+    - [x] Added `skip: isInitialized` to `useGetProfileQuery` in `client/src/App.jsx`, guaranteeing profile bootstrap runs strictly once on cold boot
+    - [x] Guarded `baseQueryWithReauth` against superfluous `/auth/refresh` attempts when user state is already known unauthenticated (`isInitialized && !isAuthenticated`)
+    - [x] Synchronized Redux `authSlice` user credentials upon successful token refresh (`POST /auth/refresh` 200)
+    - [x] Verified in live Chrome DevTools: exactly one 401 error is logged upon expired request, followed by successful refresh and retried query; exactly 2 requests on unauthenticated boot with 0 loops and 0 rate limits
+    - [x] Monorepo verification: `npm run verify` passed 100% (29 backend files, 1,513 client modules transformed, 0 syntax/build errors, dist cleaned)
+    - [x] ESLint: 0 errors, 0 warnings across client codebase
+    - [x] 13/13 native integration tests passed on live backend (`node backend/scripts/testAuth.js`)
+    - [x] Scratch test suite passed: `testBaseQueryWithReauth.js`
+    - [x] Ports 3000 and 4000 verified clean, 0 background tasks running
+  - [x] Phase 2 UI Enhancements, Accessibility & Profile Overhaul:
+    - [x] 1. Profile Page UI Overhaul:
+      - [x] Extracted `ProfileContainer.jsx` with Breadcrumbs ("Dashboard / Profile"), Header, subtitle, and modern `Paper` framing
+      - [x] Decomposed and kept `Profile.jsx` lean (< 25 lines) satisfying Invariant 9
+      - [x] `ProfileInfoTab.jsx`: Identity hero banner with 80px avatar, hover camera button, role chip, active badge, and responsive 2-column grid
+      - [x] `SecurityTab.jsx`: Security policy guidance banner, current/new/confirm password inputs with visibility toggles, and live password criteria checklist tracker (8+ chars, uppercase, lowercase, number)
+      - [x] `PreferencesTab.jsx`: Interactive modern visual theme cards (Light Mode, Dark Mode, System Default) with active highlight; excluded shift hours per user directive
+      - [x] `DangerZoneTab.jsx`: Refined outlined subtle red card with 1px border, 7-collection atomic cascade checklist, and `MuiConfirmDialog` with DELETE sentinel input
+    - [x] 2. Sidebar Bottom User Menu Triggers:
+      - [x] In expanded mode: renders avatar + text (name/role) + 3-dot `IconButton` (`MoreVertIcon`) on the right; menu opens ONLY when the 3-dot button is clicked
+      - [x] In mini mode: renders avatar + 3-dot button; menu opens when either mini avatar or mini 3-dot is clicked
+    - [x] 3. Mini Sidebar Expand Mechanism:
+      - [x] When sidebar is collapsed to mini-rail (64px), header renders `ChevronRightIcon` ONLY (with tooltip "Expand sidebar") to expand back to 240px
+    - [x] 4. Deprecated MUI Props Eradication:
+      - [x] Eradicated `primaryTypographyProps` codebase-wide (replaced with `slotProps={{ primary: ... }}` in `Sidebar.jsx`, `MuiAppbar.jsx`, and `DangerZoneTab.jsx`)
+      - [x] Eradicated `InputProps` and `FormHelperTextProps` (replaced with `slotProps.input` and `slotProps.formHelperText` in `MuiTextField.jsx`)
+      - [x] Confirmed 0 deprecated props (`InputProps`, `FormHelperTextProps`, `TypographyProps`, `PaperProps`, `BackdropProps`, `MenuProps`) in `client/src`
+    - [x] 5. Placeholder Pages with `MuiEmptyState`:
+      - [x] Created reusable `MuiEmptyState.jsx` per Master Spec Section 14.4
+      - [x] Created `Branches.jsx`, `Reports.jsx`, and `Chat.jsx` (< 35 lines) directly reusing `<MuiEmptyState />`
+      - [x] Registered routes in `router.jsx` preventing 404 navigation errors
+    - [x] 6. Accessibility `aria-hidden` Focus Warning Eradication:
+      - [x] Added `event.currentTarget.blur()` on user menu trigger clicks in `Sidebar.jsx` and `MuiAppbar.jsx`
+      - [x] Added `autoFocus={true}` and `disableRestoreFocus={false}` on `Menu` components
+      - [x] Verified in live Chrome DevTools: 0 `aria-hidden` warnings or console errors upon opening user menu
+    - [x] 7. Disabled Button Contrast & Form Submit Accessibility Resolution:
+      - [x] Enhanced theme palette `text.disabled`, `action.disabled`, and `action.disabledBackground` in `themePrimitives.js`
+      - [x] Injected high-contrast disabled overrides for contained (`color: rgba(255, 255, 255, 0.9) !important`), outlined, and text buttons in `inputs.js` and `MuiButton.jsx`
+      - [x] Overrode `MuiOutlinedInput` disabled styling to preserve `-webkit-text-fill-color: text.primary !important`
+      - [x] Updated `ProfileInfoTab.jsx` and `SecurityTab.jsx` submit buttons to remain enabled on initial page load, disabling only during active async network mutations
+      - [x] Compacted vertical padding and card spacing across Profile views to comfortably fit standard viewports
+    - [x] 8. Profile Tab Centering Resolution (`SecurityTab`, `PreferencesTab`, `DangerZoneTab`):
+      - [x] Wrapped `SecurityTab` in `<Box sx={{ maxWidth: 560, mx: 'auto' }}>` with `width: '100%'` form, eliminating asymmetric right empty space
+      - [x] Wrapped `PreferencesTab` in `<Box sx={{ maxWidth: 560, mx: 'auto' }}>` with `width: '100%'` theme cards, centering title and cards
+      - [x] Wrapped `DangerZoneTab` in `<Box sx={{ maxWidth: 600, mx: 'auto' }}>` with `width: '100%'` card, centering title and danger zone
+      - [x] Verified in live Chrome: exactly equal left and right margins (145px/145px and 125px/125px)
+    - [x] 9. Sidebar Active Nav Item Primary Accent Color Alignment:
+      - [x] Replaced generic gray `action.selected` background with theme primary accent blue (`alpha(primary.main, 0.1)` light, `0.2` dark) with `!important`
+      - [x] Enforced 3px solid primary border, primary icon, primary text, and primary hover background
+      - [x] Verified in live Chrome: computed styles confirm `backgroundColor: rgba(19, 91, 236, 0.2)` and `borderLeftColor: rgb(19, 91, 236)`
+    - [x] 10. Complete `aria-hidden` Eradication on Menu Outside Clicks:
+      - [x] Added `document.activeElement.blur()` to both `handleMenuClose` (`MuiAppbar.jsx`) and `handleCloseUserMenu` (`Sidebar.jsx`)
+      - [x] Set `autoFocus={false}`, `disableAutoFocusItem={true}`, and `disableRestoreFocus={true}` on both `Menu` instances
+      - [x] Verified in live Chrome: 0 `aria-hidden` console warnings across multiple open and outside-click stress tests
+- [ ] Step 4 (User Review & Explicit Approval): Present walkthrough, obtain user confirmation
+- [ ] Step 5 (Post-Git Merge & Cleanup): Stage, commit, push, merge to main, delete feature branch
+- **Status:** awaiting_user_approval
 
 ### Phase 3: Branch Management & Reusable BranchDialog
 - [ ] Backend: Branch schema, CRUD endpoints, soft-archive & restore, `testBranches.js`
