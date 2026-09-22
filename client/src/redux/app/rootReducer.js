@@ -6,6 +6,7 @@ import { combineReducers } from '@reduxjs/toolkit';
 import { apiSlice } from '../features/api/apiSlice.js';
 import authReducer from '../features/auth/authSlice.js';
 import branchReducer from '../features/branches/branchSlice.js';
+import reportReducer from '../features/reports/reportSlice.js';
 
 /**
  * Root Redux reducer combining all active application slices.
@@ -14,6 +15,8 @@ export const rootReducer = combineReducers({
   [apiSlice.reducerPath]: apiSlice.reducer,
   auth: authReducer,
   branches: branchReducer,
+  reports: reportReducer,
 });
 
 export default rootReducer;
+

@@ -200,9 +200,11 @@ export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) =
               onClick={() => handleNavigate(APP_ROUTES.CHAT)}
               size="small"
               sx={{
-                bgcolor: 'primary.main',
-                color: 'primary.contrastText',
-                '&:hover': { bgcolor: 'primary.dark' },
+                bgcolor: location.pathname.startsWith(APP_ROUTES.CHAT) ? 'primary.main' : 'transparent',
+                color: location.pathname.startsWith(APP_ROUTES.CHAT) ? 'primary.contrastText' : 'primary.main',
+                border: '1px solid',
+                borderColor: 'primary.main',
+                '&:hover': { bgcolor: 'primary.dark', color: 'primary.contrastText' },
                 width: 40,
                 height: 40,
                 mx: 'auto',
@@ -248,6 +250,12 @@ export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) =
                     color: 'primary.main',
                     borderLeft: '3px solid',
                     borderColor: 'primary.main',
+                    '& .MuiListItemIcon-root': {
+                      color: (theme) => `${theme.palette.primary.main} !important`,
+                    },
+                    '& .MuiSvgIcon-root': {
+                      color: (theme) => `${theme.palette.primary.main} !important`,
+                    },
                   },
                   '&:hover, &.Mui-selected:hover': {
                     bgcolor: (theme) =>
@@ -264,6 +272,10 @@ export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) =
                   sx={{
                     color: active ? 'primary.main' : 'text.secondary',
                     minWidth: expanded ? 36 : 'auto',
+                    justifyContent: 'center',
+                    '& .MuiSvgIcon-root': {
+                      color: active ? 'primary.main' : 'inherit',
+                    },
                   }}
                 >
                   {item.icon}

@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Awaiting user review and confirmation of Phase 4 Implementation Plan, then proceed to Step 1 of Phase 4 (clean tree check on main, checkout phase-4-amharic-report-engine).
+Awaiting user review and confirmation of Phase 5 comprehensive implementation plan.
 
 ## Current Phase
 
-Implementation Phase 4: Amharic Report Engine & In-Canvas 10-Row Form (planning)
+Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation (Exhaustive Analysis & Planning)
 
 ## Implementation Phases (9 Full-Stack Vertical Slices)
 
@@ -151,9 +151,47 @@ Implementation Phase 4: Amharic Report Engine & In-Canvas 10-Row Form (planning)
 - **Status:** complete
 
 ### Phase 4: Amharic Report Engine & In-Canvas 10-Row Form
-- [ ] Backend: Report schema, `reportFormatter.js`, `transliterationEngine.js`, `testReports.js`
-- [ ] Frontend: `/chat` view with centered composer, in-canvas 10-row form, live Amharic preview
-- **Status:** pending
+- [x] Step 1 (Pre-Git): Verify clean tree on main, checkout `phase-4-amharic-report-engine`
+- [x] Step 2 (Deep Codebase Analysis): Review Master Spec Sections 1.4.7, 3, 4.2.3, 8.4, 9.7, 10, 11, 12, 13, 14
+- [x] Step 3 (Execution & Validation):
+  - [x] Backend Utilities & Services:
+    - [x] `backend/src/utils/ethiopianDate.js` (bidirectional calendar converter)
+    - [x] `backend/src/utils/amharicNormalizer.js` (homophone normalization & zero-Latin linter)
+    - [x] `backend/src/services/reportFormatter.js` (deterministic plain-text synthesis engine)
+  - [x] Backend Data Layer:
+    - [x] `backend/src/models/Report.js` (Mongoose schema with visits, activities, issues, indexes, pre-save hook)
+    - [x] `backend/src/models/Chat.js` (Mongoose Chat model for atomic 1:1 chat instantiation)
+  - [x] Backend API:
+    - [x] `backend/src/validators/reportValidator.js`
+    - [x] `backend/src/services/reportService.js` (atomic creation inside ClientSession transaction)
+    - [x] `backend/src/controllers/reportController.js`
+    - [x] `backend/src/routes/reportRoutes.js`
+    - [x] Mount reportRoutes in `backend/src/routes/index.js`
+    - [x] Integration test suite: `backend/scripts/testReports.js` (8/8 passed 100%)
+  - [x] Frontend Utilities & Redux:
+    - [x] `client/src/utils/ethiopianDate.js`
+    - [x] `client/src/utils/reportFormatter.js`
+    - [x] `client/src/redux/features/reports/reportSlice.js`
+    - [x] `client/src/redux/features/reports/reportApi.js`
+    - [x] Register `reports` in `client/src/redux/app/rootReducer.js`
+  - [x] Frontend Components & UI:
+    - [x] `client/src/components/reports/VisitDialog.jsx`
+    - [x] `client/src/components/reports/ReportForm.jsx` (Rows 1–10)
+    - [x] `client/src/components/reports/ReportLivePreview.jsx` (sticky plain-text Amharic card)
+    - [x] `client/src/components/reports/ReportFormContainer.jsx` (symmetrical 2-column layout)
+    - [x] `client/src/components/chat/ChatComposer.jsx` (centered composer with `[ + New Report ]`)
+    - [x] `client/src/components/chat/ChatContainer.jsx` (orchestrates form mounting vs chat view)
+    - [x] `client/src/pages/Chat.jsx` (lean orchestrator < 35 lines)
+  - [x] Monorepo Build & Browser Verification:
+    - [x] Verify backend static syntax compilation (`node backend/scripts/verifyCodebase.js`: 43 files passed)
+    - [x] Verify client production build (`npm run verify`: 1,586 modules transformed, passed 100%)
+    - [x] Run backend integration suite (`testReports.js`: 8/8 passed 100%)
+    - [x] Run ESLint across codebase (0 errors)
+    - [x] Live Chrome browser testing (form mounting, live Amharic preview sync, modal save, cancel dialog, submission, mobile responsive 390px, 0 console errors)
+    - [x] Defensive shutdown (ports 3000/4000 free, 0 background tasks)
+- [x] Step 4 (User Review & Explicit Approval): Present walkthrough, obtain user confirmation
+- [x] Step 5 (Post-Git Merge & Cleanup): Stage, commit, push, merge to main, delete feature branch
+- **Status:** complete
 
 ### Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation
 - [ ] Backend: FFmpeg mono 16kHz WAV pipeline, `addisai` SDK, audio clip upload, ephemeral transcription

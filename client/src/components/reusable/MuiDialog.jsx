@@ -64,6 +64,8 @@ export const MuiDialog = ({
           sx: {
             borderRadius: 2,
             overflow: 'hidden',
+            backgroundImage: 'none',
+            backgroundColor: 'background.default',
             ...sx,
           },
         },

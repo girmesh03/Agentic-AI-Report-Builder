@@ -56,7 +56,12 @@ export const MuiConfirmDialog = ({
       aria-describedby="confirm-dialog-description"
       slotProps={{
         paper: {
-          sx: { borderRadius: 2, p: 1 },
+          sx: {
+            borderRadius: 2,
+            p: 1,
+            backgroundImage: 'none',
+            backgroundColor: 'background.default',
+          },
         },
       }}
     >
