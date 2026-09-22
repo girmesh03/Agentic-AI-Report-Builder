@@ -201,7 +201,7 @@ npm install --save-dev morgan@^1.10.0 nodemon@^3.1.9
 ### Frontend Dependencies (`client/package.json`)
 ```bash
 npm install @emotion/react@^11.14.0 @emotion/styled@^11.14.0 @fontsource/noto-sans-ethiopic@^5.1.0 @fontsource/roboto@^5.1.0 @mui/icons-material@^6.4.0 @mui/material@^6.4.0 @mui/x-charts@^7.24.0 @mui/x-chat@^0.1.0 @mui/x-data-grid@^7.24.0 @mui/x-date-pickers@^7.24.0 @reduxjs/toolkit@^2.5.0 async-mutex@^0.5.0 dayjs@^1.11.13 react@^18.3.1 react-dom@^18.3.1 react-error-boundary@^5.0.0 react-hook-form@^7.54.2 react-redux@^9.2.0 react-router@^7.1.3 react-toastify@^11.0.3
-npm install --save-dev @vitejs/plugin-react@^4.3.4 vite@^6.0.7
+npm install --save-dev @eslint/js@^10.0.1 @types/react@^19.2.18 @types/react-dom@^19.2.4 @vitejs/plugin-react@^6.1.0 eslint@^10.9.0 eslint-plugin-react-hooks@^7.1.1 eslint-plugin-react-refresh@^0.5.4 globals@^17.11.0 vite@^8.2.2
 ```
 
 ## Pre-Scaffolded Client Foundation & Assets (`client/*`)
@@ -275,13 +275,66 @@ The user has pre-initialized the `client/` workspace containing core configurati
    - All route definitions in `client/src/routes/router.jsx` and Section 10.1.1 must import page components using their exact canonical relative paths (`../pages/<Name>.jsx`, e.g. `../pages/Landing.jsx`, `../pages/Login.jsx`, `../pages/Register.jsx`, `../pages/Dashboard.jsx`, `../pages/Branches.jsx`, `../pages/BranchDetail.jsx`, `../pages/Reports.jsx`, `../pages/ReportDetail.jsx`, `../pages/ReportEdit.jsx`, `../pages/Chat.jsx`, `../pages/Profile.jsx`, `../pages/NotFound.jsx`).
    - Never use non-existent nested page subdirectories (e.g. `./pages/Landing/Landing`, `./pages/Auth/Login`, `./pages/Reports/ReportsList`, `./pages/Branches/BranchesList`).
    - The wildcard fallback and error boundary component is named `NotFound` from `client/src/pages/NotFound.jsx` (never `NotFoundPage`).
+13. **Monorepo Single-Hoisted Dependency Law & Rolldown/Vite Version Alignment**:
+    - In an npm monorepo with `"workspaces": ["backend", "client"]`, dependencies and build tools must never suffer from split-brain shadowing across nested directories. `client/node_modules/` must never contain stale, conflicting, or un-hoisted copies of core build tooling (`vite`, `@vitejs/plugin-react`, `rolldown`, `react`, `react-dom`).
+    - `@vitejs/plugin-react` v6 is Rolldown-native and registers `builtin:vite-react-refresh-wrapper`. If a Vite 6 runner or Rollup plugin container invokes this plugin, Rolldown's native Rust binding throws `Pre-transform error: Missing field moduleType` and `Internal server error: Missing field moduleType` because Rollup passes `(code, id, options)` whereas Rolldown expects its internal module descriptors.
+    - Full toolchain alignment is strictly mandated: `client/package.json` devDependencies must preserve all 9 developer tool packages (`@eslint/js@^10.0.1`, `@types/react@^19.2.18`, `@types/react-dom@^19.2.4`, `@vitejs/plugin-react@^6.1.0`, `eslint@^10.9.0`, `eslint-plugin-react-hooks@^7.1.1`, `eslint-plugin-react-refresh@^0.5.4`, `globals@^17.11.0`, `vite@^8.2.2`).
+    - Exactly ONE React runtime version (`react@18.3.1` and `react-dom@18.3.1`) must exist uniformly across the monorepo. `@types/react` and `@types/react-dom` are strictly devDependencies for IDE type hinting only and must never pull in a shadowed `react@19` runtime in `client/node_modules/`.
+    - Component files (`*.jsx`) must only export components to satisfy `react-refresh/only-export-components`; hooks must be decoupled into dedicated hook modules (`theme/useThemeMode.js`).
+    - Every developer script runs `killPort.js` before booting servers, and lingering background processes (e.g. lingering node instances holding port 3000/4000) must be aggressively terminated.
+14. **Root Working Directory Hygiene & Absolute Directory Anchoring Law**:
+    - Never write runtime operational directories (`logs/`, `uploads/`) relative to `process.cwd()`.
+    - In an npm monorepo where commands can be executed from workspace root or package subdirectories, all persistent paths must be resolved via `fileURLToPath(new URL('...', import.meta.url))` to guarantee they anchor strictly within `backend/logs/` and `backend/uploads/`. Root `.gitignore` must explicitly ignore `logs/` and `uploads/`.
+15. **MUI Modern Prop Standard & Tooltip Event Safety**:
+    - Never use deprecated MUI v4/v5 props (`PaperProps`, `InputProps`, `FormHelperTextProps`). Always use MUI v6 `slotProps` (`slotProps={{ paper: ... }}`, `slotProps={{ input: ..., formHelperText: ... }}`).
+    - When wrapping buttons or interactive controls in `Tooltip`, always wrap disabled or loading elements in `<Box component="span" sx={{ display: 'inline-flex' }}>` to prevent synthetic event listener warnings on disabled DOM elements.
+16. **Centralized Constants Architecture**:
+    - Zero magic numbers or strings across backend models, validators, controllers, services, client forms, dialogs, and components.
+    - All constants must be centrally defined in `backend/src/utils/constants.js` and `client/src/utils/constants.js` with comprehensive JSDoc and `Object.freeze()`.
+17. **React Fast Refresh Component Boundary**:
+    - Every `.jsx` file that declares React components must only export components to satisfy `react-refresh/only-export-components`.
+    - Non-component exports (such as `router = createBrowserRouter(...)` or custom hooks) must never share a file with component declarations. Dedicated component files (e.g. `RootHydrateFallback.jsx`) must be used for router hydration fallbacks.
+18. **Token Refresh Interceptor Hygiene & RTK Query Subscription Safety Law**:
+    - Never dispatch `apiSlice.util.resetApiState()` inside custom `baseQueryWithReauth` or error interceptors while queries are actively mounted. RTK Query subscription listeners treat a reset cache as missing data and immediately re-trigger in-flight queries, causing an infinite loop that trips backend HTTP 429 rate limiters within seconds.
+    - Conforming strictly to Master Technical Specification Section 12.11.1, `baseQueryWithReauth` must only dispatch `logOut()` to update Redux slice memory state (`user: null`, `isAuthenticated: false`, `isInitialized: true`), with zero calls to `resetApiState()` and zero hard page redirects via `window.location.replace()`.
+    - Top-level application wrappers (`App.jsx`) must guard initial session hydration hooks (`useGetProfileQuery`) with `{ skip: isInitialized }`. Once session initialization completes (either on authenticated recovery or unauthenticated guest fallback), the hook is permanently skipped, ensuring zero extraneous background queries.
+    - `baseQueryWithReauth` must guard against redundant refresh attempts when user state is already known unauthenticated (`isInitialized && !isAuthenticated`).
+    - When token rotation occurs during an active authenticated session where an access token expires:
+      The initial request returns 401 (producing exactly ONE 401 network entry in the DevTools console), `baseQueryWithReauth` refreshes the token via `POST /api/v1/auth/refresh` (200), updates user credentials in Redux, and seamlessly retries the original query (200).
+19. **Accessibility & Focus Trapping Law (Eradication of `aria-hidden` Violations)**:
+    - When opening modal overlays or popovers (e.g. MUI `Menu` or `Dialog`), if the trigger button inside `#root` retains active browser focus while MUI marks `#root` with `aria-hidden="true"`, Chrome emits a high-severity accessibility warning: `blocked aria-hidden on an element because its descendant retained focus`.
+    - To guarantee zero console warnings and full assistive technology compliance, trigger event handlers must proactively release focus (`event.currentTarget.blur()`) before opening the portal, and the `Menu` component must specify `autoFocus={true}` and `disableRestoreFocus={false}` so focus shifts immediately to the menu items.
+20. **Codebase-Wide MUI v6 Modern Prop Standard**:
+    - Completely eliminate deprecated legacy props across all components:
+      - Replace `ListItemText.primaryTypographyProps` with `ListItemText.slotProps={{ primary: { ... } }}`
+      - Replace `TextField.InputProps` with `TextField.slotProps={{ input: { ... } }}`
+      - Replace `TextField.FormHelperTextProps` with `TextField.slotProps={{ formHelperText: { ... } }}`
+      - Replace `Dialog.PaperProps` with `Dialog.slotProps={{ paper: { ... } }}`
+21. **Responsive Sidebar State & Precise Menu Triggers**:
+    - On expanded sidebar (240px): footer displays user avatar, full name/position text, and a distinct 3-dot `IconButton` (`MoreVertIcon`) on the far right. The user popover menu must appear **strictly** when the 3-dot button is clicked, not on whole-card clicks.
+    - On mini sidebar (64px rail): header displays `ChevronRightIcon` **only** (wrapped in a Tooltip "Expand sidebar") to toggle back to 240px; footer displays the mini avatar and 3-dot button, both wired to open the user popover menu.
+22. **Profile Architecture & Domain Scoping Rules**:
+    - Pages must remain lean orchestrators (< 35 lines) per Invariant 9, delegating presentation and tab framing to `components/profile/ProfileContainer.jsx`.
+    - Supervisor shift hours vary day-to-day and must never be placed in static supervisor preferences. `PreferencesTab.jsx` strictly manages appearance and color schemes (Light, Dark, System Default).
+    - The Danger Zone card must use subtle, refined styling (`border: '1px solid'`, subtle red background tint, clean itemized cascade list) rather than solid high-contrast red blocks.
+23. **Disabled Element High-Contrast & Form Submit Accessibility Law**:
+    - MUI v6 default `palette.action.disabled` and `palette.action.disabledBackground` exhibit unacceptably low contrast ratios (< 2:1), causing text to become virtually invisible on contained buttons or custom styled elements.
+    - All disabled text across themes (`themePrimitives.js`) must guarantee readable contrast: `palette.text.disabled` must use `alpha("#0f172a", 0.6)` (light) and `alpha("#ffffff", 0.65)` (dark).
+    - Contained disabled buttons must explicitly enforce `color: 'rgba(255, 255, 255, 0.9) !important'` and a tinted background (`alpha(brand[500], 0.45)`). Outlined disabled buttons must preserve legible `text.secondary` and visible borders.
+    - Disabled text inputs (`MuiOutlinedInput`) must maintain crisp, readable text with `-webkit-text-fill-color: text.primary !important`.
+    - Form primary submit buttons ("Save Changes", "Update Password") must never be disabled on initial page load (avoiding the dead-button antipattern). They remain enabled and vibrant, disabling strictly during in-flight async network mutations (`isUpdating`, `isLoading`).
+24. **Navigation Active State Semantic Accent Invariant**:
+    - In an application navigation drawer/sidebar, active routes must never rely on generic gray `action.selected` values.
+    - Conforming to Section 10.3.2, active navigation items must explicitly enforce the theme's primary brand accent background (`alpha(theme.palette.primary.main, 0.1)` in Light mode, `alpha(theme.palette.primary.main, 0.2)` in Dark mode) paired with a 3px solid primary border (`borderColor: 'primary.main'`), primary icon color, and bold/semi-bold primary text.
+25. **Modal and Popover Outside-Click Focus Trapping Invariant**:
+    - When modal overlays (e.g. MUI `Menu`, `Popover`, `Dialog`) close upon outside/backdrop clicks, Chromium throws `blocked aria-hidden on an element because its descendant retained focus` if focus remains on a descendant element while the transition animates or if focus is restored to an `anchorEl` inside an element marked `aria-hidden="true"`.
+    - To guarantee zero console warnings and complete accessibility compliance:
+      1. Every `onClose` handler must proactively blur any active element (`if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur()`).
+      2. Dropdown menus must specify `disableRestoreFocus={true}` to prevent MUI from returning focus to the anchor element while `#root` is still marked with `aria-hidden`.
+      3. Dropdown menus must set `autoFocus={false}` and `disableAutoFocusItem={true}` so focus rests safely on `document.body` rather than being trapped in closing portal trees.
 
 ## Resources & Reference Paths
 
 - Local `.env`: `backend/.env` (pre-configured with Mongo URI, Addis AI, Gemini, Nvidia, FFmpeg paths).
 - Client `.env`: `client/.env` (`VITE_API_BASE_URL`, `VITE_APP_NAME`).
 - Addis AI SDK: `https://www.npmjs.com/package/addisai` and `https://docs.addisassistant.com/docs/get-started/introduction`.
-
-
-
-

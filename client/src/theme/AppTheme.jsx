@@ -4,7 +4,7 @@
  */
 import { useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { ThemeProvider, createTheme, useColorScheme } from '@mui/material/styles';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
 import {
@@ -19,25 +19,6 @@ import {
 } from './customizations';
 
 import { colorSchemes, typography, shadows, shape } from './themePrimitives';
-
-/**
- * Custom hook providing the active theme mode and toggle function.
- * Bridges MUI v6 useColorScheme with layout navigation and control bars.
- *
- * @function useThemeMode
- * @returns {{ mode: 'light' | 'dark', toggleTheme: () => void, setMode: (mode: string) => void }}
- */
-export const useThemeMode = () => {
-  const { mode, systemMode, setMode } = useColorScheme();
-  const currentMode = mode === 'system' ? systemMode : mode;
-  const effectiveMode = currentMode || 'light';
-
-  return {
-    mode: effectiveMode,
-    setMode,
-    toggleTheme: () => setMode(effectiveMode === 'dark' ? 'light' : 'dark'),
-  };
-};
 
 /**
  * Top-level Material UI Theme Provider component.

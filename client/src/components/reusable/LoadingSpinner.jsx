@@ -42,7 +42,7 @@ export const LoadingSpinner = ({
         ...sx,
       }}
     >
-      <CircularProgress size={progressSize} color="primary" />
+      <CircularProgress size={progressSize} color="primary" disableShrink />
       {Boolean(message) && (
         <Typography
           variant="body2"

@@ -3,9 +3,14 @@
  * @description Centralized Winston logger with daily rotating file transports and development console formatting.
  */
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import winston from 'winston';
 import 'winston-daily-rotate-file';
 import { env } from './env.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const backendLogsDir = path.resolve(__dirname, '../../logs');
 
 const { combine, timestamp, printf, colorize, json, errors } = winston.format;
 
@@ -16,7 +21,7 @@ const devConsoleFormat = printf(({ level, message, timestamp, stack }) => {
 
 // Daily rotate file transport for general logs
 const combinedFileTransport = new winston.transports.DailyRotateFile({
-  filename: path.join('logs', 'combined-%DATE%.log'),
+  filename: path.join(backendLogsDir, 'combined-%DATE%.log'),
   datePattern: 'YYYY-MM-DD',
   level: 'info',
   maxSize: '20m',
@@ -27,7 +32,7 @@ const combinedFileTransport = new winston.transports.DailyRotateFile({
 
 // Daily rotate file transport for error logs
 const errorFileTransport = new winston.transports.DailyRotateFile({
-  filename: path.join('logs', 'error-%DATE%.log'),
+  filename: path.join(backendLogsDir, 'error-%DATE%.log'),
   datePattern: 'YYYY-MM-DD',
   level: 'error',
   maxSize: '20m',

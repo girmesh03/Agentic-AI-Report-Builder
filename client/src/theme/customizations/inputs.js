@@ -67,32 +67,39 @@ const inputsCustomizations = {
               variant: "contained",
             },
             style: {
-              color: "white",
-              backgroundColor: gray[900],
-              backgroundImage: `linear-gradient(to bottom, ${gray[700]}, ${gray[800]})`,
-              boxShadow: `inset 0 1px 0 ${gray[600]}, inset 0 -1px 0 1px hsl(220, 0%, 0%)`,
-              border: `1px solid ${gray[700]}`,
+              color: "#ffffff",
+              backgroundColor: brand[500],
+              boxShadow: "none",
+              border: `1px solid ${brand[600]}`,
               "&:hover": {
-                backgroundImage: "none",
-                backgroundColor: gray[700],
+                backgroundColor: brand[600],
                 boxShadow: "none",
               },
               "&:active": {
-                backgroundColor: gray[800],
+                backgroundColor: brand[700],
+              },
+              "&.Mui-disabled": {
+                color: "rgba(255, 255, 255, 0.9) !important",
+                backgroundColor: `${alpha(brand[500], 0.45)} !important`,
+                borderColor: "transparent !important",
+                boxShadow: "none !important",
               },
               ...theme.applyStyles("dark", {
-                color: "black",
-                backgroundColor: gray[50],
-                backgroundImage: `linear-gradient(to bottom, ${gray[100]}, ${gray[50]})`,
-                boxShadow: "inset 0 -1px 0  hsl(220, 30%, 80%)",
-                border: `1px solid ${gray[50]}`,
+                color: "#ffffff",
+                backgroundColor: brand[500],
+                border: `1px solid ${brand[600]}`,
                 "&:hover": {
-                  backgroundImage: "none",
-                  backgroundColor: gray[300],
+                  backgroundColor: brand[400],
                   boxShadow: "none",
                 },
                 "&:active": {
-                  backgroundColor: gray[400],
+                  backgroundColor: brand[600],
+                },
+                "&.Mui-disabled": {
+                  color: "rgba(255, 255, 255, 0.9) !important",
+                  backgroundColor: `${alpha(brand[500], 0.45)} !important`,
+                  borderColor: "transparent !important",
+                  boxShadow: "none !important",
                 },
               }),
             },
@@ -140,6 +147,11 @@ const inputsCustomizations = {
               "&:active": {
                 backgroundColor: gray[200],
               },
+              "&.Mui-disabled": {
+                color: `${(theme.vars || theme).palette.text.secondary} !important`,
+                borderColor: `${(theme.vars || theme).palette.divider} !important`,
+                backgroundColor: "transparent !important",
+              },
               ...theme.applyStyles("dark", {
                 backgroundColor: gray[800],
                 borderColor: gray[700],
@@ -149,6 +161,11 @@ const inputsCustomizations = {
                 },
                 "&:active": {
                   backgroundColor: gray[900],
+                },
+                "&.Mui-disabled": {
+                  color: `${(theme.vars || theme).palette.text.secondary} !important`,
+                  borderColor: `${(theme.vars || theme).palette.divider} !important`,
+                  backgroundColor: "transparent !important",
                 },
               }),
             },
@@ -405,11 +422,15 @@ const inputsCustomizations = {
       size: "small",
     },
     styleOverrides: {
-      input: {
+      input: ({ theme }) => ({
         padding: 0,
         "&::placeholder": {
           opacity: 0.7,
           color: gray[500],
+        },
+        "&.Mui-disabled": {
+          WebkitTextFillColor: `${(theme.vars || theme).palette.text.primary} !important`,
+          color: `${(theme.vars || theme).palette.text.primary} !important`,
         },
         "&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus":
           {
@@ -417,7 +438,7 @@ const inputsCustomizations = {
             WebkitTextFillColor: `var(--template-palette-text-primary) !important`,
             caretColor: `var(--template-palette-text-primary) !important`,
           },
-      },
+      }),
       root: ({ theme }) => ({
         padding: "8px 12px",
         color: (theme.vars || theme).palette.text.primary,
@@ -434,9 +455,16 @@ const inputsCustomizations = {
             borderColor: brand[400],
             borderWidth: "1px",
           },
-        // [`&.${outlinedInputClasses.focused}`]: {
-        //   outline: `3px solid ${alpha(brand[500], 0.5)}`,
-        // },
+        [`&.${outlinedInputClasses.disabled}`]: {
+          opacity: 0.85,
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: `${(theme.vars || theme).palette.divider} !important`,
+          },
+          "& input": {
+            WebkitTextFillColor: `${(theme.vars || theme).palette.text.primary} !important`,
+            color: `${(theme.vars || theme).palette.text.primary} !important`,
+          },
+        },
         ...theme.applyStyles("dark", {
           "&:hover .MuiOutlinedInput-notchedOutline": {
             borderColor: gray[500],
@@ -498,6 +526,18 @@ const inputsCustomizations = {
       root: ({ theme }) => ({
         typography: theme.typography.caption,
         marginBottom: 8,
+        "&.Mui-disabled": {
+          color: `${(theme.vars || theme).palette.text.secondary} !important`,
+        },
+      }),
+    },
+  },
+  MuiInputLabel: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        "&.Mui-disabled": {
+          color: `${(theme.vars || theme).palette.text.secondary} !important`,
+        },
       }),
     },
   },
