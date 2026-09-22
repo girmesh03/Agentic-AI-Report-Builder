@@ -76,39 +76,84 @@ export const ReportFormContainer = () => {
         datePayload = gDate.toISOString();
       }
 
-      const payload = {
-        date: datePayload,
-        branch: draft.branch,
-        clockIn: draft.clockIn,
-        clockOut: draft.clockOut,
-        shiftPreset: draft.shiftPreset,
-        visits: (draft.visits || []).map((v) => ({
-          branch: v.branch,
-          clockIn: v.clockIn,
-          clockOut: v.clockOut,
-        })),
-        activities: (draft.activities || []).map((a) => ({
-          text: a.text,
-          status: a.status || 'completed',
-        })),
-        issues: draft.noIssue
+      let requestBody;
+      const audioList = draft.audioFiles || [];
+
+      if (audioList.length > 0) {
+        const formData = new FormData();
+        formData.append('date', datePayload);
+        formData.append('branch', draft.branch);
+        formData.append('clockIn', draft.clockIn);
+        formData.append('clockOut', draft.clockOut);
+        formData.append('shiftPreset', draft.shiftPreset || 'morning');
+        formData.append(
+          'visits',
+          JSON.stringify(
+            (draft.visits || []).map((v) => ({
+              branch: v.branch,
+              clockIn: v.clockIn,
+              clockOut: v.clockOut,
+            }))
+          )
+        );
+        formData.append(
+          'activities',
+          JSON.stringify(
+            (draft.activities || []).map((a) => ({
+              text: a.text,
+              status: a.status || 'completed',
+            }))
+          )
+        );
+        const issuesData = draft.noIssue
           ? [{ text: 'በዕለቱ የተፈጠረ ምንም አይነት ችግር የለም።', status: 'no_issue' }]
           : (draft.issues || []).map((i) => ({
               text: i.text,
               status: i.status || 'reported',
-            })),
-        comments: draft.comments ? [draft.comments] : [],
-        audio: draft.audio || [],
-      };
+            }));
+        formData.append('issues', JSON.stringify(issuesData));
+        formData.append('comments', draft.comments ? draft.comments : '');
 
-      const result = await createReport(payload).unwrap();
+        audioList.forEach((item) => {
+          if (item.file) {
+            formData.append('audio', item.file, item.name || item.file.name || 'narration.webm');
+          }
+        });
+
+        requestBody = formData;
+      } else {
+        requestBody = {
+          date: datePayload,
+          branch: draft.branch,
+          clockIn: draft.clockIn,
+          clockOut: draft.clockOut,
+          shiftPreset: draft.shiftPreset,
+          visits: (draft.visits || []).map((v) => ({
+            branch: v.branch,
+            clockIn: v.clockIn,
+            clockOut: v.clockOut,
+          })),
+          activities: (draft.activities || []).map((a) => ({
+            text: a.text,
+            status: a.status || 'completed',
+          })),
+          issues: draft.noIssue
+            ? [{ text: 'በዕለቱ የተፈጠረ ምንም አይነት ችግር የለም።', status: 'no_issue' }]
+            : (draft.issues || []).map((i) => ({
+                text: i.text,
+                status: i.status || 'reported',
+              })),
+          comments: draft.comments ? [draft.comments] : [],
+        };
+      }
+
+      const result = await createReport(requestBody).unwrap();
       setSuccessMessage('Report successfully compiled and opened in Chat!');
       if (result?.data?.report) {
         dispatch(setReportConversation({ report: result.data.report }));
       }
-      setTimeout(() => {
-        dispatch(closeReportForm());
-      }, 400);
+      dispatch(closeReportForm());
+      dispatch(resetDraft());
     } catch (err) {
       const msg =
         err?.data?.message ||

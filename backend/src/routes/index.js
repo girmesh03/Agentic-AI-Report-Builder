@@ -10,6 +10,7 @@ import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
 import branchRoutes from './branchRoutes.js';
 import reportRoutes from './reportRoutes.js';
+import audioRoutes from './audioRoutes.js';
 
 export const apiRouter = Router();
 
@@ -35,4 +36,5 @@ apiRouter.use('/auth', authRoutes);
 apiRouter.use('/users', userRoutes);
 apiRouter.use('/branches', branchRoutes);
 apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/audio', audioRoutes);
 

@@ -74,6 +74,17 @@ export const reportApi = apiSlice.injectEndpoints({
         'Dashboard',
       ],
     }),
+
+    /**
+     * Mode 3: Transcribes ephemeral audio recording directly via Addis AI STT.
+     */
+    transcribeEphemeralAudio: builder.mutation({
+      query: (formData) => ({
+        url: '/audio/transcribe-ephemeral',
+        method: 'POST',
+        body: formData,
+      }),
+    }),
   }),
 });
 
@@ -82,4 +93,5 @@ export const {
   useGetReportByIdQuery,
   useCreateReportMutation,
   useUpdateReportMutation,
+  useTranscribeEphemeralAudioMutation,
 } = reportApi;

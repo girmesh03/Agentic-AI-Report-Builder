@@ -5,6 +5,8 @@
  * 1-to-1 Chat pairing, and paginated report queries.
  * Conforms to Master Technical Specification Sections 1.4.7, 4.2.3, and 11.4.21–25.
  */
+import path from 'node:path';
+import fs from 'node:fs';
 import mongoose from 'mongoose';
 import { Report } from '../models/Report.js';
 import { Chat } from '../models/Chat.js';
@@ -12,6 +14,9 @@ import { Branch } from '../models/Branch.js';
 import { User } from '../models/User.js';
 import { renderReportText } from './reportFormatter.js';
 import { parseEthiopianDateString, ethiopianToGregorian } from '../utils/ethiopianDate.js';
+import { probeAudioMetadata } from './audioService.js';
+import { transcribeAudioSequence } from './sttService.js';
+import { logger } from '../config/logger.js';
 import { NotFoundError, BadRequestError } from '../errors/index.js';
 
 /**
@@ -19,88 +24,120 @@ import { NotFoundError, BadRequestError } from '../errors/index.js';
  *
  * @param {string} userId - ID of authenticated supervisor.
  * @param {object} data - Report form payload.
+ * @param {Array<object>} [files=[]] - Uploaded audio files array.
  * @returns {Promise<{ report: object, chat: object }>} Created report and linked chat.
  */
-export const createReport = async (userId, data) => {
+export const createReport = async (userId, data, files = []) => {
+  // 1. Fetch user for supervisor snapshot
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError('Supervisor account not found');
+  }
+  const supervisorName = user.fullName || `${user.firstName} ${user.lastName}`.trim();
+
+  // 2. Fetch primary branch for snapshot
+  const primaryBranch = await Branch.findOne({ _id: data.branch, user: userId });
+  if (!primaryBranch) {
+    throw new NotFoundError('Primary branch location not found');
+  }
+
+  // 3. Process and snapshot visited branches itinerary (if multi-branch)
+  const visits = [];
+  if (Array.isArray(data.visits) && data.visits.length > 0) {
+    for (const v of data.visits) {
+      if (!v.branch) continue;
+      const visitedBranch = await Branch.findOne({ _id: v.branch, user: userId });
+      if (!visitedBranch) {
+        throw new NotFoundError(`Visited branch ${v.branch} not found`);
+      }
+      visits.push({
+        branch: visitedBranch._id,
+        branchName: visitedBranch.name,
+        clockIn: v.clockIn,
+        clockOut: v.clockOut,
+      });
+    }
+  }
+
+  // 4. Normalize date to UTC midnight (supports DD-MM-YY Ethiopian date or ISO string)
+  let utcDate;
+  if (typeof data.date === 'string' && /^\d{1,2}-\d{1,2}-\d{2,4}$/.test(data.date.trim())) {
+    const parsedEth = parseEthiopianDateString(data.date);
+    if (parsedEth) {
+      utcDate = ethiopianToGregorian(parsedEth.year, parsedEth.month, parsedEth.day);
+    }
+  }
+  if (!utcDate) {
+    const inputDate = new Date(data.date);
+    utcDate = new Date(
+      Date.UTC(inputDate.getUTCFullYear(), inputDate.getUTCMonth(), inputDate.getUTCDate(), 0, 0, 0, 0)
+    );
+  }
+
+  // Format activities and issues arrays
+  const activities = Array.isArray(data.activities)
+    ? data.activities.map((a) => (typeof a === 'string' ? { text: a, status: 'completed' } : a))
+    : [];
+
+  const issues = Array.isArray(data.issues)
+    ? data.issues.map((i) => (typeof i === 'string' ? { text: i, status: 'reported' } : i))
+    : [];
+
+  const comments = Array.isArray(data.comments)
+    ? data.comments
+    : typeof data.comments === 'string' && data.comments.trim()
+    ? [data.comments.trim()]
+    : [];
+
+  // 5. Deterministically compile locked plain-text Amharic report
+  const generatedText = renderReportText({
+    date: utcDate,
+    branchName: primaryBranch.name,
+    supervisorName,
+    clockIn: data.clockIn,
+    clockOut: data.clockOut,
+    visits,
+    activities,
+    issues,
+    comments,
+  });
+
+  // 6. Process audio recordings if present (probed & transcribed BEFORE DB transaction)
+  const audioFiles = [];
+  let transcription = '';
+  if (Array.isArray(files) && files.length > 0) {
+    const tempDir = path.resolve(process.cwd(), 'uploads/temp');
+    for (const file of files) {
+      let duration = 0;
+      try {
+        const meta = await probeAudioMetadata(file.path);
+        duration = meta.duration || 0;
+      } catch (err) {
+        logger.warn(`Failed to probe duration for ${file.originalname}: ${err.message}`);
+      }
+      audioFiles.push({
+        originalName: file.originalname,
+        fileName: file.filename,
+        path: file.path,
+        mimeType: file.mimetype,
+        size: file.size,
+        duration,
+      });
+    }
+
+    try {
+      const result = await transcribeAudioSequence(files, tempDir);
+      transcription = result.fullTranscript || '';
+    } catch (err) {
+      logger.error(`[reportService] Audio transcription warning: ${err.message}`);
+    }
+  }
+
+  // 7. Atomic DB Transaction for Report and paired Chat creation
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    // 1. Fetch user for supervisor snapshot
-    const user = await User.findById(userId).session(session);
-    if (!user) {
-      throw new NotFoundError('Supervisor account not found');
-    }
-    const supervisorName = user.fullName || `${user.firstName} ${user.lastName}`.trim();
-
-    // 2. Fetch primary branch for snapshot
-    const primaryBranch = await Branch.findOne({ _id: data.branch, user: userId }).session(session);
-    if (!primaryBranch) {
-      throw new NotFoundError('Primary branch location not found');
-    }
-
-    // 3. Process and snapshot visited branches itinerary (if multi-branch)
-    const visits = [];
-    if (Array.isArray(data.visits) && data.visits.length > 0) {
-      for (const v of data.visits) {
-        if (!v.branch) continue;
-        const visitedBranch = await Branch.findOne({ _id: v.branch, user: userId }).session(session);
-        if (!visitedBranch) {
-          throw new NotFoundError(`Visited branch ${v.branch} not found`);
-        }
-        visits.push({
-          branch: visitedBranch._id,
-          branchName: visitedBranch.name,
-          clockIn: v.clockIn,
-          clockOut: v.clockOut,
-        });
-      }
-    }
-
-    // 4. Normalize date to UTC midnight (supports DD-MM-YY Ethiopian date or ISO string)
-    let utcDate;
-    if (typeof data.date === 'string' && /^\d{1,2}-\d{1,2}-\d{2,4}$/.test(data.date.trim())) {
-      const parsedEth = parseEthiopianDateString(data.date);
-      if (parsedEth) {
-        utcDate = ethiopianToGregorian(parsedEth.year, parsedEth.month, parsedEth.day);
-      }
-    }
-    if (!utcDate) {
-      const inputDate = new Date(data.date);
-      utcDate = new Date(
-        Date.UTC(inputDate.getUTCFullYear(), inputDate.getUTCMonth(), inputDate.getUTCDate(), 0, 0, 0, 0)
-      );
-    }
-
-    // Format activities and issues arrays
-    const activities = Array.isArray(data.activities)
-      ? data.activities.map((a) => (typeof a === 'string' ? { text: a, status: 'completed' } : a))
-      : [];
-
-    const issues = Array.isArray(data.issues)
-      ? data.issues.map((i) => (typeof i === 'string' ? { text: i, status: 'reported' } : i))
-      : [];
-
-    const comments = Array.isArray(data.comments)
-      ? data.comments
-      : typeof data.comments === 'string' && data.comments.trim()
-      ? [data.comments.trim()]
-      : [];
-
-    // 5. Deterministically compile locked plain-text Amharic report
-    const generatedText = renderReportText({
-      date: utcDate,
-      branchName: primaryBranch.name,
-      supervisorName,
-      clockIn: data.clockIn,
-      clockOut: data.clockOut,
-      visits,
-      activities,
-      issues,
-      comments,
-    });
-
-    // 6. Instantiate Report within atomic session using array syntax
     const isMulti = visits.length > 0;
     const [report] = await Report.create(
       [
@@ -118,12 +155,13 @@ export const createReport = async (userId, data) => {
           issues,
           comments,
           generated: generatedText,
+          transcription,
+          audioFiles,
         },
       ],
       { session }
     );
 
-    // 7. Instantiate paired 1-to-1 Chat within atomic session
     const chatTitle = isMulti
       ? `Report: ${primaryBranch.name} (+${visits.length - 1} branches)`
       : `Report: ${primaryBranch.name}`;
@@ -140,7 +178,6 @@ export const createReport = async (userId, data) => {
       { session }
     );
 
-    // Link chat to report
     report.chat = chat._id;
     await report.save({ session });
 
@@ -260,4 +297,31 @@ export const updateReport = async (userId, reportId, updates) => {
 
   await report.save();
   return report.toObject();
+};
+
+/**
+ * Retrieves audio clip binary information for authenticated supervisor (Method 1).
+ *
+ * @param {string} userId - ID of supervisor.
+ * @param {string} reportId - ID of report.
+ * @param {string} clipId - ID of audio subdocument.
+ * @returns {Promise<{ clip: object, filePath: string }>} Audio subdocument and resolved file path.
+ */
+export const getReportAudioClip = async (userId, reportId, clipId) => {
+  const report = await Report.findOne({ _id: reportId, user: userId });
+  if (!report) {
+    throw new NotFoundError('Report not found');
+  }
+
+  const clip = report.audioFiles.id(clipId);
+  if (!clip) {
+    throw new NotFoundError('Audio clip not found');
+  }
+
+  const resolvedPath = path.resolve(clip.path);
+  if (!fs.existsSync(resolvedPath)) {
+    throw new NotFoundError('Audio file does not exist on disk');
+  }
+
+  return { clip: clip.toObject(), filePath: resolvedPath };
 };

@@ -4,7 +4,12 @@
  */
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import {
+  closeReportForm,
+  resetDraft,
+  clearChatMessages,
+} from '../redux/features/reports/reportSlice.js';
 import { alpha } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
@@ -68,6 +73,7 @@ const NAV_ITEMS = [
 export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
   const user = useSelector(selectCurrentUser);
   const [logout] = useLogoutMutation();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -85,6 +91,16 @@ export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) =
     if (isMobile) {
       onClose();
     }
+  };
+
+  /**
+   * Resets chat and draft form before navigating to /chat for a fresh start.
+   */
+  const handleNewChat = () => {
+    dispatch(closeReportForm());
+    dispatch(resetDraft());
+    dispatch(clearChatMessages());
+    handleNavigate(APP_ROUTES.CHAT);
   };
 
   /** Opens user menu dropdown anchored to footer element. */
@@ -177,7 +193,7 @@ export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) =
       <Box sx={{ px: expanded ? 2 : 1, py: 1 }}>
         {expanded ? (
           <ListItemButton
-            onClick={() => handleNavigate(APP_ROUTES.CHAT)}
+            onClick={handleNewChat}
             sx={{
               borderRadius: 1,
               bgcolor: 'primary.main',
@@ -197,7 +213,7 @@ export const Sidebar = ({ open, expanded, onClose, onToggleExpand, isMobile }) =
         ) : (
           <Tooltip title="New Chat" placement="right">
             <IconButton
-              onClick={() => handleNavigate(APP_ROUTES.CHAT)}
+              onClick={handleNewChat}
               size="small"
               sx={{
                 bgcolor: location.pathname.startsWith(APP_ROUTES.CHAT) ? 'primary.main' : 'transparent',

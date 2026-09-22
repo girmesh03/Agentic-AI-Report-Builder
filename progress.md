@@ -814,15 +814,49 @@ Use this file as the chronological record of work performed, files created, git 
      - Checked out `main`, pulled latest, merged `phase-3-branch-management`, pushed `main`.
      - Deleted local and remote feature branch `phase-3-branch-management`.
 
+### Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation
+- **Status:** complete
+- **Started:** 2026-09-22T21:00:00+03:00
+- **Completed:** 2026-09-22T23:45:00+03:00
+- Actions taken:
+  1. *Backend Audio Services & Addis AI STT Integration*:
+     - Probing & Acoustic Normalization: Implemented `audioService.js` using `ffprobe` and `ffmpeg` to normalize incoming audio to mono 16kHz 16-bit linear PCM WAV.
+     - Silence-Based Segmentation: Integrated `silencedetect=noise=-30dB:d=0.5` with strict 55-second ceiling honoring Addis AI's 60-second API limit.
+     - Official Addis AI SDK: Integrated `addisai` Speech-to-Text client in `sttService.js` with exponential retry backoff.
+     - Multipart Audio Upload: Implemented `uploadMiddleware.js` using `multer.diskStorage` with 25MB file limit and MIME allowlist.
+     - Mode 3 Ephemeral Dictation: Implemented `POST /api/v1/audio/transcribe-ephemeral` in `audioController.js` and `audioRoutes.js` with guaranteed zero disk persistence.
+     - Method 1 Audio Streaming: Implemented authenticated audio streaming `GET /api/v1/reports/:reportId/clips/:clipId`.
+     - Transaction Boundary Isolation: Pre-executed STT audio processing before MongoDB ClientSession transaction in `reportService.js`.
+     - Integration Testing: Built `backend/scripts/testAudio.js` passing all 10/10 tests 100% against live Addis AI API and real sample audio (`audio-ce8b9740-3940-407e-a8f0-cceea895569f.wav`).
+  2. *Frontend Audio Components & User Feedback Refinements*:
+     - Recording Duration & Size: Updated `MuiRecorder.jsx` to 15 minutes (900s) and 25MB limit with bilingual warning thresholds.
+     - Drag & Drop Browser Protection: Added global `window.addEventListener('dragover'/'drop', preventDefault)` and enforced strict 10 files max within 25MB cumulative limit.
+     - Scrollable Audio Deck: Wrapped staged audio player deck in `maxHeight: 280, overflowY: 'auto'` container with slim scrollbars in `ReportForm.jsx`.
+     - Player Card Redesign & Deletion Confirmation: Removed file names from `MuiAudioPlayer.jsx`. Wired delete action to `MuiConfirmDialog.jsx` and updated `reportSlice.js` to reliably splice clips.
+     - Form Navigation & Reset: Wired "New Chat" in `Sidebar.jsx` to dispatch `closeReportForm()`, `resetDraft()`, and `clearChatMessages()`. Form submission immediately closes form and resets draft.
+     - UI Glitches Resolved: Compact recording pill layout fixed with `whiteSpace: nowrap`; robot assistant avatar preserved as circle with `flexShrink: 0`; Preset Select dropdown given custom `renderValue` to prevent text collision.
+     - Redux Serialization Fix: Added `'meta.arg.originalArgs'` to `serializableCheck.ignoredActionPaths` in `store.js`, achieving 0 console errors.
+  3. *Monorepo Verification & Browser Audits*:
+     - Backend verification: `npm run verify --workspace=backend` passed (100% syntax check across 48 files).
+     - Client verification: `npm run verify --workspace=client` passed (Vite production build, 0 errors, dist cleaned).
+     - Chrome DevTools Live Testing: Verified 0 console errors, 15 min / 25MB recorder, drag & drop protection, delete confirm dialog, scrollable deck, and clean New Chat reset.
+     - Defensive port cleanup: Free ports 3000 & 4000; 0 background tasks active.
+  4. *Step 5: Post-Git Merge & Cleanup*:
+     - Staged all Phase 5 changes.
+     - Committed: `feat: phase 5 audio pipeline, addis ai stt and multi-modal dictation`.
+     - Pushed `phase-5-audio-pipeline-stt` to origin.
+     - Checked out `main`, pulled latest, merged `phase-5-audio-pipeline-stt`, pushed `main`.
+     - Deleted local and remote feature branch `phase-5-audio-pipeline-stt`.
+
 ## 5-Question Reboot Check
 
 | Question | Answer |
 |---|---|
-| Where am I? | Phase 3 Step 5 complete. On `main` preparing Phase 4 Implementation Plan. |
-| Where am I going? | Deep codebase and spec analysis for Phase 4 (Amharic Report Engine & In-Canvas 10-Row Form), presenting comprehensive implementation plan for user approval. |
-| What's the goal? | Build Phase 4 with full Amharic plain-text report generation, 10-Row Form, Ge'ez transliteration, validation, and zero unstated assumptions. |
-| What have I learned? | MuiDataGrid, MuiDataGridToolbar, and MuiEmptyState overlays are fully reusable across domain pages (branches, reports). MuiDataGridToolbar is passed as a slot from page level, keeping the DataGrid decoupled. |
-| What have I done? | Completed and merged Phase 3 branch management with 100% verification and zero defects. |
+| Where am I? | Phase 5 Step 5 Post-Git Merge & Cleanup complete. On `main` preparing Phase 6 Deep Analysis & Planning. |
+| Where am I going? | Deep codebase and spec analysis for Phase 6 (Conversational Agent, Gemini Multi-Tier Fallback & SSE Streaming). |
+| What's the goal? | Build Phase 6 conversational AI engine with Gemini 2.5 Flash, multi-tier fallback, 11-tool execution loop, SSE streaming, and chat canvas. |
+| What have I learned? | Addis AI STT requires acoustic segmentation on silence gaps with a 55s ceiling; Redux RTK Query FormData actions must ignore `meta.arg.originalArgs` in serializableCheck; window dragover/drop preventDefault stops browsers opening dropped media. |
+| What have I done? | Completed and merged Phase 5 Audio Pipeline, Addis AI STT, and Multi-Modal Dictation with 100% verification and zero defects. |
 
 
 

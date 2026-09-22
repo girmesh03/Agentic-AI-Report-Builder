@@ -10,7 +10,7 @@
  * - Reusable MuiTimePicker (24h format, analog clock face popover)
  * - 100% responsive on extra small (xs) screens (no clipping, 0px horizontal overflow)
  */
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -31,6 +31,8 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import useTheme from '@mui/material/styles/useTheme';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import AddOutlined from '@mui/icons-material/AddOutlined';
@@ -45,6 +47,9 @@ import TuneOutlined from '@mui/icons-material/TuneOutlined';
 import MuiButton from '../reusable/MuiButton.jsx';
 import MuiDatePicker from '../reusable/MuiDatePicker.jsx';
 import MuiTimePicker from '../reusable/MuiTimePicker.jsx';
+import MuiRecorder from '../reusable/MuiRecorder.jsx';
+import MuiAudioPlayer from '../reusable/MuiAudioPlayer.jsx';
+import MuiConfirmDialog from '../reusable/MuiConfirmDialog.jsx';
 import VisitDialog from './VisitDialog.jsx';
 import PresetDialog from './PresetDialog.jsx';
 import {
@@ -54,6 +59,9 @@ import {
   updateVisit,
   removeVisit,
   resetDraft,
+  addAudioFile,
+  removeAudioFile,
+  clearAudioFiles,
 } from '../../redux/features/reports/reportSlice.js';
 import { useGetBranchesQuery } from '../../redux/features/branches/branchApi.js';
 import { gregorianToEthiopian, parseEthiopianDateString } from '../../utils/ethiopianDate.js';
@@ -158,6 +166,157 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
     }
   };
 
+  const fileInputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRecordingOpen, setIsRecordingOpen] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+  const [clipToDeleteIndex, setClipToDeleteIndex] = useState(null);
+  const [clearAllConfirmOpen, setClearAllConfirmOpen] = useState(false);
+
+  // Prevent default browser file navigation when dropping files anywhere on window
+  useEffect(() => {
+    const preventDefault = (e) => {
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', preventDefault);
+    window.addEventListener('drop', preventDefault);
+    return () => {
+      window.removeEventListener('dragover', preventDefault);
+      window.removeEventListener('drop', preventDefault);
+    };
+  }, []);
+
+  const MAX_AUDIO_FILES = 10;
+  const MAX_TOTAL_SIZE = 25 * 1024 * 1024; // 25MB
+
+  const stageAudioFiles = (files) => {
+    const supportedExtensions = /\.(webm|wav|mp3|m4a|ogg|aac)$/i;
+    const currentList = draft.audioFiles || [];
+
+    if (currentList.length >= MAX_AUDIO_FILES) {
+      setAudioError('ከ 10 ፋይሎች በላይ ማያያዝ አይቻልም (Maximum 10 audio files allowed).');
+      return;
+    }
+
+    let currentTotalSize = currentList.reduce((acc, f) => acc + (f.size || 0), 0);
+    let addedCount = 0;
+    let skippedUnsupported = false;
+    let skippedExceededSize = false;
+
+    for (const file of files) {
+      if (!supportedExtensions.test(file.name) && !file.type.startsWith('audio/')) {
+        skippedUnsupported = true;
+        continue;
+      }
+
+      if (currentList.length + addedCount >= MAX_AUDIO_FILES) {
+        break;
+      }
+
+      if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+        skippedExceededSize = true;
+        break;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      dispatch(
+        addAudioFile({
+          id: `audio-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          file,
+          url: objectUrl,
+          name: file.name,
+          size: file.size,
+          duration: 0,
+        })
+      );
+      currentTotalSize += file.size;
+      addedCount += 1;
+    }
+
+    if (skippedUnsupported) {
+      setAudioError('አንዳንድ ፋይሎች ተቀባይነት የሌላቸው ቅርጸቶች በመሆናቸው አልተጨመሩም (Unsupported file format. Please upload .webm, .wav, .mp3, .m4a, .ogg, or .aac).');
+    } else if (skippedExceededSize) {
+      setAudioError('የፋይሎች ድምር መጠን ከ 25MB መብለጥ የለበትም (Total audio size exceeds 25MB limit).');
+    } else if (files.length > addedCount && currentList.length + addedCount >= MAX_AUDIO_FILES) {
+      setAudioError('ከ 10 ፋይሎች በላይ ማያያዝ አይቻልም (Maximum 10 audio files limit reached).');
+    }
+  };
+
+  const handleRecordingComplete = (file, blob, durationSec) => {
+    const currentList = draft.audioFiles || [];
+    if (currentList.length >= MAX_AUDIO_FILES) {
+      setAudioError('ከ 10 ፋይሎች በላይ ማያያዝ አይቻልም (Maximum 10 audio files limit reached).');
+      setIsRecordingOpen(false);
+      return;
+    }
+    const currentTotalSize = currentList.reduce((acc, f) => acc + (f.size || 0), 0);
+    if (currentTotalSize + file.size > MAX_TOTAL_SIZE) {
+      setAudioError('የፋይሎች ድምር መጠን ከ 25MB መብለጥ የለበትም (Total audio size exceeds 25MB limit).');
+      setIsRecordingOpen(false);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    dispatch(
+      addAudioFile({
+        id: `rec-${Date.now()}`,
+        file,
+        url: objectUrl,
+        name: file.name,
+        size: file.size,
+        duration: durationSec,
+      })
+    );
+    setIsRecordingOpen(false);
+  };
+
+  const handleFileSelect = (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      stageAudioFiles(selectedFiles);
+    }
+    e.target.value = '';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    if (droppedFiles.length > 0) {
+      stageAudioFiles(droppedFiles);
+    }
+  };
+
+  const handleConfirmDeleteClip = () => {
+    if (clipToDeleteIndex !== null && draft.audioFiles?.[clipToDeleteIndex]) {
+      const clip = draft.audioFiles[clipToDeleteIndex];
+      if (clip.url && clip.url.startsWith('blob:')) {
+        URL.revokeObjectURL(clip.url);
+      }
+      dispatch(removeAudioFile(clipToDeleteIndex));
+      setClipToDeleteIndex(null);
+    }
+  };
+
+  const handleConfirmClearAll = () => {
+    (draft.audioFiles || []).forEach((clip) => {
+      if (clip.url && clip.url.startsWith('blob:')) {
+        URL.revokeObjectURL(clip.url);
+      }
+    });
+    dispatch(clearAudioFiles());
+    setClearAllConfirmOpen(false);
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 1.5, sm: 2.25 }, width: '100%' }}>
       {/* ========================================================================= */}
@@ -187,6 +346,23 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
           fullWidth
           value={activePresetId}
           onChange={handlePresetChange}
+          renderValue={(selectedId) => {
+            const preset = allPresets.find((p) => p._id === selectedId);
+            return (
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {preset ? preset.name : selectedId}
+              </Typography>
+            );
+          }}
           sx={{ fontSize: '0.85rem' }}
         >
           {allPresets.map((p) => (
@@ -477,6 +653,16 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
       {/* ROW 5: Tri-Modal Audio Ingestion & Extraction Source Deck                 */}
       {/* ========================================================================= */}
       <Paper elevation={0} sx={{ p: { xs: 1.5, sm: 2 }, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".webm,.wav,.mp3,.m4a,.ogg,.aac,audio/*"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
           <Stack direction="row" spacing={0.75} alignItems="center">
             <GraphicEqOutlined color="primary" fontSize="small" />
@@ -484,36 +670,52 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
               ROW 5: AUDIO INGESTION (የድምፅ ቀረጻ ምንጭ)
             </Typography>
           </Stack>
-          <Chip label="AI Extraction Source" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+          <Chip
+            label={
+              draft.audioFiles?.length > 0
+                ? `${draft.audioFiles.length} file(s) ready`
+                : 'AI Extraction Source'
+            }
+            size="small"
+            color={draft.audioFiles?.length > 0 ? 'success' : 'primary'}
+            variant="outlined"
+            sx={{ height: 20, fontSize: '0.65rem' }}
+          />
         </Stack>
 
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, lineHeight: 1.4 }}>
           Activities, issues, and comments are extracted directly from your recorded voice notes via Speech-to-Text and AI synthesis.
         </Typography>
 
+        {/* Ingestion Modes Selector Cards */}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1.5, mb: 1.5 }}>
+          {/* Card 1: Live Audio Recording (Orb Mode) */}
           <Box
+            onClick={() => setIsRecordingOpen((prev) => !prev)}
             sx={{
               p: 1.5,
               borderRadius: 1.5,
               border: '1px solid',
-              borderColor: 'divider',
+              borderColor: isRecordingOpen ? 'primary.main' : 'divider',
               textAlign: 'center',
               cursor: 'pointer',
-              bgcolor: 'background.paper',
-              '&:hover': { bgcolor: 'action.hover' },
+              bgcolor: isRecordingOpen ? 'primary.lighter' : 'background.paper',
+              transition: 'all 0.2s',
+              '&:hover': { bgcolor: 'action.hover', transform: 'translateY(-1px)' },
             }}
           >
             <MicOutlined color="primary" sx={{ fontSize: 24, mb: 0.5 }} />
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Audio Orb
+              {isRecordingOpen ? 'Hide Recorder' : 'Audio Orb'}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Record live Amharic
             </Typography>
           </Box>
 
+          {/* Card 2: Browse Files */}
           <Box
+            onClick={() => fileInputRef.current?.click()}
             sx={{
               p: 1.5,
               borderRadius: 1.5,
@@ -522,7 +724,8 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
               textAlign: 'center',
               cursor: 'pointer',
               bgcolor: 'background.paper',
-              '&:hover': { bgcolor: 'action.hover' },
+              transition: 'all 0.2s',
+              '&:hover': { bgcolor: 'action.hover', transform: 'translateY(-1px)' },
             }}
           >
             <FolderOpenOutlined color="primary" sx={{ fontSize: 24, mb: 0.5 }} />
@@ -530,23 +733,31 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
               Browse Files
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              .m4a, .mp3, .wav
+              .m4a, .mp3, .wav, .webm
             </Typography>
           </Box>
 
+          {/* Card 3: Drag & Drop Zone */}
           <Box
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
             sx={{
               p: 1.5,
               borderRadius: 1.5,
               border: '1px dashed',
-              borderColor: 'divider',
+              borderColor: isDragging ? 'primary.main' : 'divider',
+              bgcolor: isDragging ? 'action.hover' : 'background.paper',
               textAlign: 'center',
-              bgcolor: 'background.paper',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              '&:hover': { borderColor: 'primary.main' },
             }}
           >
-            <CloudUploadOutlined color="action" sx={{ fontSize: 24, mb: 0.5 }} />
+            <CloudUploadOutlined color={isDragging ? 'primary' : 'action'} sx={{ fontSize: 24, mb: 0.5 }} />
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Drag & Drop
+              {isDragging ? 'Drop files here!' : 'Drag & Drop'}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               Max 25MB per file
@@ -554,35 +765,72 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
           </Box>
         </Box>
 
-        {/* Staged Audio Queue Player Deck preview */}
-        <Box
-          sx={{
-            p: 1.25,
-            borderRadius: 1.5,
-            border: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            bgcolor: 'action.hover',
-            gap: 1,
-          }}
-        >
-          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0, flex: 1 }}>
-            <IconButton size="small" color="primary" aria-label="Play sample audio">
-              <PlayArrowOutlined fontSize="small" />
-            </IconButton>
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                Shift_Inspection_Summary.m4a
+        {/* Live Audio Recorder Panel (Toggled by Card 1) */}
+        {isRecordingOpen && (
+          <Box sx={{ mb: 2 }}>
+            <MuiRecorder onRecordingComplete={handleRecordingComplete} />
+          </Box>
+        )}
+
+        {/* Staged Audio Queue Player Deck */}
+        {draft.audioFiles && draft.audioFiles.length > 0 ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                Staged Narrations ({draft.audioFiles.length} of 10 max)
               </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                02:45 • 4.2 MB • Ready for AI STT Extraction
-              </Typography>
+              <MuiButton
+                size="small"
+                variant="text"
+                color="error"
+                onClick={() => setClearAllConfirmOpen(true)}
+                sx={{ fontSize: '0.7rem', height: 22 }}
+              >
+                Clear All
+              </MuiButton>
+            </Stack>
+
+            <Box
+              sx={{
+                maxHeight: 280,
+                overflowY: 'auto',
+                pr: 0.5,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                '&::-webkit-scrollbar': { width: 6 },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: 'divider',
+                  borderRadius: 3,
+                },
+              }}
+            >
+              {draft.audioFiles.map((item, idx) => (
+                <MuiAudioPlayer
+                  key={item.id || idx}
+                  src={item.url}
+                  duration={item.duration}
+                  onDelete={() => setClipToDeleteIndex(idx)}
+                />
+              ))}
             </Box>
-          </Stack>
-          <Chip label="Ready" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.65rem', flexShrink: 0 }} />
-        </Box>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: 1.5,
+              border: '1px dashed',
+              borderColor: 'divider',
+              textAlign: 'center',
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              ምንም የድምፅ ፋይል አልተያያዘም (No voice narrations attached yet. Record live audio or upload files above.)
+            </Typography>
+          </Box>
+        )}
       </Paper>
 
       {/* ========================================================================= */}
@@ -660,6 +908,42 @@ export const ReportForm = ({ onCancel, onSubmit, isLoading = false }) => {
         open={isPresetDialogOpen}
         onClose={() => setIsPresetDialogOpen(false)}
         onSave={handleSaveCustomPreset}
+      />
+
+      {/* Audio Error / Limit Snackbar */}
+      <Snackbar
+        open={Boolean(audioError)}
+        autoHideDuration={6000}
+        onClose={() => setAudioError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="warning" onClose={() => setAudioError(null)}>
+          {audioError}
+        </Alert>
+      </Snackbar>
+
+      {/* Confirm Single Audio Clip Deletion */}
+      <MuiConfirmDialog
+        open={clipToDeleteIndex !== null}
+        title="ድምፅ ይሰረዝ? (Delete Audio Clip?)"
+        message="ይህ የተቀረፀ ወይም የተያያዘ የድምፅ ፋይል ከዝርዝሩ ውስጥ ይሰረዛል። (Are you sure you want to remove this audio file?)"
+        confirmText="ሰርዝ (Delete)"
+        cancelText="ይቅር (Cancel)"
+        confirmColor="error"
+        onConfirm={handleConfirmDeleteClip}
+        onClose={() => setClipToDeleteIndex(null)}
+      />
+
+      {/* Confirm Clear All Audio Clips */}
+      <MuiConfirmDialog
+        open={clearAllConfirmOpen}
+        title="ሁሉንም የድምፅ ፋይሎች ማጽዳት (Clear All Audio)?"
+        message="ሁሉም የተያያዙ የድምፅ ፋይሎች ከቅጹ ይወገዳሉ። እርግጠኛ ነዎት? (All attached audio clips will be removed. Are you sure?)"
+        confirmText="ሁሉንም አጽዳ (Clear All)"
+        cancelText="ይቅር (Cancel)"
+        confirmColor="error"
+        onConfirm={handleConfirmClearAll}
+        onClose={() => setClearAllConfirmOpen(false)}
       />
     </Box>
   );

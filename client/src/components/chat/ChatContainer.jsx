@@ -113,6 +113,7 @@ export const ChatContainer = () => {
                 justifyContent: 'center',
                 width: 64,
                 height: 64,
+                flexShrink: 0,
                 borderRadius: '50%',
                 bgcolor: 'primary.light',
                 color: 'primary.main',
@@ -333,6 +334,7 @@ export const ChatContainer = () => {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
+                              flexShrink: 0,
                             }}
                           >
                             <SmartToyOutlined sx={{ fontSize: 18 }} />

@@ -9,16 +9,32 @@ import { HTTP_STATUS } from '../config/httpStatus.js';
 
 /**
  * Creates a structured Daily Supervisory Report and paired Chat co-pilot.
+ * Supports JSON body as well as multipart/form-data with uploaded audio narrations.
  * @function createReportHandler
  */
 export const createReportHandler = asyncHandler(async (req, res) => {
-  const result = await reportService.createReport(req.user._id, req.validated.body);
+  const result = await reportService.createReport(req.user._id, req.validated.body, req.files || []);
 
   res.status(HTTP_STATUS.CREATED).json({
     success: true,
     message: 'Report created successfully',
     data: result,
   });
+});
+
+/**
+ * Streams an audio clip binary to authenticated supervisor (Method 1).
+ * @function getReportAudioClipHandler
+ */
+export const getReportAudioClipHandler = asyncHandler(async (req, res) => {
+  const { clip, filePath } = await reportService.getReportAudioClip(
+    req.user._id,
+    req.params.reportId,
+    req.params.clipId
+  );
+
+  res.setHeader('Content-Type', clip.mimeType || 'audio/wav');
+  res.sendFile(filePath);
 });
 
 /**

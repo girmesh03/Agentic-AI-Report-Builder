@@ -19,6 +19,7 @@ const initialDraft = {
   issues: [],
   comments: '',
   noIssue: false,
+  audioFiles: [],
 };
 
 const initialState = {
@@ -147,6 +148,35 @@ export const reportSlice = createSlice({
       state.draft.noIssue = !state.draft.noIssue;
       state.isDirty = true;
     },
+    addAudioFile: (state, action) => {
+      if (!state.draft.audioFiles) {
+        state.draft.audioFiles = [];
+      }
+      state.draft.audioFiles.push(action.payload);
+      state.isDirty = true;
+    },
+    removeAudioFile: (state, action) => {
+      if (state.draft.audioFiles) {
+        if (typeof action.payload === 'number') {
+          state.draft.audioFiles.splice(action.payload, 1);
+        } else if (action.payload?.id) {
+          state.draft.audioFiles = state.draft.audioFiles.filter(
+            (item) => item.id !== action.payload.id
+          );
+        } else {
+          state.draft.audioFiles = state.draft.audioFiles.filter(
+            (item, idx) => idx !== action.payload
+          );
+        }
+        state.isDirty = true;
+      }
+    },
+    clearAudioFiles: (state) => {
+      if (state.draft.audioFiles) {
+        state.draft.audioFiles = [];
+        state.isDirty = true;
+      }
+    },
   },
 });
 
@@ -164,6 +194,9 @@ export const {
   addIssue,
   removeIssue,
   toggleNoIssue,
+  addAudioFile,
+  removeAudioFile,
+  clearAudioFiles,
   addChatMessage,
   setReportConversation,
   clearChatMessages,

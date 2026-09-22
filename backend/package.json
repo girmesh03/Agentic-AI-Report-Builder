@@ -7,6 +7,7 @@
     "dev": "node scripts/killPort.js 4000 && nodemon src/server.js",
     "start": "node src/server.js",
     "verify": "node scripts/verifyCodebase.js",
+    "test:audio": "node scripts/testAudio.js",
     "test:api": "node scripts/testAll.js"
   },
   "dependencies": {

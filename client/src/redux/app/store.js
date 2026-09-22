@@ -13,7 +13,18 @@ import { env } from '../../config/env.js';
 export const store = configureStore({
   reducer: rootReducer,
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(apiSlice.middleware),
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: ['reports/addAudioFile'],
+        ignoredActionPaths: [
+          'payload.file',
+          'meta.baseQueryMeta.request',
+          'meta.baseQueryMeta.response',
+          'meta.arg.originalArgs',
+        ],
+        ignoredPaths: ['reports.draft.audioFiles'],
+      },
+    }).concat(apiSlice.middleware),
   devTools: env.IS_DEV,
 });
 

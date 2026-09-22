@@ -8,11 +8,11 @@ Produce a comprehensive, unambiguous 14-section master specification for a MERN 
 
 ## Next Step
 
-Awaiting user review and confirmation of Phase 5 comprehensive implementation plan.
+Phase 5 Step 5 Post-Git Merge & Cleanup complete. Ready for Phase 6 Deep Analysis & Planning.
 
 ## Current Phase
 
-Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation (Exhaustive Analysis & Planning)
+Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation (Complete)
 
 ## Implementation Phases (9 Full-Stack Vertical Slices)
 
@@ -194,9 +194,35 @@ Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation (Exhaustive Analys
 - **Status:** complete
 
 ### Phase 5: Audio Pipeline, Addis AI STT & Multi-Modal Dictation
-- [ ] Backend: FFmpeg mono 16kHz WAV pipeline, `addisai` SDK, audio clip upload, ephemeral transcription
-- [ ] Frontend: Web Audio API recording orb, 120s timer, in-memory Blob player `MuiAudioPlayer.jsx`
-- **Status:** pending
+- [x] Step 1 (Pre-Git): Verify clean tree on main, checkout `phase-5-audio-pipeline-stt`
+- [x] Step 2 (Deep Codebase Analysis): Exhaustive review of Addis AI STT SDK, FFmpeg pipeline, audio schemas, and multi-modal ingestion
+- [x] Step 3 (Execution & Validation):
+  - [x] Backend Audio Services:
+    - [x] Audio probing and acoustic normalization (`audioService.js`: mono 16kHz 16-bit linear PCM WAV via ffmpeg/ffprobe)
+    - [x] Silence-based segmentation (`silencedetect=noise=-30dB:d=0.5`) with 55s ceiling honoring Addis AI 60s hard limit
+    - [x] Official Addis AI SDK integration (`sttService.js`: `addisai` Speech-to-Text client)
+    - [x] Multipart audio ingestion middleware (`uploadMiddleware.js`: 25MB diskStorage, audio MIME allowlist)
+    - [x] Mode 3 Ephemeral Voice Dictation endpoint (`POST /api/v1/audio/transcribe-ephemeral` with guaranteed zero persistence)
+    - [x] Method 1 authenticated audio streaming (`GET /api/v1/reports/:reportId/clips/:clipId`)
+    - [x] Pre-transaction STT transcription execution before MongoDB atomic ClientSession in `reportService.js`
+    - [x] Native audio test suite `backend/scripts/testAudio.js` (10/10 tests passed 100%)
+  - [x] Frontend Audio UI & State:
+    - [x] `MuiRecorder.jsx`: Web Audio API real-time acoustic RMS visualizer, 15-minute cap (900s), 25MB limit guardrail, compact indicator pill
+    - [x] `MuiAudioPlayer.jsx`: Reusable Blob URL audio player, scrubber slider, mm:ss timer, stopPropagation delete button, zero file name clutter
+    - [x] `useAudioBlob.js`: Blob lifecycle management hook
+    - [x] `ReportForm.jsx`: Row 5 Tri-modal audio ingestion (Audio Orb, Browse Files, Drag & Drop), global drag prevention, 10 file & 25MB cumulative cap, 280px scrollable deck, `MuiConfirmDialog` delete confirmation, Preset Select `renderValue`
+    - [x] `ChatComposer.jsx`: Mode 3 voice dictation integration with inline circular progress
+    - [x] `Sidebar.jsx`: New Chat button reset flow (`closeReportForm`, `resetDraft`, `clearChatMessages`)
+    - [x] `ChatContainer.jsx`: `flexShrink: 0` circular robot avatar preservation
+    - [x] `store.js`: Added `'meta.arg.originalArgs'` to `ignoredActionPaths` eliminating Redux serialization errors
+  - [x] Monorepo Build & Browser Verification:
+    - [x] Backend static syntax check: `npm run verify --workspace=backend` passed 100% (48 files)
+    - [x] Client production build: `npm run verify --workspace=client` passed 100% (0 errors)
+    - [x] Chrome DevTools MCP Live Audit: Verified 0 console errors, 15 min / 25MB recorder, drag & drop protection, delete confirmation modal, scrollable deck, New Chat reset
+    - [x] Defensive shutdown: Ports 3000 & 4000 free; 0 background tasks active
+- [x] Step 4 (User Review & Explicit Approval): Present walkthrough with screenshots, user reviewed and approved
+- [x] Step 5 (Post-Git Merge & Cleanup): Stage, commit, push, merge to main, delete feature branch
+- **Status:** complete
 
 ### Phase 6: Conversational Agent, Gemini Multi-Tier Fallback & SSE Streaming
 - [ ] Backend: `agentService.js`, 11-tool execution loop, SSE endpoint, abort protocol, `testChats.js`

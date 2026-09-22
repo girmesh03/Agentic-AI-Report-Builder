@@ -4,7 +4,7 @@
  * Default provider: Google (Gemini), Language: Amharic, Reasoning: Max.
  * Max-width 880px conforming to Master Technical Specification Section 9.3 and Section 9.7.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import InputBase from '@mui/material/InputBase';
@@ -15,13 +15,17 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import AutoAwesomeOutlined from '@mui/icons-material/AutoAwesomeOutlined';
 import KeyboardArrowDownOutlined from '@mui/icons-material/KeyboardArrowDownOutlined';
 import SendOutlined from '@mui/icons-material/SendOutlined';
-import MicOutlined from '@mui/icons-material/MicOutlined';
 import AttachFileOutlined from '@mui/icons-material/AttachFileOutlined';
 import CheckOutlined from '@mui/icons-material/CheckOutlined';
 import MuiButton from '../reusable/MuiButton.jsx';
+import MuiRecorder from '../reusable/MuiRecorder.jsx';
+import { useTranscribeEphemeralAudioMutation } from '../../redux/features/reports/reportApi.js';
 
 const AI_PROVIDERS = [
   {
@@ -63,6 +67,45 @@ export const ChatComposer = ({ onSend, disabled = false }) => {
 
   const activeProvider = AI_PROVIDERS.find((p) => p.id === providerId) || AI_PROVIDERS[0];
   const isMenuOpen = Boolean(providerAnchor);
+
+  const [transcribeEphemeralAudio, { isLoading: isTranscribing }] = useTranscribeEphemeralAudioMutation();
+  const [composerError, setComposerError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleVoiceDictationComplete = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('audio', file, file.name);
+      const res = await transcribeEphemeralAudio(formData).unwrap();
+      const transcribedText = res?.data?.text || '';
+      if (transcribedText) {
+        setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
+      }
+    } catch (err) {
+      setComposerError(
+        err?.data?.message || err?.message || 'ድምፅ ወደ ጽሁፍ መቀየር አልተቻለም (Voice dictation failed).'
+      );
+    }
+  };
+
+  const handleAudioFileAttach = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const formData = new FormData();
+      formData.append('audio', file, file.name);
+      const res = await transcribeEphemeralAudio(formData).unwrap();
+      const transcribedText = res?.data?.text || '';
+      if (transcribedText) {
+        setText((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
+      }
+    } catch (err) {
+      setComposerError(
+        err?.data?.message || err?.message || 'የድምፅ ፋይሉን መተርጎም አልተቻለም (Failed to transcribe audio).'
+      );
+    }
+    e.target.value = '';
+  };
 
   const handleOpenProviderMenu = (e) => {
     setProviderAnchor(e.currentTarget);
@@ -246,19 +289,43 @@ export const ChatComposer = ({ onSend, disabled = false }) => {
             })}
           </Menu>
 
-          {/* Right actions: Voice mic, Attachments, Send */}
+          {/* Right actions: Voice dictation (Mode 3), Voice attachment, Send */}
           <Stack direction="row" spacing={0.5} alignItems="center">
-            <Tooltip title="Voice dictation (Phase 5)">
-              <span>
-                <IconButton size="small" disabled sx={{ color: 'text.secondary' }}>
-                  <MicOutlined fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
+            {isTranscribing && (
+              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mr: 0.5 }}>
+                <CircularProgress size={16} color="primary" />
+                <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 600, fontSize: '0.7rem' }}>
+                  እየተተረጎመ...
+                </Typography>
+              </Stack>
+            )}
 
-            <Tooltip title="Attach audio file (Phase 5)">
+            {/* Mode 3: Ephemeral Dictation via MuiRecorder */}
+            <MuiRecorder
+              compact
+              onRecordingComplete={handleVoiceDictationComplete}
+              disabled={disabled || isTranscribing}
+              label="ድምፅዎን ይናገሩ (Speak to dictate)"
+            />
+
+            {/* Hidden audio file attachment input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".webm,.wav,.mp3,.m4a,.ogg,.aac,audio/*"
+              style={{ display: 'none' }}
+              onChange={handleAudioFileAttach}
+            />
+
+            <Tooltip title="የድምፅ ፋይል ያያይዙ (Attach voice note)">
               <span>
-                <IconButton size="small" disabled sx={{ color: 'text.secondary' }}>
+                <IconButton
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={disabled || isTranscribing}
+                  sx={{ color: 'text.secondary' }}
+                  aria-label="Attach audio file"
+                >
                   <AttachFileOutlined fontSize="small" />
                 </IconButton>
               </span>
@@ -269,7 +336,7 @@ export const ChatComposer = ({ onSend, disabled = false }) => {
                 <IconButton
                   size="small"
                   color="primary"
-                  disabled={!text.trim() || disabled}
+                  disabled={!text.trim() || disabled || isTranscribing}
                   onClick={handleSend}
                   sx={{
                     bgcolor: text.trim() ? 'primary.main' : 'transparent',
@@ -286,6 +353,18 @@ export const ChatComposer = ({ onSend, disabled = false }) => {
           </Stack>
         </Stack>
       </Paper>
+
+      {/* Transcription error feedback */}
+      <Snackbar
+        open={Boolean(composerError)}
+        autoHideDuration={5000}
+        onClose={() => setComposerError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="warning" onClose={() => setComposerError(null)}>
+          {composerError}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
